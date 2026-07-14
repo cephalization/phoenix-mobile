@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeOut, ReduceMotion, ZoomIn, ZoomOut } from 'react-native-reanimated';
 
@@ -10,6 +10,7 @@ import { MotionPressable } from '@/components/motion-pressable';
 import { PhoenixLogo } from '@/components/phoenix-logo';
 import { phoenixQueryKeys } from '@/hooks/use-phoenix-data';
 import { haptics } from '@/lib/haptics';
+import { confirmAction } from '@/lib/confirm';
 import { AppFonts, MaxContentWidth, Spacing, useAppColors } from '@/constants/theme';
 import { useInstanceStore } from '@/store/instances';
 import type { PhoenixInstance } from '@/types/instance';
@@ -19,21 +20,24 @@ export default function InstancesScreen() {
   const queryClient = useQueryClient();
   const instances = useInstanceStore((state) => state.instances);
   const hasHydrated = useInstanceStore((state) => state.hasHydrated);
+  const activeInstanceId = useInstanceStore((state) => state.activeInstanceId);
   const removeInstance = useInstanceStore((state) => state.removeInstance);
 
   const requestRemove = (instance: PhoenixInstance) => {
-    Alert.alert('Remove connection?', `${instance.name} will be removed from this device.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: () => {
+    confirmAction({
+      title: 'Remove connection?',
+      message: `${instance.name} and its local PXI history will be removed from this device.`,
+      confirmLabel: 'Remove',
+      onConfirm: async () => {
+        try {
+          await removeInstance(instance.id);
           queryClient.removeQueries({ queryKey: phoenixQueryKeys.instance(instance.id) });
-          removeInstance(instance.id);
           haptics.success();
-        },
+        } catch {
+          haptics.error();
+        }
       },
-    ]);
+    });
   };
 
   return (
@@ -51,7 +55,7 @@ export default function InstancesScreen() {
               </Animated.View>
             )}
           </View>
-          <PhoenixLogo size={36} />
+          {!activeInstanceId && <PhoenixLogo size={36} />}
         </View>
 
         <View style={styles.listArea}>

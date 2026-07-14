@@ -16,6 +16,7 @@ import Animated, {
 
 import { AppFonts, Spacing, useAppColors } from '@/constants/theme';
 import { haptics } from '@/lib/haptics';
+import { useInstanceStore } from '@/store/instances';
 import type { PhoenixInstance } from '@/types/instance';
 
 import { MotionPressable } from './motion-pressable';
@@ -30,6 +31,7 @@ export function InstanceCard({ index, instance, onRemove }: InstanceCardProps) {
   const colors = useAppColors();
   const reduceMotion = useReducedMotion();
   const entrance = useSharedValue(reduceMotion ? 1 : 0);
+  const setActiveInstanceId = useInstanceStore((state) => state.setActiveInstanceId);
 
   useEffect(() => {
     entrance.set(
@@ -63,7 +65,10 @@ export function InstanceCard({ index, instance, onRemove }: InstanceCardProps) {
         <MotionPressable
           accessibilityHint="Opens this Phoenix instance"
           accessibilityRole="button"
-          onPress={() => router.push({ pathname: '/instances/[id]', params: { id: instance.id } })}
+          onPress={() => {
+            setActiveInstanceId(instance.id);
+            router.push({ pathname: '/instances/[id]', params: { id: instance.id } });
+          }}
           scaleTo={0.99}
           style={[styles.card, { backgroundColor: colors.backgroundElement }]}>
           <View style={[styles.monogram, { backgroundColor: colors.accentSoft }]}>

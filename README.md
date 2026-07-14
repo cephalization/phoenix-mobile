@@ -8,6 +8,7 @@ A mobile companion for connecting to and monitoring self-hosted [Arize Phoenix](
 - Verify a server before saving it
 - Display the Phoenix server version and projects through `@arizeai/phoenix-client`
 - Refresh server data through TanStack Query
+- Stream PXI conversations and restore local chat history through Expo SQLite on native and IndexedDB on web
 - Support light, dark, mobile, tablet, and web layouts
 - Model connections for future OAuth 2 credentials while currently allowing unauthenticated servers only
 
@@ -17,6 +18,7 @@ A mobile companion for connecting to and monitoring self-hosted [Arize Phoenix](
 - React Native and strict TypeScript
 - TanStack Query for Phoenix server state
 - Zustand and AsyncStorage for persisted instance metadata
+- Native Markdown rendering for streamed PXI responses
 - React Hook Form and Zod for connection validation
 - SecureStore installed for the upcoming OAuth credential flow
 

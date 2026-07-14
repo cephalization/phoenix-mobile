@@ -1,6 +1,6 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MotionPressable } from '@/components/motion-pressable';
@@ -8,6 +8,8 @@ import { PhoenixLogo } from '@/components/phoenix-logo';
 import { AppFonts, MaxContentWidth, useAppColors } from '@/constants/theme';
 import { phoenixQueryKeys } from '@/hooks/use-phoenix-data';
 import { haptics } from '@/lib/haptics';
+import { confirmAction } from '@/lib/confirm';
+import { clearPxiSessions, countPxiSessions } from '@/lib/pxi-session-db';
 import { useInstanceStore } from '@/store/instances';
 import { type Appearance, useSettingsStore } from '@/store/settings';
 
@@ -24,20 +26,42 @@ export default function SettingsScreen() {
   const setAppearance = useSettingsStore((state) => state.setAppearance);
   const instances = useInstanceStore((state) => state.instances);
   const clearInstances = useInstanceStore((state) => state.clearInstances);
+  const chatCount = useQuery({ queryKey: ['pxi', 'session-count'], queryFn: countPxiSessions });
 
   const clearConnections = () => {
-    Alert.alert('Remove all connections?', 'Every saved Phoenix connection will be removed from this device.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove all',
-        style: 'destructive',
-        onPress: () => {
+    confirmAction({
+      title: 'Remove all connections?',
+      message: 'Every saved Phoenix connection and its local PXI history will be removed from this device.',
+      confirmLabel: 'Remove all',
+      onConfirm: async () => {
+        try {
+          await clearInstances();
           queryClient.removeQueries({ queryKey: phoenixQueryKeys.all });
-          clearInstances();
+          queryClient.removeQueries({ queryKey: ['pxi'] });
           haptics.success();
-        },
+        } catch {
+          haptics.error();
+        }
       },
-    ]);
+    });
+  };
+
+  const clearChatHistory = () => {
+    confirmAction({
+      title: 'Clear chat history?',
+      message: 'Every locally saved PXI conversation will be deleted from this device.',
+      confirmLabel: 'Clear history',
+      onConfirm: async () => {
+        try {
+          await clearPxiSessions();
+          queryClient.removeQueries({ queryKey: ['pxi', 'session'] });
+          await queryClient.invalidateQueries({ queryKey: ['pxi'] });
+          haptics.success();
+        } catch {
+          haptics.error();
+        }
+      },
+    });
   };
 
   return (
@@ -74,6 +98,26 @@ export default function SettingsScreen() {
                 );
               })}
             </View>
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeading}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>PXI history</Text>
+              <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
+                {chatCount.data === 1 ? '1 chat stored locally on this device.' : `${chatCount.data ?? 0} chats stored locally on this device.`}
+              </Text>
+            </View>
+            <MotionPressable
+              accessibilityRole="button"
+              disabled={!chatCount.data}
+              haptic="warning"
+              onPress={clearChatHistory}
+              style={[
+                styles.clearButton,
+                { borderColor: colors.border, opacity: chatCount.data ? 1 : 0.45 },
+              ]}>
+              <Text style={[styles.clearButtonText, { color: colors.danger }]}>Clear chat history</Text>
+            </MotionPressable>
           </View>
 
           <View style={styles.section}>

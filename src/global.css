@@ -16,6 +16,10 @@ body,
   background-color: #fdfdfd;
 }
 
+[aria-label='Message PXI']:focus {
+  outline: none;
+}
+
 @media (prefers-color-scheme: dark) {
   html,
   body,

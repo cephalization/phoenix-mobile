@@ -13,6 +13,48 @@ This is the project's living technical memory. Record discoveries that would oth
 
 ## Active Constraints
 
+### 2026-07-14 - PXI Uses The External Server-Agent Stream
+
+**Status:** Decision
+**Area:** PXI, networking
+
+Phoenix Mobile sends AI SDK 6 `UIMessage` history to `/agents/server/sessions/{sessionId}/chat`, not the browser-mounted `/agents/assistant` route. The contract was verified against Phoenix 17.29.0 with `x-vercel-ai-ui-message-stream: v1`: plain text produced progressive snapshots, and a GraphQL question streamed a server-executed tool through `output-available` before the final answer.
+
+Requests always set GraphQL mutations to disabled and edit permission to manual. AI SDK `ai@6.0.225` and `@ai-sdk/react@3.0.227` are installed within the Phoenix-compatible major versions, and Expo exports their transport for iOS, Android, and web.
+
+**Implication:** Keep the mobile transport aligned with the Phoenix CLI contract and re-run a live text, tool, and abort probe when either side changes AI SDK versions. Never switch to bypass permissions or the web assistant route to work around a protocol mismatch.
+
+### 2026-07-14 - PXI Sessions Persist In Platform Storage
+
+**Status:** Decision
+**Area:** PXI, security, persistence
+
+PXI session metadata and complete ordered AI SDK messages persist in normalized `pxi_sessions` and `pxi_messages` tables through Expo SQLite on native. Web uses an IndexedDB implementation behind the same repository API. The app restores the most recently updated session for an instance, loads other message bodies only when selected from history, and sends restored history back to the server-agent endpoint when the conversation continues.
+
+Database writes are serialized within each runtime, parameterized, and transactional. Durable deletion barriers plus a history generation prevent late stream completions from recreating cleared sessions. Optimistic session revisions reject competing web-tab branches instead of silently overwriting one transcript with another. Chat content is not written to AsyncStorage or logs.
+
+The native SQLite file is app-private but not encrypted. Web records are scoped to the browser origin in IndexedDB and are likewise unencrypted. Expo's SQLCipher option is not enabled because it is unavailable in Expo Go and requires a separate key-management and native-build decision.
+
+**Implication:** Treat local chat storage as sensitive user data, preserve explicit per-session and global deletion, and do not copy transcripts into Zustand or AsyncStorage. Encryption at rest remains a release-hardening decision.
+
+### 2026-07-14 - Safari Web Uses IndexedDB Instead Of Expo SQLite
+
+**Status:** Resolved
+**Area:** persistence, web, Safari
+
+Expo SQLite web support uses a WASM worker and `SharedArrayBuffer`. Even with COEP/COOP headers, an iPhone loading Metro over a plain HTTP LAN address is not in a secure context, so Safari cannot initialize the worker. PXI storage now resolves to IndexedDB on web and remains Expo SQLite on native; the web repository preserves revisions, deletion barriers, and history generations without requiring isolation headers.
+
+**Implication:** Keep web storage free of Expo SQLite imports unless all supported web origins can guarantee secure-context isolation. Changes to the PXI repository contract must be implemented and verified in both storage backends.
+
+### 2026-07-14 - PXI Model Availability Comes From GraphQL Preflight
+
+**Status:** Decision
+**Area:** PXI, model providers
+
+The mobile model catalog queries `modelProviders`, `playgroundModels`, and `generativeModelCustomProviders`. Built-in options are limited to providers with installed dependencies and configured credentials; curated Phoenix web models are ordered first, and custom provider identifiers are treated as configured server-side references.
+
+**Implication:** Revalidate before each new app session and show an actionable no-model state. Never request or persist model provider credentials on the phone.
+
 ### 2026-07-14 - Authentication Is Deliberately Incomplete
 
 **Status:** Active  
@@ -83,6 +125,17 @@ CSS can color the document but cannot remove normal iOS Safari toolbars. The app
 **Implication:** Test the installed Home Screen experience separately from an ordinary Safari tab. Do not treat browser-controlled bars as React Native layout defects.
 
 ## Resolved Bugs And Reusable Patterns
+
+### 2026-07-14 - Streaming Chat Scroll Follows Reader Intent
+
+**Status:** Decision
+**Area:** PXI, scrolling, Markdown
+
+PXI keeps following streamed output only while the reader remains at the live edge. Touching or dragging the transcript releases follow mode, subsequent chunks arrive without stealing position, and the Latest control explicitly returns to and re-engages the live edge. New user turns receive a stable row anchor, saved threads reopen at the latest user turn, and `maintainVisibleContentPosition` limits displacement when rich content changes size.
+
+Assistant text renders through `@ronradtke/react-native-markdown-display`'s `MarkdownStream`. It provides a pure-JavaScript native-view renderer, seals incomplete streaming fences, supports styled headings, lists, links, quotes, tables, and syntax-highlighted code, and does not require another native client rebuild. Model-generated links are restricted to HTTP and HTTPS. The AI SDK UI update throttle remains 50 ms so token chunks do not force unbounded parsing and layout work.
+
+**Implication:** Scroll state must distinguish reader interaction from programmatic and layout-driven scroll events. Keep Markdown styles aligned with Phoenix tokens, handle external links explicitly, and re-test long code blocks, tables, selection, and mid-stream scrolling when changing the renderer or transcript list.
 
 ### 2026-07-14 - Animated Rows Dematerialized After Settling
 

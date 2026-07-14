@@ -12,6 +12,7 @@
 - **Depends on**: none
 - **Category**: feature
 - **Planned on**: 2026-07-14
+- **Planned at**: commit `d7a9043`
 
 ## Why This Matters
 
@@ -25,7 +26,7 @@ Connecting an instance proves the mobile foundation works, but it does not yet p
 - Pressing the button opens a full-screen chat for the active instance. Do not use a narrow popover on phones.
 - The button and assistant identity use the five-cell PXI glyph from the Phoenix web application. The first version is a static SVG with no shader runtime; shader-backed treatments are a separate follow-up.
 - The first release is read-only. GraphQL mutations are disabled, `editPermission` remains `manual`, and bypass permissions must not be sent.
-- Sessions and finalized messages remain in memory in the first release. Do not put potentially sensitive transcript or tool content in AsyncStorage.
+- Sessions and complete AI SDK messages persist locally in Expo SQLite on native and IndexedDB on web so users can restore and continue prior chats. Do not put transcript or tool content in AsyncStorage.
 - Keep the current React Native styles and theme tokens. NativeWind, Tailwind conversion, shadcn DOM components, and `streamdown` are out of scope.
 
 ## Current State
@@ -132,7 +133,7 @@ Expo Router cannot have both `src/app/instances/[id].tsx` and a sibling `[id]/ch
 - GraphQL mutations, edit execution, bypass permissions, and approval submission
 - bash execution on the phone
 - client-side web-browser tools
-- durable transcript persistence, cloud synchronization, or server session history
+- cloud synchronization or server session history
 - OAuth implementation; transport must be able to accept future headers, but this plan does not build the OAuth flow
 - attachments, voice input, notifications, and background stream continuation
 - complete parity with the Phoenix desktop agent panel
@@ -295,18 +296,20 @@ Manual device scenarios remain required for:
 
 ## Done Criteria
 
-- [ ] A valid selected instance exposes exactly one top-right PXI FAB on every non-chat route.
-- [ ] The FAB uses the same static five-cell SVG geometry as Phoenix web and has no shader dependency.
-- [ ] Removing or invalidating the selected instance removes the FAB and aborts its active chat.
+- [x] A valid selected instance exposes exactly one top-right PXI FAB on every non-chat route.
+- [x] The FAB uses the same static five-cell SVG geometry as Phoenix web and has no shader dependency.
+- [x] Removing or invalidating the selected instance removes the FAB and aborts its active chat.
 - [ ] Chat streams incrementally from `/agents/server/sessions/{sessionId}/chat` on iOS and Android.
-- [ ] AI SDK versions remain compatible with Phoenix's AI SDK 6 wire implementation.
-- [ ] GraphQL mutations are disabled and bypass permission is never sent.
-- [ ] Users can send, stop, retry, start a new session, select a configured model, and inspect tool progress.
+- [x] AI SDK versions remain compatible with Phoenix's AI SDK 6 wire implementation.
+- [x] GraphQL mutations are disabled and bypass permission is never sent.
+- [x] Users can send, stop, retry, start a new session, select a configured model, and inspect tool progress.
 - [ ] Scrolling away stops auto-follow; Jump to latest restores it.
-- [ ] No transcript or tool payload is persisted to AsyncStorage or logged.
+- [x] Chat history persists in SQLite on native and IndexedDB on web; no transcript or tool payload is persisted to AsyncStorage or logged.
 - [ ] Light, dark, reduced-motion, large-text, empty, loading, streaming, stopped, and error states are verified.
-- [ ] `npm run typecheck`, `npm run lint`, `npx expo-doctor`, and `npx expo export --platform all --clear` exit 0.
+- [x] `npm run typecheck`, `npm run lint`, `npx expo-doctor`, and `npx expo export --platform all --clear` exit 0.
 - [ ] `plans/README.md` marks Plan 001 `DONE`.
+
+Implementation and live protocol verification completed on 2026-07-14. Plain text streaming produced seven progressive AI SDK snapshots, a server GraphQL tool turn produced 37 snapshots with a completed tool part, and abort propagated successfully. Native bundles export successfully, but this machine has neither Xcode simulator tools nor Android `adb`; the remaining unchecked items require native interaction QA.
 
 ## STOP Conditions
 
@@ -326,7 +329,7 @@ Stop and report instead of improvising if:
 
 - Port Phoenix's shader-backed PXI glyph treatment after a native rendering approach is selected and profiled.
 - Add explicit mutation approvals and elicitation forms before enabling any edit capability.
-- Design encrypted or otherwise deliberate durable transcript storage and session history.
+- Evaluate SQLCipher and key management before promising encrypted local chat history.
 - Add server session summaries, rewind/branching, generated charts, file handling, and rich artifacts.
 - Reconnect interrupted streams if the server adds a resumable stream contract.
 - Extract a shared, runtime-neutral PXI protocol package upstream so CLI, web, and mobile no longer mirror handwritten contracts.

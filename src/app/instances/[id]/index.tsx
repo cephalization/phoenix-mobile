@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
-import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
@@ -25,6 +25,7 @@ import {
   usePhoenixVersion,
 } from '@/hooks/use-phoenix-data';
 import { haptics } from '@/lib/haptics';
+import { confirmAction } from '@/lib/confirm';
 import { useInstanceStore } from '@/store/instances';
 
 export default function InstanceScreen() {
@@ -33,9 +34,14 @@ export default function InstanceScreen() {
   const queryClient = useQueryClient();
   const instance = useInstanceStore((state) => state.instances.find((item) => item.id === id));
   const removeInstance = useInstanceStore((state) => state.removeInstance);
+  const setActiveInstanceId = useInstanceStore((state) => state.setActiveInstanceId);
   const version = usePhoenixVersion(instance);
   const projects = usePhoenixProjects(instance);
   const isRefreshing = version.isRefetching || projects.isRefetching;
+
+  useEffect(() => {
+    if (instance) setActiveInstanceId(instance.id);
+  }, [instance, setActiveInstanceId]);
 
   const refresh = async () => {
     if (!instance || isRefreshing) return;
@@ -47,19 +53,21 @@ export default function InstanceScreen() {
 
   const remove = () => {
     if (!instance) return;
-    Alert.alert('Remove connection?', `${instance.name} will be removed from this device.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: () => {
+    confirmAction({
+      title: 'Remove connection?',
+      message: `${instance.name} and its local PXI history will be removed from this device.`,
+      confirmLabel: 'Remove',
+      onConfirm: async () => {
+        try {
+          await removeInstance(instance.id);
           queryClient.removeQueries({ queryKey: phoenixQueryKeys.instance(instance.id) });
-          removeInstance(instance.id);
           haptics.success();
           router.dismissTo('/');
-        },
+        } catch {
+          haptics.error();
+        }
       },
-    ]);
+    });
   };
 
   if (!instance) {

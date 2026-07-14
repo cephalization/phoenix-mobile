@@ -9,10 +9,11 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { useColorScheme } from 'react-native';
+import { StyleSheet, View, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { Colors } from '@/constants/theme';
+import { PxiFab } from '@/components/pxi-fab';
 import { useSettingsStore } from '@/store/settings';
 
 SplashScreen.preventAutoHideAsync();
@@ -50,39 +51,45 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider value={resolvedScheme === 'dark' ? DarkTheme : DefaultTheme}>
           <StatusBar style="auto" />
-          <Stack
-            screenOptions={{
-              contentStyle: { backgroundColor: colors.background },
-              headerShadowVisible: false,
-              headerStyle: { backgroundColor: colors.background },
-              headerTintColor: colors.text,
-              headerTitleStyle: { fontFamily: 'Geist_600SemiBold' },
-            }}>
-            <Stack.Screen name="index" options={{ headerShown: false }} />
-            <Stack.Screen
-              name="instances/new"
-              options={{
-                presentation: 'formSheet',
-                sheetAllowedDetents: [0.72, 0.95],
-                sheetCornerRadius: 28,
-                sheetGrabberVisible: true,
-                title: 'Add Instance',
-              }}
-            />
-            <Stack.Screen name="instances/[id]" options={{ title: 'Instance' }} />
-            <Stack.Screen
-              name="settings"
-              options={{
-                presentation: 'formSheet',
-                sheetAllowedDetents: [0.58, 0.88],
-                sheetCornerRadius: 28,
-                sheetGrabberVisible: true,
-                title: 'Settings',
-              }}
-            />
-          </Stack>
+          <View style={styles.root}>
+            <Stack
+              screenOptions={{
+                contentStyle: { backgroundColor: colors.background },
+                headerShadowVisible: false,
+                headerStyle: { backgroundColor: colors.background },
+                headerTintColor: colors.text,
+                headerTitleStyle: { fontFamily: 'Geist_600SemiBold' },
+              }}>
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="instances/new"
+                options={{
+                  presentation: 'formSheet',
+                  sheetAllowedDetents: [0.72, 0.95],
+                  sheetCornerRadius: 28,
+                  sheetGrabberVisible: true,
+                  title: 'Add Instance',
+                }}
+              />
+              <Stack.Screen name="instances/[id]/index" options={{ title: 'Instance' }} />
+              <Stack.Screen name="instances/[id]/chat" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="settings"
+                options={{
+                  presentation: 'formSheet',
+                  sheetAllowedDetents: [0.58, 0.88],
+                  sheetCornerRadius: 28,
+                  sheetGrabberVisible: true,
+                  title: 'Settings',
+                }}
+              />
+            </Stack>
+            <PxiFab />
+          </View>
         </ThemeProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({ root: { flex: 1 } });
