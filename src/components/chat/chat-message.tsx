@@ -1,13 +1,31 @@
 import { isToolUIPart } from 'ai';
+import * as Clipboard from 'expo-clipboard';
+import { SymbolView } from 'expo-symbols';
 import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Share, StyleSheet, Text, View } from 'react-native';
 
 import { MotionPressable } from '@/components/motion-pressable';
 import { MessageMarkdown } from '@/components/chat/message-markdown';
+import { NativeContextMenu, type NativeContextMenuAction } from '@/components/native-context-menu';
 import { PxiGlyph } from '@/components/pxi-glyph';
 import { AppFonts, Fonts, useAppColors } from '@/constants/theme';
 import type { PxiMessage } from '@/features/pxi/types';
+import { haptics } from '@/lib/haptics';
+
+const TEXT_MENU_ACTIONS: NativeContextMenuAction[] = [
+  { id: 'copy', systemImage: 'doc.on.doc', title: 'Copy' },
+  { id: 'share', systemImage: 'square.and.arrow.up', title: 'Share' },
+];
+
+function handleTextMenuAction(id: string, text: string, onInteraction?: () => void) {
+  onInteraction?.();
+  if (id === 'copy') {
+    void Clipboard.setStringAsync(text).then(haptics.success);
+  } else if (id === 'share') {
+    void Share.share({ message: text });
+  }
+}
 
 function titleCase(value: string): string {
   return value
@@ -89,8 +107,13 @@ function ToolPart({ onInteraction, part }: { onInteraction?: () => void; part: P
   const detailOutput = stdout ?? part.output;
   const hasDetails = detailInput !== undefined || (complete && detailOutput !== undefined) || error !== undefined;
   const stateLabel = failed ? 'Failed' : denied ? 'Denied' : approval ? 'Approval needed' : complete ? '' : 'Running';
+  const menuActions: NativeContextMenuAction[] = [
+    ...(detailInput !== undefined ? [{ id: 'copy-input', systemImage: 'doc.on.doc', title: command ? 'Copy command' : 'Copy input' }] : []),
+    ...(complete && detailOutput !== undefined ? [{ id: 'copy-output', systemImage: 'doc.on.clipboard', title: stdout !== undefined ? 'Copy output' : 'Copy result' }] : []),
+    ...(error !== undefined ? [{ id: 'copy-error', systemImage: 'exclamationmark.triangle', title: 'Copy error' }] : []),
+  ];
 
-  return (
+  const content = (
     <View style={styles.tool}>
       <MotionPressable
         accessibilityHint={hasDetails ? 'Shows tool input and result' : undefined}
@@ -128,7 +151,18 @@ function ToolPart({ onInteraction, part }: { onInteraction?: () => void; part: P
           </View>
           {preview ? <Text numberOfLines={1} style={[styles.toolPreview, { color: colors.textSecondary }]}>{preview}</Text> : null}
         </View>
-        {hasDetails ? <Text style={[styles.disclosure, { color: colors.textSecondary }]}>{expanded ? '⌄' : '›'}</Text> : null}
+        {hasDetails ? (
+          <View style={styles.disclosure}>
+            <SymbolView
+              name={expanded
+                ? { ios: 'chevron.down', android: 'keyboard_arrow_down', web: 'keyboard_arrow_down' }
+                : { ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
+              size={14}
+              tintColor={colors.textSecondary}
+              weight="semibold"
+            />
+          </View>
+        ) : null}
       </MotionPressable>
       {expanded && hasDetails && (
         <View style={[styles.toolDetails, { backgroundColor: colors.backgroundElement }]}>
@@ -139,6 +173,18 @@ function ToolPart({ onInteraction, part }: { onInteraction?: () => void; part: P
       )}
     </View>
   );
+
+  return menuActions.length > 0 ? (
+    <NativeContextMenu
+      actions={menuActions}
+      onAction={(id) => {
+        onInteraction?.();
+        const value = id === 'copy-input' ? detailInput : id === 'copy-output' ? detailOutput : error;
+        if (value !== undefined) void Clipboard.setStringAsync(serialize(value)).then(haptics.success);
+      }}>
+      {content}
+    </NativeContextMenu>
+  ) : content;
 }
 
 function ToolDetail({ danger = false, label, separated = false, value }: { danger?: boolean; label: string; separated?: boolean; value: unknown }) {
@@ -158,14 +204,15 @@ export function ChatMessage({ instanceBaseUrl, message, onInteraction }: { insta
   const traceId = message.metadata?.trace?.traceId;
 
   if (isUser) {
+    const text = textParts.map((part) => part.text).join('');
     return (
-      <View style={styles.userRow}>
-        <View style={[styles.userBubble, { backgroundColor: colors.accent }]}>
-          <Text selectable style={[styles.userText, { color: colors.accentForeground }]}>
-            {textParts.map((part) => part.text).join('')}
-          </Text>
+      <NativeContextMenu actions={TEXT_MENU_ACTIONS} onAction={(id) => handleTextMenuAction(id, text, onInteraction)}>
+        <View style={styles.userRow}>
+          <View style={[styles.userBubble, { backgroundColor: colors.accent }]}>
+            <Text selectable style={[styles.userText, { color: colors.accentForeground }]}>{text}</Text>
+          </View>
         </View>
-      </View>
+      </NativeContextMenu>
     );
   }
 
@@ -198,7 +245,13 @@ function AssistantPart({ onInteraction, part }: { onInteraction?: () => void; pa
   const colors = useAppColors();
 
   if (part.type === 'text') {
-    return <MessageMarkdown onInteraction={onInteraction} streaming={part.state === 'streaming'} text={part.text} />;
+    return (
+      <NativeContextMenu actions={TEXT_MENU_ACTIONS} onAction={(id) => handleTextMenuAction(id, part.text, onInteraction)}>
+        <View>
+          <MessageMarkdown onInteraction={onInteraction} streaming={part.state === 'streaming'} text={part.text} />
+        </View>
+      </NativeContextMenu>
+    );
   }
   if (isToolUIPart(part)) return <ToolPart onInteraction={onInteraction} part={part} />;
   if (part.type === 'reasoning') {
@@ -269,7 +322,7 @@ const styles = StyleSheet.create({
   toolName: { flexShrink: 1, fontFamily: AppFonts.medium, fontSize: 14 },
   toolStatus: { fontFamily: AppFonts.regular, fontSize: 11 },
   toolPreview: { fontFamily: AppFonts.regular, fontSize: 13, lineHeight: 18 },
-  disclosure: { fontFamily: AppFonts.regular, fontSize: 20, lineHeight: 28, textAlign: 'center', width: 24 },
+  disclosure: { alignItems: 'center', height: 28, justifyContent: 'center', width: 24 },
   toolDetails: { borderRadius: 11, marginBottom: 8, marginLeft: 27, overflow: 'hidden' },
   toolDetailSection: { gap: 5, paddingHorizontal: 12, paddingVertical: 10 },
   toolDetailLabel: { fontFamily: AppFonts.semibold, fontSize: 10, letterSpacing: 0.7, textTransform: 'uppercase' },

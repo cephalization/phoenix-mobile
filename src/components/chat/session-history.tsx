@@ -1,9 +1,13 @@
-import { FlatList, Modal, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SymbolView } from 'expo-symbols';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
+import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
+import Animated, { Extrapolation, interpolate, type SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
+import { ChatBottomSheet } from '@/components/chat/chat-bottom-sheet';
 import { MotionPressable } from '@/components/motion-pressable';
 import { PxiGlyph } from '@/components/pxi-glyph';
-import { AppFonts, Spacing, useAppColors } from '@/constants/theme';
+import { AppFonts, useAppColors } from '@/constants/theme';
+import { haptics } from '@/lib/haptics';
 import { confirmAction } from '@/lib/confirm';
 import type { PxiSessionSummary } from '@/lib/pxi-session-db';
 
@@ -45,91 +49,139 @@ export function SessionHistory({
   };
 
   return (
-    <Modal animationType="slide" onRequestClose={onClose} presentationStyle="pageSheet" visible={visible}>
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <View style={styles.headingGroup}>
-            <Text style={[styles.title, { color: colors.text }]}>Chat history</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Stored locally on this device</Text>
+    <ChatBottomSheet onClose={onClose} subtitle="Stored locally on this device" title="Chat history" visible={visible}>
+      <FlatList
+        contentContainerStyle={[styles.listContent, sessions.length === 0 && styles.emptyList]}
+        data={sessions}
+        ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: colors.border }]} />}
+        keyExtractor={(session) => session.id}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <View style={[styles.emptyGlyph, { backgroundColor: colors.accentSoft }]}><PxiGlyph color={colors.brand} size={28} /></View>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No saved chats</Text>
+            <Text style={[styles.emptyCopy, { color: colors.textSecondary }]}>Conversations appear here after you send your first message.</Text>
           </View>
-          <MotionPressable accessibilityRole="button" onPress={onClose} style={[styles.closeButton, { backgroundColor: colors.backgroundSelected }]}>
-            <Text style={[styles.closeText, { color: colors.text }]}>Close</Text>
-          </MotionPressable>
-        </View>
+        }
+        renderItem={({ item }) => (
+          <SessionRow
+            active={item.id === activeSessionId}
+            onDelete={() => confirmDelete(item)}
+            onSelect={() => onSelect(item)}
+            session={item}
+          />
+        )}
+        style={[styles.list, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}
+      />
 
-        <FlatList
-          contentContainerStyle={[styles.list, sessions.length === 0 && styles.emptyList]}
-          data={sessions}
-          keyExtractor={(session) => session.id}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <View style={[styles.emptyGlyph, { backgroundColor: colors.accentSoft }]}><PxiGlyph color={colors.brand} size={28} /></View>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>No saved chats</Text>
-              <Text style={[styles.emptyCopy, { color: colors.textSecondary }]}>Conversations appear here after you send your first message.</Text>
-            </View>
-          }
-          renderItem={({ item }) => {
-            const isActive = item.id === activeSessionId;
-            return (
-              <View style={[styles.row, { backgroundColor: isActive ? colors.backgroundSelected : colors.backgroundElement, borderColor: isActive ? colors.accent : colors.border }]}>
-                <MotionPressable
-                  accessibilityLabel={`${item.title}, ${formatSessionDate(item.updatedAt)}`}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isActive }}
-                  haptic="selection"
-                  onPress={() => onSelect(item)}
-                  scaleTo={0.99}
-                  style={styles.sessionButton}>
-                  <View style={styles.sessionCopy}>
-                    <Text numberOfLines={2} style={[styles.sessionTitle, { color: colors.text }]}>{item.title}</Text>
-                    <Text style={[styles.sessionMeta, { color: colors.textSecondary }]}>{formatSessionDate(item.updatedAt)} · {item.messageCount} messages</Text>
-                  </View>
-                </MotionPressable>
-                <MotionPressable
-                  accessibilityLabel={`Delete ${item.title}`}
-                  accessibilityRole="button"
-                  haptic="warning"
-                  onPress={() => confirmDelete(item)}
-                  style={styles.deleteButton}>
-                  <Text style={[styles.deleteText, { color: colors.danger }]}>Delete</Text>
-                </MotionPressable>
-              </View>
-            );
-          }}
-        />
+      <View style={styles.footer}>
+        <MotionPressable
+          accessibilityRole="button"
+          haptic="selection"
+          onPress={onNew}
+          style={[styles.newButton, { backgroundColor: colors.accent }]}>
+          <SymbolView
+            name={{ ios: 'plus', android: 'add', web: 'add' }}
+            size={18}
+            tintColor={colors.accentForeground}
+            weight="medium"
+          />
+          <Text style={[styles.newButtonText, { color: colors.accentForeground }]}>New chat</Text>
+        </MotionPressable>
+      </View>
+    </ChatBottomSheet>
+  );
+}
 
-        <View style={[styles.footer, { borderTopColor: colors.border }]}>
-          <MotionPressable accessibilityRole="button" onPress={onNew} style={[styles.newButton, { backgroundColor: colors.accent }]}>
-            <Text style={[styles.newButtonText, { color: colors.accentForeground }]}>New chat</Text>
-          </MotionPressable>
+function SessionRow({
+  active,
+  onDelete,
+  onSelect,
+  session,
+}: {
+  active: boolean;
+  onDelete: () => void;
+  onSelect: () => void;
+  session: PxiSessionSummary;
+}) {
+  const colors = useAppColors();
+  return (
+    <Swipeable
+      childrenContainerStyle={{ backgroundColor: active ? colors.backgroundSelected : colors.backgroundElement }}
+      friction={1.6}
+      onSwipeableWillOpen={haptics.selection}
+      overshootRight={false}
+      renderRightActions={(progress, _translation, methods) => (
+        <DeleteAction close={methods.close} onDelete={onDelete} progress={progress} />
+      )}
+      rightThreshold={42}>
+      <MotionPressable
+        accessibilityLabel={`${session.title}, ${formatSessionDate(session.updatedAt)}`}
+        accessibilityRole="button"
+        accessibilityState={{ selected: active }}
+        haptic="selection"
+        onPress={onSelect}
+        scaleTo={0.99}
+        style={styles.sessionButton}>
+        <View style={styles.sessionCopy}>
+          <Text numberOfLines={2} style={[styles.sessionTitle, { color: colors.text }]}>{session.title}</Text>
+          <Text style={[styles.sessionMeta, { color: colors.textSecondary }]}>{formatSessionDate(session.updatedAt)} · {session.messageCount} messages</Text>
         </View>
-      </SafeAreaView>
-    </Modal>
+        <View style={styles.accessorySlot}>
+          <SymbolView
+            name={active
+              ? { ios: 'checkmark', android: 'check', web: 'check' }
+              : { ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
+            size={active ? 17 : 15}
+            tintColor={active ? colors.brand : colors.textSecondary}
+            weight="semibold"
+          />
+        </View>
+      </MotionPressable>
+    </Swipeable>
+  );
+}
+
+function DeleteAction({ close, onDelete, progress }: { close: () => void; onDelete: () => void; progress: SharedValue<number> }) {
+  const colors = useAppColors();
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 0.5, 1], [0, 0.6, 1], Extrapolation.CLAMP),
+    transform: [{ translateX: interpolate(progress.value, [0, 1], [28, 0], Extrapolation.CLAMP) }],
+  }));
+  return (
+    <Animated.View style={[styles.deleteAction, { backgroundColor: colors.danger }, animatedStyle]}>
+      <MotionPressable
+        accessibilityLabel="Delete chat"
+        accessibilityRole="button"
+        haptic="warning"
+        onPress={() => {
+          close();
+          onDelete();
+        }}
+        style={styles.deleteActionButton}>
+        <Text style={styles.deleteActionText}>Delete</Text>
+      </MotionPressable>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
-  header: { alignItems: 'center', borderBottomWidth: 1, flexDirection: 'row', gap: Spacing.three, justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16 },
-  headingGroup: { flex: 1, gap: 3 },
-  title: { fontFamily: AppFonts.semibold, fontSize: 22, letterSpacing: -0.4 },
-  subtitle: { fontFamily: AppFonts.regular, fontSize: 13 },
-  closeButton: { borderRadius: 12, justifyContent: 'center', minHeight: 40, paddingHorizontal: 13 },
-  closeText: { fontFamily: AppFonts.medium, fontSize: 14 },
-  list: { gap: 9, padding: 16, paddingBottom: 24 },
+  list: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, marginTop: 12, overflow: 'hidden' },
+  listContent: { paddingBottom: 1 },
   emptyList: { flexGrow: 1 },
-  emptyState: { alignItems: 'center', flex: 1, gap: 10, justifyContent: 'center', padding: 28 },
+  emptyState: { alignItems: 'center', flex: 1, gap: 9, justifyContent: 'center', minHeight: 250, padding: 28 },
   emptyGlyph: { alignItems: 'center', borderRadius: 22, height: 60, justifyContent: 'center', marginBottom: 4, width: 60 },
   emptyTitle: { fontFamily: AppFonts.semibold, fontSize: 20 },
   emptyCopy: { fontFamily: AppFonts.regular, fontSize: 15, lineHeight: 21, maxWidth: 300, textAlign: 'center' },
-  row: { alignItems: 'center', borderRadius: 16, borderWidth: 1, flexDirection: 'row', minHeight: 78, overflow: 'hidden' },
-  sessionButton: { flex: 1, minHeight: 76, justifyContent: 'center', padding: 14 },
-  sessionCopy: { gap: 6 },
+  separator: { height: StyleSheet.hairlineWidth, marginLeft: 14 },
+  sessionButton: { alignItems: 'center', flexDirection: 'row', minHeight: 72, paddingHorizontal: 14, paddingVertical: 11 },
+  sessionCopy: { flex: 1, gap: 5, minWidth: 0 },
   sessionTitle: { fontFamily: AppFonts.medium, fontSize: 15, lineHeight: 20 },
   sessionMeta: { fontFamily: AppFonts.regular, fontSize: 12 },
-  deleteButton: { alignItems: 'center', alignSelf: 'stretch', justifyContent: 'center', minWidth: 72, paddingHorizontal: 10 },
-  deleteText: { fontFamily: AppFonts.medium, fontSize: 12 },
-  footer: { borderTopWidth: 1, padding: 16 },
-  newButton: { alignItems: 'center', borderRadius: 15, justifyContent: 'center', minHeight: 50 },
+  accessorySlot: { alignItems: 'center', height: 28, justifyContent: 'center', marginLeft: 10, width: 28 },
+  deleteAction: { width: 86 },
+  deleteActionButton: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingHorizontal: 10 },
+  deleteActionText: { color: '#FFFFFF', fontFamily: AppFonts.semibold, fontSize: 13 },
+  footer: { paddingBottom: 4, paddingTop: 12 },
+  newButton: { alignItems: 'center', borderRadius: 15, flexDirection: 'row', gap: 8, justifyContent: 'center', minHeight: 50 },
   newButtonText: { fontFamily: AppFonts.semibold, fontSize: 15 },
 });

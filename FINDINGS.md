@@ -51,9 +51,9 @@ Expo SQLite web support uses a WASM worker and `SharedArrayBuffer`. Even with CO
 **Status:** Decision
 **Area:** PXI, model providers
 
-The mobile model catalog queries `modelProviders`, `playgroundModels`, and `generativeModelCustomProviders`. Built-in options are limited to providers with installed dependencies and configured credentials; curated Phoenix web models are ordered first, and custom provider identifiers are treated as configured server-side references.
+The mobile model catalog queries `modelProviders` and `playgroundModels`, then applies the same ordered allowlist as Phoenix's `AgentModelMenu`. Only curated built-in models whose provider dependencies and credentials are ready are selectable. Other built-in and custom-provider models stay hidden, matching the main agent menu's default `limitToCuratedModels` behavior.
 
-**Implication:** Revalidate before each new app session and show an actionable no-model state. Never request or persist model provider credentials on the phone.
+**Implication:** Revalidate before each new app session, keep the allowlist synchronized with Phoenix's `agentCuratedModels.ts`, and show an actionable no-model state. Never request or persist model provider credentials on the phone.
 
 ### 2026-07-14 - Authentication Is Deliberately Incomplete
 
@@ -182,6 +182,15 @@ The targeted Metro resolver shim fixed iOS and Android bundling without polyfill
 **Implication:** Prefer a narrow empty-module shim over broad Node polyfills. Track upstream compatibility when upgrading.
 
 ## Design Decisions
+
+### 2026-07-14 - Chat Overlays Use Expo UI Native Surfaces
+
+**Status:** Decision
+**Area:** chat, native UI, sheets, menus
+
+Model selection and chat history use the universal `@expo/ui` `BottomSheet`, which maps to SwiftUI presentation detents, Material 3 `ModalBottomSheet`, and a Vaul drawer on web. Their React Native list content is hosted through `RNHostView`. Transcript long-press actions use `@expo/ui/community/menu` on iOS and Android, with a pass-through web implementation where text remains selectable.
+
+**Implication:** Keep React Native sheet content inside `RNHostView`, test nested scrolling and gestures on both native platforms, and preserve a functional web fallback when adding menu actions that are otherwise only available through native context menus.
 
 ### 2026-07-14 - Phoenix Visual Language
 

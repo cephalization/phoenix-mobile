@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
@@ -85,7 +86,14 @@ export function InstanceCard({ index, instance, onRemove }: InstanceCardProps) {
               </Text>
             </View>
           </View>
-          <Text style={[styles.arrow, { color: colors.textSecondary }]}>›</Text>
+          <View style={styles.arrow}>
+            <SymbolView
+              name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
+              size={15}
+              tintColor={colors.textSecondary}
+              weight="semibold"
+            />
+          </View>
         </MotionPressable>
       </Swipeable>
     </Animated.View>
@@ -141,7 +149,7 @@ const styles = StyleSheet.create({
   hostRow: { alignItems: 'center', flexDirection: 'row', gap: 6 },
   name: { fontFamily: AppFonts.semibold, fontSize: 16 },
   host: { flex: 1, fontFamily: AppFonts.regular, fontSize: 13 },
-  arrow: { fontFamily: AppFonts.regular, fontSize: 27 },
+  arrow: { alignItems: 'center', height: 32, justifyContent: 'center', width: 24 },
   removeAction: { width: 92 },
   removeActionButton: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingHorizontal: 12 },
   removeActionText: { color: '#FFFFFF', fontFamily: AppFonts.semibold, fontSize: 13 },

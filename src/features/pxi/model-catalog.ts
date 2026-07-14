@@ -21,14 +21,12 @@ const MODEL_PREFLIGHT_QUERY = `
       credentialRequirements { envVarName isRequired }
     }
     playgroundModels { providerKey name }
-    generativeModelCustomProviders(first: 50) {
-      edges { node { id name sdk modelNames } }
-    }
   }
 `;
 
 const MODEL_PREFLIGHT_TIMEOUT_MS = 10_000;
 
+// Keep this order aligned with Phoenix AgentModelMenu's agentCuratedModels.ts.
 const CURATED_MODELS = [
   ['ANTHROPIC', 'claude-fable-5'],
   ['ANTHROPIC', 'claude-opus-4-8'],
@@ -51,11 +49,6 @@ type ModelPreflightResponse = {
       credentialsSet: boolean;
     }[];
     playgroundModels: { providerKey: BuiltInProvider; name: string }[];
-    generativeModelCustomProviders: {
-      edges: {
-        node: { id: string; name: string; sdk: string; modelNames: string[] };
-      }[];
-    };
   };
   errors?: { message?: string }[];
 };
@@ -114,7 +107,11 @@ export async function fetchPxiModelCatalog(
   );
   const curatedIds = new Set(CURATED_MODELS.map(([provider, name]) => `${provider}/${name}`));
   const options: PxiModelOption[] = payload.data.playgroundModels
-    .filter((model) => usableProviders.has(model.providerKey))
+    .filter(
+      (model) =>
+        usableProviders.has(model.providerKey) &&
+        curatedIds.has(`${model.providerKey}/${model.name}`)
+    )
     .map((model) => {
       const selection: ModelSelection = {
         providerType: 'builtin',
@@ -129,23 +126,6 @@ export async function fetchPxiModelCatalog(
         recommended: curatedIds.has(`${model.providerKey}/${model.name}`),
       };
     });
-
-  for (const { node } of payload.data.generativeModelCustomProviders.edges) {
-    for (const modelName of node.modelNames) {
-      const selection: ModelSelection = {
-        providerType: 'custom',
-        providerId: node.id,
-        modelName,
-      };
-      options.push({
-        id: modelId(selection),
-        label: modelName,
-        providerLabel: node.name,
-        selection,
-        recommended: false,
-      });
-    }
-  }
 
   const curatedOrder = new Map(CURATED_MODELS.map(([provider, name], index) => [`${provider}/${name}`, index]));
   options.sort((left, right) => {

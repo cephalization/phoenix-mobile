@@ -195,7 +195,7 @@ export default function PxiChatScreen() {
       ) : catalog.isError ? (
         <StateMessage title="PXI isn’t ready" copy={formatPxiError(catalog.error)} action="Try again" onAction={() => catalog.refetch()} />
       ) : !selectedModel || catalog.data.options.length === 0 ? (
-        <StateMessage title="No model is configured" copy="Configure an AI provider in Phoenix Settings, then try again." action="Check again" onAction={() => catalog.refetch()} />
+        <StateMessage title="No recommended model is configured" copy="Configure a Phoenix-recommended agent model, then try again." action="Check again" onAction={() => catalog.refetch()} />
       ) : requiresModelReplacement ? (
         <StateMessage
           title="Saved model is unavailable"
@@ -491,7 +491,14 @@ function ChatSession({
         <MotionPressable accessibilityLabel={`Change model, currently ${modelLabel}`} accessibilityRole="button" haptic="selection" onPress={onChooseModel} style={[styles.modelButton, { backgroundColor: colors.backgroundSelected }]}>
           <View style={[styles.modelStatus, { backgroundColor: colors.success }]} />
           <Text numberOfLines={1} style={[styles.modelLabel, { color: colors.text }]}>{modelLabel}</Text>
-          <Text style={[styles.modelChevron, { color: colors.textSecondary }]}>⌄</Text>
+          <View style={styles.modelChevron}>
+            <SymbolView
+              name={{ ios: 'chevron.up.chevron.down', android: 'unfold_more', web: 'unfold_more' }}
+              size={14}
+              tintColor={colors.textSecondary}
+              weight="medium"
+            />
+          </View>
         </MotionPressable>
         <Text style={[styles.readOnly, { color: colors.textSecondary }]}>Read-only</Text>
       </View>
@@ -654,7 +661,7 @@ const styles = StyleSheet.create({
   modelButton: { alignItems: 'center', borderRadius: 12, flexDirection: 'row', gap: 7, maxWidth: '72%', minHeight: 34, paddingHorizontal: 10 },
   modelStatus: { borderRadius: 4, height: 7, width: 7 },
   modelLabel: { flexShrink: 1, fontFamily: AppFonts.medium, fontSize: 12 },
-  modelChevron: { fontFamily: AppFonts.regular, fontSize: 15 },
+  modelChevron: { alignItems: 'center', height: 24, justifyContent: 'center', width: 20 },
   readOnly: { fontFamily: AppFonts.medium, fontSize: 11, letterSpacing: 0.3, textTransform: 'uppercase' },
   transcript: { gap: 28, paddingHorizontal: 18, paddingVertical: 24 },
   emptyTranscript: { flexGrow: 1 },
