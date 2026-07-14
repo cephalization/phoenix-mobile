@@ -31,6 +31,20 @@ npm start
 
 Use `npm run ios`, `npm run android`, or `npm run web` to target a platform directly.
 
+To install a development build on a connected iPhone from macOS, enable Developer Mode on the phone and run:
+
+```bash
+npm run ios:device
+```
+
+Pass a device name or UDID to skip Expo's device prompt:
+
+```bash
+npm run ios:device -- "Tony's iPhone"
+```
+
+The script selects `/Applications/Xcode.app`, completes Xcode's first-launch setup, installs locked dependencies, lists connected devices, and builds and installs Phoenix Mobile. Set `XCODE_APP` when Xcode is installed elsewhere.
+
 ```bash
 npm run typecheck
 npm run lint

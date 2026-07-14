@@ -16,6 +16,7 @@
     "expo-build-properties": "~57.0.3",
     "expo-clipboard": "~57.0.0",
     "expo-constants": "~57.0.3",
+    "expo-dev-client": "~57.0.5",
     "expo-device": "~57.0.0",
     "expo-font": "~57.0.0",
     "expo-glass-effect": "~57.0.0",
@@ -56,6 +57,7 @@
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
+    "ios:device": "./scripts/run-ios-device.sh",
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit"
