@@ -5,26 +5,57 @@
 
 import '@/global.css';
 
-import { Platform } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
+
+import { useSettingsStore } from '@/store/settings';
 
 export const Colors = {
   light: {
     text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    background: '#FDFDFD',
+    backgroundElement: '#FFFFFF',
+    backgroundSelected: '#F8F8F8',
+    textSecondary: '#686868',
+    border: '#E6E6E6',
+    accent: '#000000',
+    accentForeground: '#FFFFFF',
+    accentSoft: '#E0F2FF',
+    brand: '#00ADEE',
+    brandSecondary: '#18BAB6',
+    success: '#008F5D',
+    danger: '#EA3829',
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    text: '#FFFFFF',
+    background: '#0E0E0E',
+    backgroundElement: '#1D1D1D',
+    backgroundSelected: '#303030',
+    textSecondary: '#B0B0B0',
+    border: '#303030',
+    accent: '#FFFFFF',
+    accentForeground: '#000000',
+    accentSoft: '#123C3A',
+    brand: '#00ADEE',
+    brandSecondary: '#18BAB6',
+    success: '#0FB5AE',
+    danger: '#F9634C',
   },
 } as const;
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+
+export function useAppColors() {
+  const systemScheme = useColorScheme();
+  const appearance = useSettingsStore((state) => state.appearance);
+  const scheme = appearance === 'system' ? systemScheme : appearance;
+  return Colors[scheme === 'dark' ? 'dark' : 'light'];
+}
+
+export const AppFonts = {
+  regular: 'Geist_400Regular',
+  medium: 'Geist_500Medium',
+  semibold: 'Geist_600SemiBold',
+} as const;
 
 export const Fonts = Platform.select({
   ios: {
