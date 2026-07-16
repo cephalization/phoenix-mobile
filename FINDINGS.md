@@ -234,9 +234,9 @@ The targeted Metro resolver shim fixed iOS and Android bundling without polyfill
 **Status:** Decision
 **Area:** chat, native UI, sheets, menus
 
-Model selection and chat history use the universal `@expo/ui` `BottomSheet`, which maps to SwiftUI presentation detents, Material 3 `ModalBottomSheet`, and a Vaul drawer on web. Their React Native list content is hosted through `RNHostView`. Transcript long-press actions use `@expo/ui/community/menu` on iOS and Android, with a pass-through web implementation where text remains selectable.
+Model selection and chat history use the universal `@expo/ui` `BottomSheet`, which maps to SwiftUI presentation detents, Material 3 `ModalBottomSheet`, and a Vaul drawer on web. Their React Native list content is hosted through `RNHostView`. On iOS, the universal sheet adds native content margins around that host; applying the canvas color to `RNHostView` creates a rectangular surface inside the rounded sheet. The sheet instead sets its SwiftUI presentation background while leaving the hosted subtree transparent. Transcript long-press actions use `@expo/ui/community/menu` on iOS and Android, with a pass-through web implementation where text remains selectable.
 
-**Implication:** Keep React Native sheet content inside `RNHostView`, test nested scrolling and gestures on both native platforms, and preserve a functional web fallback when adding menu actions that are otherwise only available through native context menus.
+**Implication:** Keep React Native sheet content inside `RNHostView`, apply native sheet chrome at the presentation boundary rather than the inset host, test nested scrolling and gestures on both native platforms, and preserve a functional web fallback when adding menu actions that are otherwise only available through native context menus.
 
 ### 2026-07-14 - Phoenix Visual Language
 

@@ -24,7 +24,6 @@ export function SessionHistory({
   activeSessionId,
   onClose,
   onDelete,
-  onNew,
   onSelect,
   sessions,
   visible,
@@ -32,7 +31,6 @@ export function SessionHistory({
   activeSessionId: string | null;
   onClose: () => void;
   onDelete: (sessionId: string) => void;
-  onNew: () => void;
   onSelect: (session: PxiSessionSummary) => void;
   sessions: PxiSessionSummary[];
   visible: boolean;
@@ -72,22 +70,6 @@ export function SessionHistory({
         )}
         style={[styles.list, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}
       />
-
-      <View style={styles.footer}>
-        <MotionPressable
-          accessibilityRole="button"
-          haptic="selection"
-          onPress={onNew}
-          style={[styles.newButton, { backgroundColor: colors.accent }]}>
-          <SymbolView
-            name={{ ios: 'plus', android: 'add', web: 'add' }}
-            size={18}
-            tintColor={colors.accentForeground}
-            weight="medium"
-          />
-          <Text style={[styles.newButtonText, { color: colors.accentForeground }]}>New chat</Text>
-        </MotionPressable>
-      </View>
     </ChatBottomSheet>
   );
 }
@@ -165,7 +147,7 @@ function DeleteAction({ close, onDelete, progress }: { close: () => void; onDele
 }
 
 const styles = StyleSheet.create({
-  list: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, marginTop: 12, overflow: 'hidden' },
+  list: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
   listContent: { paddingBottom: 1 },
   emptyList: { flexGrow: 1 },
   emptyState: { alignItems: 'center', flex: 1, gap: 9, justifyContent: 'center', minHeight: 250, padding: 28 },
@@ -181,7 +163,4 @@ const styles = StyleSheet.create({
   deleteAction: { width: 86 },
   deleteActionButton: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingHorizontal: 10 },
   deleteActionText: { color: '#FFFFFF', fontFamily: AppFonts.semibold, fontSize: 13 },
-  footer: { paddingBottom: 4, paddingTop: 12 },
-  newButton: { alignItems: 'center', borderRadius: 15, flexDirection: 'row', gap: 8, justifyContent: 'center', minHeight: 50 },
-  newButtonText: { fontFamily: AppFonts.semibold, fontSize: 15 },
 });

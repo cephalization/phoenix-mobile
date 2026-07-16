@@ -245,7 +245,6 @@ export default function PxiChatScreen() {
         activeSessionId={sessionId}
         onClose={() => setHistoryVisible(false)}
         onDelete={(removedSessionId) => void removeSession(removedSessionId)}
-        onNew={startNewChat}
         onSelect={selectSession}
         sessions={sessions.data ?? []}
         visible={historyVisible}

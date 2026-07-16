@@ -1,15 +1,14 @@
 import { BottomSheet, RNHostView, type SnapPoint } from '@expo/ui';
-import { SymbolView } from 'expo-symbols';
+import { presentationBackground } from '@expo/ui/swift-ui/modifiers';
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 
-import { MotionPressable } from '@/components/motion-pressable';
-import { AppFonts, Spacing, useAppColors } from '@/constants/theme';
+import { AppFonts, useAppColors } from '@/constants/theme';
 
 export function ChatBottomSheet({
   children,
   onClose,
-  snapPoints = ['half', 'full'],
+  snapPoints = [{ fraction: 0.58 }, { fraction: 0.88 }],
   subtitle,
   title,
   visible,
@@ -26,29 +25,17 @@ export function ChatBottomSheet({
   return (
     <BottomSheet
       isPresented={visible}
+      modifiers={Platform.OS === 'ios' ? [presentationBackground(colors.background)] : undefined}
       onDismiss={onClose}
       showDragIndicator
       snapPoints={snapPoints}>
       <RNHostView>
         <View style={styles.sheet}>
-          <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <View style={styles.header}>
             <View style={styles.headingGroup}>
               <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
               <Text numberOfLines={1} style={[styles.subtitle, { color: colors.textSecondary }]}>{subtitle}</Text>
             </View>
-            <MotionPressable
-              accessibilityLabel={`Close ${title.toLowerCase()}`}
-              accessibilityRole="button"
-              haptic="selection"
-              onPress={onClose}
-              style={[styles.closeButton, { backgroundColor: colors.backgroundSelected }]}>
-              <SymbolView
-                name={{ ios: 'xmark', android: 'close', web: 'close' }}
-                size={17}
-                tintColor={colors.text}
-                weight="medium"
-              />
-            </MotionPressable>
           </View>
           <View style={styles.body}>{children}</View>
         </View>
@@ -58,19 +45,15 @@ export function ChatBottomSheet({
 }
 
 const styles = StyleSheet.create({
-  sheet: { flex: 1 },
+  sheet: { flex: 1, paddingBottom: 20, paddingHorizontal: 20 },
   header: {
-    alignItems: 'center',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: Spacing.three,
-    minHeight: 68,
-    paddingBottom: 12,
-    paddingHorizontal: 4,
+    justifyContent: 'center',
+    minHeight: 72,
+    paddingBottom: 14,
+    paddingTop: 4,
   },
-  headingGroup: { flex: 1, gap: 2, minWidth: 0 },
-  title: { fontFamily: AppFonts.semibold, fontSize: 21, letterSpacing: -0.35 },
-  subtitle: { fontFamily: AppFonts.regular, fontSize: 12 },
-  closeButton: { alignItems: 'center', borderRadius: 16, height: 44, justifyContent: 'center', width: 44 },
+  headingGroup: { gap: 4, minWidth: 0 },
+  title: { fontFamily: AppFonts.semibold, fontSize: 20, letterSpacing: -0.3 },
+  subtitle: { fontFamily: AppFonts.regular, fontSize: 13, lineHeight: 18 },
   body: { flex: 1 },
 });

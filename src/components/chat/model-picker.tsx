@@ -32,7 +32,6 @@ export function ModelPicker({
         data={options}
         ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: colors.border }]} />}
         keyExtractor={(option) => option.id}
-        ListHeaderComponent={<Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Recommended by Phoenix</Text>}
         renderItem={({ item }) => {
           const isSelected = isSameModel(item.selection, selected);
           return (
@@ -44,9 +43,6 @@ export function ModelPicker({
               onPress={() => onSelect(item.selection)}
               scaleTo={0.99}
               style={[styles.option, isSelected && { backgroundColor: colors.backgroundSelected }]}>
-              <View style={[styles.providerMark, { backgroundColor: colors.accentSoft }]}>
-                <Text style={[styles.providerInitial, { color: colors.brand }]}>{item.providerLabel.charAt(0).toUpperCase()}</Text>
-              </View>
               <View style={styles.optionCopy}>
                 <Text numberOfLines={1} style={[styles.modelName, { color: colors.text }]}>{item.label}</Text>
                 <Text numberOfLines={1} style={[styles.providerName, { color: colors.textSecondary }]}>{item.providerLabel}</Text>
@@ -71,21 +67,10 @@ export function ModelPicker({
 }
 
 const styles = StyleSheet.create({
-  list: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, marginTop: 12, overflow: 'hidden' },
+  list: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
   listContent: { paddingBottom: 20 },
-  sectionLabel: {
-    fontFamily: AppFonts.semibold,
-    fontSize: 11,
-    letterSpacing: 0.55,
-    paddingBottom: 8,
-    paddingHorizontal: 14,
-    paddingTop: 13,
-    textTransform: 'uppercase',
-  },
-  separator: { height: StyleSheet.hairlineWidth, marginLeft: 58 },
-  option: { alignItems: 'center', flexDirection: 'row', gap: 11, minHeight: 62, paddingHorizontal: 12, paddingVertical: 9 },
-  providerMark: { alignItems: 'center', borderRadius: 10, height: 34, justifyContent: 'center', width: 34 },
-  providerInitial: { fontFamily: AppFonts.semibold, fontSize: 13 },
+  separator: { height: StyleSheet.hairlineWidth, marginLeft: 14 },
+  option: { alignItems: 'center', flexDirection: 'row', gap: 11, minHeight: 62, paddingHorizontal: 14, paddingVertical: 9 },
   optionCopy: { flex: 1, gap: 2, minWidth: 0 },
   modelName: { fontFamily: AppFonts.medium, fontSize: 15 },
   providerName: { fontFamily: AppFonts.regular, fontSize: 12 },
