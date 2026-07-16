@@ -323,7 +323,20 @@ function ChatSession({
       persistenceSucceeded.current = true;
       if (mounted.current) setPersistenceIssue(null);
       queryClient.setQueryData<StoredPxiSession>(['pxi', 'session', sessionId], saved);
-      await queryClient.invalidateQueries({ queryKey: ['pxi', 'sessions', instance.id] });
+      queryClient.setQueryData<PxiSessionSummary[]>(['pxi', 'sessions', instance.id], (current = []) => {
+        const summary: PxiSessionSummary = {
+          id: saved.id,
+          instanceId: saved.instanceId,
+          model: saved.model,
+          title: saved.title,
+          messageCount: saved.messageCount,
+          generation: saved.generation,
+          revision: saved.revision,
+          createdAt: saved.createdAt,
+          updatedAt: saved.updatedAt,
+        };
+        return [summary, ...current.filter((candidate) => candidate.id !== saved.id)];
+      });
     });
     persistenceQueue.current = save.catch(() => undefined);
     try {
@@ -357,6 +370,8 @@ function ChatSession({
     },
   });
   const isStreaming = status === 'submitted' || status === 'streaming';
+  const isAwaitingAssistant = status === 'submitted'
+    || (status === 'streaming' && messages.at(-1)?.role === 'user');
   const persistenceBlocked = persistenceIssue === 'conflict' || persistenceIssue === 'deleted';
   const sendDisabled = persistenceBlocked || isPersistingSubmission;
   const stopOnUnmount = useEffectEvent(() => {
@@ -510,6 +525,7 @@ function ChatSession({
         keyboardShouldPersistTaps="handled"
         keyExtractor={(message) => message.id}
         ListEmptyComponent={<EmptyChat instanceName={instance.name} />}
+        ListFooterComponent={isAwaitingAssistant ? <PendingAssistant /> : null}
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         onContentSizeChange={(_width, height) => {
           const grew = height > contentHeight.current + 1;
@@ -634,6 +650,22 @@ function EmptyChat({ instanceName }: { instanceName: string }) {
   );
 }
 
+function PendingAssistant() {
+  const colors = useAppColors();
+  return (
+    <View accessibilityLabel="PXI is thinking" accessibilityRole="progressbar" style={styles.pendingAssistant}>
+      <View style={styles.pendingAssistantLabel}>
+        <PxiGlyph color={colors.brand} size={15} />
+        <Text style={[styles.pendingAssistantName, { color: colors.textSecondary }]}>PXI</Text>
+      </View>
+      <View style={styles.pendingAssistantState}>
+        <ActivityIndicator color={colors.brand} size="small" style={styles.pendingAssistantSpinner} />
+        <Text style={[styles.thinking, { color: colors.textSecondary }]}>Thinking…</Text>
+      </View>
+    </View>
+  );
+}
+
 function StateMessage({ action, copy, onAction, title }: { action: string; copy: string; onAction: () => void; title: string }) {
   const colors = useAppColors();
   return (
@@ -651,11 +683,11 @@ const styles = StyleSheet.create({
   chat: { alignSelf: 'center', flex: 1, maxWidth: MaxContentWidth, width: '100%' },
   header: { alignItems: 'center', borderBottomWidth: 1, flexDirection: 'row', minHeight: 58, paddingHorizontal: 12 },
   headerIcon: { alignItems: 'center', height: 48, justifyContent: 'center', width: 48 },
-  headerTitleGroup: { alignItems: 'center', flex: 1, gap: 1 },
+  headerTitleGroup: { alignItems: 'center', gap: 1, left: 108, position: 'absolute', right: 108 },
   headerTitleRow: { alignItems: 'center', flexDirection: 'row', gap: 7 },
   headerTitle: { fontFamily: AppFonts.semibold, fontSize: 16 },
   instanceName: { fontFamily: AppFonts.regular, fontSize: 11, maxWidth: 220 },
-  newButton: { alignItems: 'center', height: 48, justifyContent: 'center', minWidth: 48 },
+  newButton: { alignItems: 'center', height: 48, justifyContent: 'center', marginLeft: 'auto', minWidth: 48 },
   newText: { fontFamily: AppFonts.medium, fontSize: 14 },
   modelBar: { alignItems: 'center', borderBottomWidth: 1, flexDirection: 'row', justifyContent: 'space-between', minHeight: 48, paddingHorizontal: 16 },
   modelButton: { alignItems: 'center', borderRadius: 12, flexDirection: 'row', gap: 7, maxWidth: '72%', minHeight: 34, paddingHorizontal: 10 },
@@ -669,6 +701,12 @@ const styles = StyleSheet.create({
   emptyGlyph: { alignItems: 'center', borderRadius: 24, height: 66, justifyContent: 'center', marginBottom: 5, width: 66 },
   emptyTitle: { fontFamily: AppFonts.semibold, fontSize: 24, letterSpacing: -0.5, textAlign: 'center' },
   emptyCopy: { fontFamily: AppFonts.regular, fontSize: 15, lineHeight: 22, maxWidth: 380, textAlign: 'center' },
+  pendingAssistant: { gap: 11, paddingRight: 8 },
+  pendingAssistantLabel: { alignItems: 'center', flexDirection: 'row', gap: 7 },
+  pendingAssistantName: { fontFamily: AppFonts.semibold, fontSize: 12, letterSpacing: 0.5 },
+  pendingAssistantSpinner: { transform: [{ translateX: -1.5 }] },
+  pendingAssistantState: { alignItems: 'center', flexDirection: 'row', gap: 8, minHeight: 22 },
+  thinking: { fontFamily: AppFonts.regular, fontSize: 12, fontStyle: 'italic' },
   center: { alignItems: 'center', flex: 1, gap: 12, justifyContent: 'center', padding: 28 },
   stateTitle: { fontFamily: AppFonts.semibold, fontSize: 22, letterSpacing: -0.4, textAlign: 'center' },
   stateCopy: { fontFamily: AppFonts.regular, fontSize: 15, lineHeight: 22, maxWidth: 360, textAlign: 'center' },

@@ -139,6 +139,17 @@ CSS can color the document but cannot remove normal iOS Safari toolbars. The app
 
 ## Resolved Bugs And Reusable Patterns
 
+### 2026-07-16 - PXI Saves Must Not Await Session-List Refetches
+
+**Status:** Resolved
+**Area:** PXI, persistence, TanStack Query
+
+PXI persisted each message snapshot to the serialized SQLite repository and then awaited invalidation of the active session-list query before resolving the save. On native, a completed first turn could leave that refetch pending indefinitely. The next submission waited behind the unresolved persistence queue, so its send button disabled while the text remained in the composer.
+
+Successful saves now update both the session detail and ordered session-summary caches directly from the returned durable record. Follow-up submission proceeds as soon as the database commit completes.
+
+**Implication:** Do not include query refetches in the serialized persistence completion path. Update caches synchronously when a mutation already returns the authoritative record, and reserve refetches for explicit reconciliation paths.
+
 ### 2026-07-16 - Form Sheet Frames Must Update Synchronously
 
 **Status:** Resolved

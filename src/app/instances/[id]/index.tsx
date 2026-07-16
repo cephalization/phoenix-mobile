@@ -17,6 +17,7 @@ import Animated, {
 
 import { MotionPressable } from '@/components/motion-pressable';
 import { PhoenixLogo } from '@/components/phoenix-logo';
+import { PxiHeaderButton } from '@/components/pxi-header-button';
 import { AppFonts, MaxContentWidth, Spacing, useAppColors } from '@/constants/theme';
 import {
   phoenixQueryKeys,
@@ -96,7 +97,20 @@ export default function InstanceScreen() {
         />
       }
       style={[styles.screen, { backgroundColor: colors.background }]}>
-      <Stack.Screen options={{ scrollEdgeEffects: { bottom: 'soft' }, title: instance.name }} />
+      <Stack.Screen
+        options={{
+          headerBackTitle: 'Instances',
+          headerRight: () => <PxiHeaderButton instance={instance} />,
+          scrollEdgeEffects: { bottom: 'soft' },
+          title: instance.name,
+          unstable_headerRightItems: () => [
+            {
+              element: <PxiHeaderButton instance={instance} />,
+              type: 'custom',
+            },
+          ],
+        }}
+      />
       <View style={[styles.content, { paddingBottom: 20 + insets.bottom }]}>
           <View style={styles.hero}>
             <View style={[styles.statusRow, { backgroundColor: colors.backgroundSelected }]}>

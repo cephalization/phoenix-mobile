@@ -20,7 +20,6 @@ export default function InstancesScreen() {
   const queryClient = useQueryClient();
   const instances = useInstanceStore((state) => state.instances);
   const hasHydrated = useInstanceStore((state) => state.hasHydrated);
-  const activeInstanceId = useInstanceStore((state) => state.activeInstanceId);
   const removeInstance = useInstanceStore((state) => state.removeInstance);
 
   const requestRemove = (instance: PhoenixInstance) => {
@@ -55,7 +54,7 @@ export default function InstancesScreen() {
               </Animated.View>
             )}
           </View>
-          {!activeInstanceId && <PhoenixLogo size={36} />}
+          <PhoenixLogo size={36} />
         </View>
 
         <View style={styles.listArea}>

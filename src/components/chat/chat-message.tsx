@@ -137,7 +137,7 @@ function ToolPart({ onInteraction, part }: { onInteraction?: () => void; part: P
           ) : approval ? (
             <Text style={[styles.toolStateGlyph, { color: colors.brand }]}>?</Text>
           ) : (
-            <ActivityIndicator color={colors.brand} size="small" />
+            <ActivityIndicator color={colors.brand} size="small" style={styles.toolSpinner} />
           )}
         </View>
         <View style={styles.toolCopy}>
@@ -317,6 +317,7 @@ const styles = StyleSheet.create({
   toolHeading: { alignItems: 'flex-start', flexDirection: 'row', gap: 9, minHeight: 48, paddingVertical: 7 },
   toolStateSlot: { alignItems: 'center', height: 28, justifyContent: 'center', width: 18 },
   toolStateGlyph: { fontFamily: AppFonts.semibold, fontSize: 16, lineHeight: 22 },
+  toolSpinner: { transform: [{ translateX: -1.5 }] },
   toolCopy: { flex: 1, gap: 2, minWidth: 0 },
   toolTitleRow: { alignItems: 'center', flexDirection: 'row', gap: 8, minHeight: 22 },
   toolName: { flexShrink: 1, fontFamily: AppFonts.medium, fontSize: 14 },
