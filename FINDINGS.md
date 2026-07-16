@@ -13,6 +13,19 @@ This is the project's living technical memory. Record discoveries that would oth
 
 ## Active Constraints
 
+### 2026-07-16 - Xcode 27 Beta Requires The UIKit Scene Lifecycle
+
+**Status:** Active
+**Area:** iOS, Expo, Xcode
+
+Building the generated SDK 57 app with Xcode 27 beta raises `SIGTRAP` in `UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption` because the template uses the legacy application lifecycle. Expo accepted [expo/expo#46664](https://github.com/expo/expo/issues/46664) for the same failure on SDK 56 and tracks it as an iOS 27 issue with upstream React Native work.
+
+The local `with-ios-scene-lifecycle` config plugin moves React startup into `SceneDelegate`, assigns the scene window to both `SceneDelegate.window` and `AppDelegate.window`, and forwards scene URL opens through the existing AppDelegate path. Assigning `AppDelegate.window` is essential: without it, Expo Dev Launcher can load while the React root stays detached and black. This exact flow was verified on a physical iOS 27 device with Expo SDK 57.0.6 and Xcode 27 beta.
+
+The App Store version of Expo Go does not yet include SDK 57. `eas go` and EAS physical-device builds require a paid Apple Developer membership, so local Xcode builds signed by the configured Personal Team are the available no-cost device workflow.
+
+**Implication:** Keep the local scene plugin and regenerate iOS through `npm run ios:device:clean` until Expo resolves the accepted lifecycle issue. Revalidate React mounting, Expo Dev Launcher, initial URLs, and deep links whenever the generated AppDelegate changes.
+
 ### 2026-07-14 - PXI Uses The External Server-Agent Stream
 
 **Status:** Decision
@@ -125,6 +138,28 @@ CSS can color the document but cannot remove normal iOS Safari toolbars. The app
 **Implication:** Test the installed Home Screen experience separately from an ordinary Safari tab. Do not treat browser-controlled bars as React Native layout defects.
 
 ## Resolved Bugs And Reusable Patterns
+
+### 2026-07-16 - Form Sheet Frames Must Update Synchronously
+
+**Status:** Resolved
+**Area:** iOS, navigation, form sheets
+
+With Fabric and fixed form-sheet detents, asynchronous React Native layout transactions could restore the smaller detent's frame after a sheet expanded. Settings and connection content then appeared clipped or disappeared entirely. `react-native-screens` tracks this frame-ordering race and provides `featureFlags.experiment.synchronousScreenUpdatesEnabled` for React Native 0.82 and newer.
+
+The app enables synchronous screen updates before mounting navigation. Sheet routes expose their `ScrollView` as the screen root because iOS form-sheet sizing and scroll-driven expansion require a direct first-child path to the scroll view. Keyboard and safe-area spacing are applied as scroll insets and content padding instead of adding layout wrappers around the scroll view.
+
+**Implication:** Keep synchronous screen updates enabled while these routes use fixed native detents. Preserve the root-scroll-view hierarchy and re-test both detents, keyboard presentation, top and bottom scroll extents, and settled content after React Native or `react-native-screens` upgrades.
+
+### 2026-07-14 - npm ci Removes Expo SQLite's Generated iOS Source
+
+**Status:** Resolved
+**Area:** iOS, Expo SQLite, setup
+
+Expo SQLite 57 ships its SQLite amalgamation under `vendor/` and copies `sqlite3.c` and `sqlite3.h` into its `ios/` directory while CocoaPods evaluates the podspec. Running `npm ci` replaces `node_modules` and removes those generated copies, but an existing Pods project can still reference them without causing Expo CLI to reinstall pods.
+
+The iOS device setup script now runs `pod install` after `npm ci`, which evaluates the podspec and restores the source files before building.
+
+**Implication:** Keep CocoaPods installation after clean JavaScript dependency installation. A missing `node_modules/expo-sqlite/ios/sqlite3.c` indicates stale pods, not a source file that should be checked into the app.
 
 ### 2026-07-14 - Streaming Chat Scroll Follows Reader Intent
 

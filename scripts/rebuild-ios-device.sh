@@ -33,6 +33,19 @@ sudo xcodebuild -runFirstLaunch
 cd "${ROOT_DIR}"
 printf 'Installing locked JavaScript dependencies...\n'
 npm ci
+IOS_DEPLOYMENT_TARGET="$(node --print "require('./app.json').expo.ios.deploymentTarget")"
+
+printf 'Regenerating the iOS project from app config...\n'
+npx expo prebuild --clean --platform ios --no-install
+
+printf 'Installing iOS CocoaPods dependencies...\n'
+(
+  cd "${ROOT_DIR}/ios"
+  pod install
+)
+node "${ROOT_DIR}/scripts/normalize-ios-deployment-targets.js" \
+  "${ROOT_DIR}/ios/Pods/Pods.xcodeproj/project.pbxproj" \
+  "${IOS_DEPLOYMENT_TARGET}"
 
 printf '\nConnected Apple devices:\n'
 xcrun devicectl list devices

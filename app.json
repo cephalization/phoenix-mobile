@@ -11,6 +11,7 @@
     "primaryColor": "#000000",
     "ios": {
       "icon": "./assets/expo.icon",
+      "deploymentTarget": "16.4",
       "config": {
         "usesNonExemptEncryption": false
       },
@@ -19,7 +20,8 @@
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         }
-      }
+      },
+      "bundleIdentifier": "com.anonymous.phoenix-mobile"
     },
     "android": {
       "adaptiveIcon": {
@@ -57,7 +59,11 @@
           }
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "./plugins/with-ios-scene-lifecycle",
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

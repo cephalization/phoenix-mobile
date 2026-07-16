@@ -31,19 +31,21 @@ npm start
 
 Use `npm run ios`, `npm run android`, or `npm run web` to target a platform directly.
 
-To install a development build on a connected iPhone from macOS, enable Developer Mode on the phone and run:
+For the first development build on a connected iPhone, or after native dependency and app-config changes, enable Developer Mode on the phone and run:
 
 ```bash
-npm run ios:device
+npm run ios:device:clean
 ```
 
 Pass a device name or UDID to skip Expo's device prompt:
 
 ```bash
-npm run ios:device -- "Tony's iPhone"
+npm run ios:device:clean -- "My iPhone"
 ```
 
-The script selects `/Applications/Xcode.app`, completes Xcode's first-launch setup, installs locked dependencies, lists connected devices, and builds and installs Phoenix Mobile. Set `XCODE_APP` when Xcode is installed elsewhere.
+The clean script selects `/Applications/Xcode.app`, completes Xcode's first-launch setup, installs locked JavaScript dependencies, regenerates the iOS project with the Xcode 27 scene-lifecycle workaround, installs CocoaPods dependencies, and builds and installs Phoenix Mobile. Xcode discovers a locally configured development team for signing; no team identifier is stored in the repository. Set `XCODE_APP` when Xcode is installed elsewhere.
+
+For normal JavaScript and TypeScript development, leave the installed development client on the phone and run `npm start` for Fast Refresh. Use `npm run ios:device` only when an incremental native rebuild is needed.
 
 ```bash
 npm run typecheck

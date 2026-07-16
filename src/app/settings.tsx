@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MotionPressable } from '@/components/motion-pressable';
 import { PhoenixLogo } from '@/components/phoenix-logo';
@@ -21,6 +21,7 @@ const appearanceOptions: { label: string; value: Appearance }[] = [
 
 export default function SettingsScreen() {
   const colors = useAppColors();
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const appearance = useSettingsStore((state) => state.appearance);
   const setAppearance = useSettingsStore((state) => state.setAppearance);
@@ -65,9 +66,11 @@ export default function SettingsScreen() {
   };
 
   return (
-    <SafeAreaView edges={['bottom']} style={[styles.screen, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.content}>
+    <ScrollView
+      contentContainerStyle={styles.scrollContent}
+      contentInsetAdjustmentBehavior="automatic"
+      style={[styles.screen, { backgroundColor: colors.background }]}>
+      <View style={[styles.content, { paddingBottom: 20 + insets.bottom }]}>
           <View style={styles.section}>
             <View style={styles.sectionHeading}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Appearance</Text>
@@ -147,9 +150,8 @@ export default function SettingsScreen() {
               <Text style={[styles.aboutVersion, { color: colors.textSecondary }]}>Version {Constants.expoConfig?.version ?? '1.0.0'}</Text>
             </View>
           </View>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+      </View>
+    </ScrollView>
   );
 }
 

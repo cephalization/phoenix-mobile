@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
   FadeIn,
@@ -31,6 +31,7 @@ import { useInstanceStore } from '@/store/instances';
 export default function InstanceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useAppColors();
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const instance = useInstanceStore((state) => state.instances.find((item) => item.id === id));
   const removeInstance = useInstanceStore((state) => state.removeInstance);
@@ -82,20 +83,21 @@ export default function InstanceScreen() {
   }
 
   return (
-    <SafeAreaView edges={['bottom']} style={[styles.screen, { backgroundColor: colors.background }]}>
-      <Stack.Screen options={{ title: instance.name }} />
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl
-            colors={[colors.brand]}
-            onRefresh={refresh}
-            progressBackgroundColor={colors.backgroundElement}
-            refreshing={isRefreshing}
-            tintColor={colors.brand}
-          />
-        }>
-        <View style={styles.content}>
+    <ScrollView
+      contentContainerStyle={styles.scrollContent}
+      contentInsetAdjustmentBehavior="automatic"
+      refreshControl={
+        <RefreshControl
+          colors={[colors.brand]}
+          onRefresh={refresh}
+          progressBackgroundColor={colors.backgroundElement}
+          refreshing={isRefreshing}
+          tintColor={colors.brand}
+        />
+      }
+      style={[styles.screen, { backgroundColor: colors.background }]}>
+      <Stack.Screen options={{ scrollEdgeEffects: { bottom: 'soft' }, title: instance.name }} />
+      <View style={[styles.content, { paddingBottom: 20 + insets.bottom }]}>
           <View style={styles.hero}>
             <View style={[styles.statusRow, { backgroundColor: colors.backgroundSelected }]}>
               <View style={[styles.statusDot, { backgroundColor: projects.isError ? colors.danger : colors.success }]} />
@@ -171,9 +173,8 @@ export default function InstanceScreen() {
           <MotionPressable accessibilityRole="button" haptic="warning" onPress={remove} style={styles.removeButton}>
             <Text style={[styles.removeText, { color: colors.danger }]}>Remove connection</Text>
           </MotionPressable>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+      </View>
+    </ScrollView>
   );
 }
 

@@ -11,12 +11,14 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { featureFlags } from 'react-native-screens';
 
 import { Colors } from '@/constants/theme';
 import { PxiFab } from '@/components/pxi-fab';
 import { useSettingsStore } from '@/store/settings';
 
 SplashScreen.preventAutoHideAsync();
+featureFlags.experiment.synchronousScreenUpdatesEnabled = true;
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();

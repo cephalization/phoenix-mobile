@@ -43,7 +43,7 @@ Connecting an instance proves the mobile foundation works, but it does not yet p
 
 ### Phoenix PXI References
 
-Treat these files in `/Users/tony/repos/phoenix` as protocol and visual references. Do not import source files across repositories.
+Treat the following paths in a local checkout of the Arize Phoenix repository as protocol and visual references. Do not import source files across repositories.
 
 - `js/packages/phoenix-cli/src/pxi/types.ts` defines `PxiMessage`, assistant metadata, model selection, contexts, edit permissions, and the server-agent request body.
 - `js/packages/phoenix-cli/src/pxi/client.ts` builds `/agents/server/sessions/{sessionId}/chat`, sends complete `UIMessage[]` history, and consumes the AI SDK UI-message stream.

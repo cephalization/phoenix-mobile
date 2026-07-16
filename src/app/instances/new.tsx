@@ -3,16 +3,9 @@ import { useMutation } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, ReduceMotion, useReducedMotion } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
 import { MotionPressable } from '@/components/motion-pressable';
@@ -32,6 +25,7 @@ type ConnectionForm = z.infer<typeof connectionSchema>;
 
 export default function NewInstanceScreen() {
   const colors = useAppColors();
+  const insets = useSafeAreaInsets();
   const reduceMotion = useReducedMotion();
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'verifying' | 'success'>('idle');
   const addInstance = useInstanceStore((state) => state.addInstance);
@@ -82,13 +76,13 @@ export default function NewInstanceScreen() {
   });
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <ScrollView
+      automaticallyAdjustKeyboardInsets
+      contentContainerStyle={styles.scrollContent}
+      contentInsetAdjustmentBehavior="automatic"
+      keyboardShouldPersistTaps="handled"
       style={[styles.screen, { backgroundColor: colors.background }]}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled">
-        <View style={styles.content}>
+      <View style={[styles.content, { paddingBottom: 20 + insets.bottom }]}>
           <View style={styles.heading}>
             <View style={styles.connectionType}>
               <PhoenixLogo size={25} />
@@ -207,9 +201,8 @@ export default function NewInstanceScreen() {
               On a physical device, use your computer’s LAN address instead of localhost.
             </Text>
           </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </View>
+    </ScrollView>
   );
 }
 
