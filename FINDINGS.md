@@ -177,7 +177,7 @@ The iOS device setup script now runs `pod install` after `npm ci`, which evaluat
 **Status:** Decision
 **Area:** PXI, scrolling, Markdown
 
-PXI keeps following streamed output only while the reader remains at the live edge. Touching or dragging the transcript releases follow mode, subsequent chunks arrive without stealing position, and the Latest control explicitly returns to and re-engages the live edge. New user turns receive a stable row anchor, saved threads reopen at the latest user turn, and `maintainVisibleContentPosition` limits displacement when rich content changes size.
+PXI keeps following streamed output only while the reader remains at the live edge. Sending a new turn explicitly re-engages live-edge following; touching or dragging the transcript releases it, subsequent chunks arrive without stealing position, and the Latest control explicitly returns to and re-engages the live edge. Saved threads reopen at the latest user turn, and `maintainVisibleContentPosition` limits displacement when rich content changes size.
 
 Assistant text renders through `@ronradtke/react-native-markdown-display`'s `MarkdownStream`. It provides a pure-JavaScript native-view renderer, seals incomplete streaming fences, supports styled headings, lists, links, quotes, tables, and syntax-highlighted code, and does not require another native client rebuild. Model-generated links are restricted to HTTP and HTTPS. The AI SDK UI update throttle remains 50 ms so token chunks do not force unbounded parsing and layout work.
 

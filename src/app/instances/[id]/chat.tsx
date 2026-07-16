@@ -287,8 +287,6 @@ function ChatSession({
   const contentHeight = useRef(0);
   const initialAnchorId = useRef([...initialMessages].reverse().find((message) => message.role === 'user')?.id);
   const initialAnchorOpened = useRef(initialMessages.length === 0);
-  const pendingAnchorId = useRef<string | null>(null);
-  const turnAnchorInProgress = useRef(false);
   const [showJump, setShowJump] = useState(false);
   const [input, setInput] = useState('');
   const [wasStopped, setWasStopped] = useState(false);
@@ -410,6 +408,7 @@ function ChatSession({
   }, [persistenceIssue, stop]);
 
   const scrollToLatest = () => {
+    readerIsInteracting.current = false;
     followLiveEdge.current = true;
     setShowJump(false);
     listRef.current?.scrollToEnd({ animated: true });
@@ -432,13 +431,6 @@ function ChatSession({
       requestAnimationFrame(() => listRef.current?.scrollToOffset({ animated: false, offset }));
       return;
     }
-    if (messageId === pendingAnchorId.current) {
-      pendingAnchorId.current = null;
-      requestAnimationFrame(() => {
-        listRef.current?.scrollToOffset({ animated: false, offset });
-        requestAnimationFrame(() => { turnAnchorInProgress.current = false; });
-      });
-    }
   };
 
   const submit = async () => {
@@ -452,12 +444,8 @@ function ChatSession({
       role: 'user',
       parts: [{ type: 'text', text }],
     };
-    pendingAnchorId.current = userMessage.id;
-    turnAnchorInProgress.current = true;
     const saved = await persistMessages([...messages, userMessage]);
     if (!saved) {
-      pendingAnchorId.current = null;
-      turnAnchorInProgress.current = false;
       submitting.current = false;
       if (mounted.current) setIsPersistingSubmission(false);
       return;
@@ -468,6 +456,7 @@ function ChatSession({
     }
     setInput('');
     setWasStopped(false);
+    readerIsInteracting.current = false;
     followLiveEdge.current = true;
     setShowJump(false);
     haptics.light();
@@ -530,7 +519,8 @@ function ChatSession({
         onContentSizeChange={(_width, height) => {
           const grew = height > contentHeight.current + 1;
           contentHeight.current = height;
-          if (followLiveEdge.current && !turnAnchorInProgress.current) {
+          if (followLiveEdge.current) {
+            setShowJump(false);
             requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
           } else if (grew && isStreaming) {
             setShowJump(true);
@@ -539,13 +529,10 @@ function ChatSession({
         onLayout={() => {
           if (followLiveEdge.current) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
         }}
-        onMomentumScrollBegin={() => { readerIsInteracting.current = true; }}
-        onMomentumScrollEnd={() => { readerIsInteracting.current = false; }}
         onScroll={onScroll}
         onScrollBeginDrag={() => {
           readerIsInteracting.current = true;
           followLiveEdge.current = false;
-          turnAnchorInProgress.current = false;
         }}
         onScrollEndDrag={(event) => {
           onScroll(event);
@@ -554,7 +541,6 @@ function ChatSession({
         onTouchStart={() => {
           if (isStreaming) {
             followLiveEdge.current = false;
-            turnAnchorInProgress.current = false;
           }
         }}
         ref={listRef}
@@ -565,7 +551,6 @@ function ChatSession({
               message={item}
               onInteraction={() => {
                 followLiveEdge.current = false;
-                turnAnchorInProgress.current = false;
                 setShowJump(true);
               }}
             />
