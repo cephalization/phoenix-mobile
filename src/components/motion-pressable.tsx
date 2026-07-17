@@ -3,6 +3,7 @@ import { Pressable } from 'react-native';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { pressSpring } from '@/constants/motion';
+import { useAppColors } from '@/constants/theme';
 import { haptics } from '@/lib/haptics';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -14,7 +15,7 @@ type MotionPressableProps = Omit<PressableProps, 'style'> & {
 };
 
 export function MotionPressable({
-  haptic = 'light',
+  haptic = 'none',
   onPress,
   onPressIn,
   onPressOut,
@@ -22,6 +23,7 @@ export function MotionPressable({
   style,
   ...props
 }: MotionPressableProps) {
+  const colors = useAppColors();
   const reduceMotion = useReducedMotion();
   const scale = useSharedValue(1);
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
@@ -29,6 +31,7 @@ export function MotionPressable({
   return (
     <AnimatedPressable
       {...props}
+      android_ripple={{ color: colors.ripple, foreground: true }}
       onPress={(event) => {
         if (haptic === 'light') haptics.light();
         if (haptic === 'selection') haptics.selection();

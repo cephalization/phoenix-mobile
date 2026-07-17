@@ -13,6 +13,15 @@ This is the project's living technical memory. Record discoveries that would oth
 
 ## Active Constraints
 
+### 2026-07-17 - Android Predictive Back And Sheet Keyboard Await Device Validation
+
+**Status:** Watch
+**Area:** Android, navigation, form sheets
+
+The Android manifest opt-out behind `predictiveBackGestureEnabled: false` is deprecated once the app targets API 36, so the app would receive predictive back unprepared. The flag is now enabled; the codebase has no `BackHandler` interception and `react-native-screens` 4.25 supports predictive back for the native stack. The connection form sheet previously relied on `automaticallyAdjustKeyboardInsets` and `contentInsetAdjustmentBehavior`, which are iOS-only; Android now wraps the sheet's root scroll view in `KeyboardAvoidingView` with `height` behavior, matching the device-verified chat fix, while iOS keeps the scroll view as the screen root per the form-sheet frame finding.
+
+**Implication:** Verify on a physical Android device: back gesture through the chat route, open form sheets, and open bottom sheets; and keyboard behavior in the connection sheet at both detents. Also note `sheetGrabberVisible` and `sheetCornerRadius` are iOS-only in `react-native-screens`, and `@expo/ui` fractional snap points resolve to half/full on Android.
+
 ### 2026-07-16 - Xcode 27 Beta Requires The UIKit Scene Lifecycle
 
 **Status:** Active
@@ -139,6 +148,24 @@ CSS can color the document but cannot remove normal iOS Safari toolbars. The app
 
 ## Resolved Bugs And Reusable Patterns
 
+### 2026-07-17 - Native Surfaces Follow The Platform Scheme, Not App State
+
+**Status:** Resolved
+**Area:** theming, status bar, Android, iOS
+
+The in-app appearance override only themed React-rendered views. `expo-status-bar`'s `auto` style, `Alert.alert`, the Material bottom sheet and menus, and other native chrome resolve from the platform scheme via the `Appearance` module, so a forced appearance produced an illegible status bar and mismatched native dialogs. The root layout now derives the status-bar style from the resolved scheme and pushes the override into `Appearance.setColorScheme` on native (`null` restores system following).
+
+**Implication:** Any future native surface (dialogs, sheets, pickers) inherits the override automatically only because of the `Appearance.setColorScheme` sync. Do not remove it, and keep web excluded — the web document theme is handled separately.
+
+### 2026-07-17 - Interrupted Streams Persist Non-Terminal Part States
+
+**Status:** Resolved
+**Area:** PXI, persistence, AI SDK
+
+AI SDK 6 does not finalize UI message part states on abort, disconnect, or error: text and reasoning parts keep `state: 'streaming'` and tool parts keep `input-streaming`/`input-available`. Snapshot and `onFinish` persistence captured those frozen states, so restored sessions rendered a permanent tool spinner, "Thinking…" line, and streaming Markdown with no stream attached. `finalizeInterruptedMessages` now normalizes parts to terminal states on both persist and restore (restore also repairs rows saved before the fix); interrupted tools become `output-error` with an explanatory message.
+
+**Implication:** Keep persistence and restore routed through the finalizer, and re-check its state mapping whenever the AI SDK major version or part-state vocabulary changes.
+
 ### 2026-07-16 - Android Chat Must Avoid The Keyboard Explicitly
 
 **Status:** Resolved
@@ -237,6 +264,15 @@ The targeted Metro resolver shim fixed iOS and Android bundling without polyfill
 **Implication:** Prefer a narrow empty-module shim over broad Node polyfills. Track upstream compatibility when upgrading.
 
 ## Design Decisions
+
+### 2026-07-17 - Touch Feedback Is Platform-Idiomatic And Haptics Are Reserved For State Changes
+
+**Status:** Decision
+**Area:** Interaction design, Android
+
+`MotionPressable` now renders an `android_ripple` (via the theme `ripple` token) alongside its press spring so Android touches read as Material state layers, and its default haptic is `none`. Haptics are opt-in for meaningful state changes only: value selection (model, session, appearance), send/stop, destructive confirmations, swipe-action reveal, and operation results. Plain navigation, link opens, and disclosure toggles are silent, matching both HIG and Material guidance.
+
+**Implication:** New pressables get ripple and silence for free. Pass a `haptic` value only when the interaction changes state, and let operation results keep using the success/warning/error notifications.
 
 ### 2026-07-14 - Chat Overlays Use Expo UI Native Surfaces
 

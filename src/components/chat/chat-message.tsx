@@ -120,7 +120,6 @@ function ToolPart({ onInteraction, part }: { onInteraction?: () => void; part: P
         accessibilityRole="button"
         accessibilityState={{ disabled: !hasDetails, expanded }}
         disabled={!hasDetails}
-        haptic="selection"
         onPress={() => {
           onInteraction?.();
           setExpanded((value) => !value);
@@ -228,7 +227,6 @@ export function ChatMessage({ instanceBaseUrl, message, onInteraction }: { insta
       {traceId && (
         <MotionPressable
           accessibilityRole="link"
-          haptic="selection"
           onPress={() => {
             onInteraction?.();
             void WebBrowser.openBrowserAsync(`${instanceBaseUrl.replace(/\/+$/, '')}/redirects/traces/${encodeURIComponent(traceId)}`);
@@ -261,7 +259,6 @@ function AssistantPart({ onInteraction, part }: { onInteraction?: () => void; pa
     return (
       <MotionPressable
         accessibilityRole="link"
-        haptic="selection"
         onPress={() => {
           onInteraction?.();
           void WebBrowser.openBrowserAsync(part.url);
@@ -275,7 +272,6 @@ function AssistantPart({ onInteraction, part }: { onInteraction?: () => void; pa
     return (
       <MotionPressable
         accessibilityRole="link"
-        haptic="selection"
         onPress={() => {
           onInteraction?.();
           void WebBrowser.openBrowserAsync(part.url);

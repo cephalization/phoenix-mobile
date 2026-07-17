@@ -64,8 +64,12 @@ export function InstanceCard({ index, instance, onRemove }: InstanceCardProps) {
           />
         )}>
         <MotionPressable
+          accessibilityActions={[{ name: 'delete', label: 'Remove connection' }]}
           accessibilityHint="Opens this Phoenix instance"
           accessibilityRole="button"
+          onAccessibilityAction={(event) => {
+            if (event.nativeEvent.actionName === 'delete') onRemove(instance);
+          }}
           onPress={() => {
             setActiveInstanceId(instance.id);
             router.push({ pathname: '/instances/[id]', params: { id: instance.id } });
