@@ -139,6 +139,15 @@ CSS can color the document but cannot remove normal iOS Safari toolbars. The app
 
 ## Resolved Bugs And Reusable Patterns
 
+### 2026-07-16 - Android Chat Must Avoid The Keyboard Explicitly
+
+**Status:** Resolved
+**Area:** Android, PXI, keyboard
+
+The generated Android activity already uses `windowSoftInputMode="adjustResize"`, but the PXI `KeyboardAvoidingView` previously enabled a behavior only on iOS. On a physical Pixel running Android 17, opening the keyboard covered the composer despite the activity resize policy. PXI now uses `height` avoidance on Android while retaining `padding` on iOS.
+
+**Implication:** Preserve both the generated `adjustResize` policy and explicit Android keyboard avoidance. Verify the empty chat, long transcript, multiline composer, and keyboard dismissal on a physical Android device after changing chat layout or edge-to-edge configuration.
+
 ### 2026-07-16 - PXI Saves Must Not Await Session-List Refetches
 
 **Status:** Resolved

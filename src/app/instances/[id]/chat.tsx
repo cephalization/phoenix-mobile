@@ -376,7 +376,7 @@ function ChatSession({
     void stop();
   });
   const handleAppStateChange = useEffectEvent((nextState: string) => {
-    if (nextState !== 'active' && isStreaming) {
+    if (nextState === 'background' && isStreaming) {
       setWasStopped(true);
       void persistMessages(messages).finally(() => void stop());
     }
@@ -489,7 +489,7 @@ function ChatSession({
       : { label: 'Retry save', run: retryPersistence };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.chat}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.chat}>
       <View style={[styles.modelBar, { borderBottomColor: colors.border }]}>
         <MotionPressable accessibilityLabel={`Change model, currently ${modelLabel}`} accessibilityRole="button" haptic="selection" onPress={onChooseModel} style={[styles.modelButton, { backgroundColor: colors.backgroundSelected }]}>
           <View style={[styles.modelStatus, { backgroundColor: colors.success }]} />

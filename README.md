@@ -31,6 +31,13 @@ npm start
 
 Use `npm run ios`, `npm run android`, or `npm run web` to target a platform directly.
 
+Physical-device setup is documented separately:
+
+- [iOS setup below](#ios-physical-device)
+- [Android device development](./docs/android-development.md)
+
+### iOS physical device
+
 For the first development build on a connected iPhone, or after native dependency and app-config changes, enable Developer Mode on the phone and run:
 
 ```bash
