@@ -139,6 +139,17 @@ CSS can color the document but cannot remove normal iOS Safari toolbars. The app
 
 ## Resolved Bugs And Reusable Patterns
 
+### 2026-07-18 - Android Menu Triggers Consume Nested Presses
+
+**Status:** Resolved
+**Area:** Android, Expo UI, PXI, interaction
+
+Expo SDK 57's `MenuView` uses an internal React Native `Pressable` as its Android trigger. That outer trigger claims the gesture, so nested press handlers do not fire; iOS uses a SwiftUI context-menu host and does not exhibit the same responder conflict. Wrapping a PXI tool disclosure in `MenuView` therefore prevented Android users from expanding tool and subagent details.
+
+Tool disclosure controls now remain outside the context-menu trigger. Long-press copy actions wrap only the expanded, non-interactive detail surface.
+
+**Implication:** Do not place pressable controls, links, or other tap interactions inside `NativeContextMenu`. Attach the menu to a non-interactive surface or provide a separate trigger, and verify both tap and long-press behavior on Android.
+
 ### 2026-07-16 - Android Chat Must Avoid The Keyboard Explicitly
 
 **Status:** Resolved
