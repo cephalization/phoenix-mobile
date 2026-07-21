@@ -31,7 +31,7 @@ export function MotionPressable({
   return (
     <AnimatedPressable
       {...props}
-      android_ripple={{ color: colors.ripple, foreground: true }}
+      android_ripple={{ color: colors.ripple }}
       onPress={(event) => {
         if (haptic === 'light') haptics.light();
         if (haptic === 'selection') haptics.selection();

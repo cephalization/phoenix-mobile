@@ -113,7 +113,15 @@ function ToolPart({ onInteraction, part }: { onInteraction?: () => void; part: P
     ...(error !== undefined ? [{ id: 'copy-error', systemImage: 'exclamationmark.triangle', title: 'Copy error' }] : []),
   ];
 
-  const content = (
+  const details = expanded && hasDetails ? (
+    <View style={[styles.toolDetails, { backgroundColor: colors.backgroundElement }]}>
+      {detailInput !== undefined ? <ToolDetail label={command ? 'Command' : 'Input'} value={detailInput} /> : null}
+      {complete && detailOutput !== undefined ? <ToolDetail label={stdout !== undefined ? 'Output' : 'Result'} value={detailOutput} separated={detailInput !== undefined} /> : null}
+      {error !== undefined ? <ToolDetail danger label="Error" value={error} separated={detailInput !== undefined || detailOutput !== undefined} /> : null}
+    </View>
+  ) : null;
+
+  return (
     <View style={styles.tool}>
       <MotionPressable
         accessibilityHint={hasDetails ? 'Shows tool input and result' : undefined}
@@ -163,27 +171,19 @@ function ToolPart({ onInteraction, part }: { onInteraction?: () => void; part: P
           </View>
         ) : null}
       </MotionPressable>
-      {expanded && hasDetails && (
-        <View style={[styles.toolDetails, { backgroundColor: colors.backgroundElement }]}>
-          {detailInput !== undefined ? <ToolDetail label={command ? 'Command' : 'Input'} value={detailInput} /> : null}
-          {complete && detailOutput !== undefined ? <ToolDetail label={stdout !== undefined ? 'Output' : 'Result'} value={detailOutput} separated={detailInput !== undefined} /> : null}
-          {error !== undefined ? <ToolDetail danger label="Error" value={error} separated={detailInput !== undefined || detailOutput !== undefined} /> : null}
-        </View>
-      )}
+      {details && menuActions.length > 0 ? (
+        <NativeContextMenu
+          actions={menuActions}
+          onAction={(id) => {
+            onInteraction?.();
+            const value = id === 'copy-input' ? detailInput : id === 'copy-output' ? detailOutput : error;
+            if (value !== undefined) void Clipboard.setStringAsync(serialize(value)).then(haptics.success);
+          }}>
+          {details}
+        </NativeContextMenu>
+      ) : details}
     </View>
   );
-
-  return menuActions.length > 0 ? (
-    <NativeContextMenu
-      actions={menuActions}
-      onAction={(id) => {
-        onInteraction?.();
-        const value = id === 'copy-input' ? detailInput : id === 'copy-output' ? detailOutput : error;
-        if (value !== undefined) void Clipboard.setStringAsync(serialize(value)).then(haptics.success);
-      }}>
-      {content}
-    </NativeContextMenu>
-  ) : content;
 }
 
 function ToolDetail({ danger = false, label, separated = false, value }: { danger?: boolean; label: string; separated?: boolean; value: unknown }) {
