@@ -97,10 +97,14 @@ function SessionRow({
       )}
       rightThreshold={42}>
       <MotionPressable
+        accessibilityActions={[{ name: 'delete', label: 'Delete chat' }]}
         accessibilityLabel={`${session.title}, ${formatSessionDate(session.updatedAt)}`}
         accessibilityRole="button"
         accessibilityState={{ selected: active }}
         haptic="selection"
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === 'delete') onDelete();
+        }}
         onPress={onSelect}
         scaleTo={0.99}
         style={styles.sessionButton}>

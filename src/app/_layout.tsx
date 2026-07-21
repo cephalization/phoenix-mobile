@@ -9,7 +9,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { useColorScheme } from 'react-native';
+import { Appearance, Platform, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { featureFlags } from 'react-native-screens';
 
@@ -45,13 +45,20 @@ export default function RootLayout() {
     if (fontsLoaded || fontError) SplashScreen.hideAsync();
   }, [fontError, fontsLoaded]);
 
+  // Native surfaces outside React (Alert, native sheets, Material menus) read the
+  // platform scheme, so the in-app appearance override must be pushed down to it.
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    Appearance.setColorScheme(appearance === 'system' ? 'unspecified' : appearance);
+  }, [appearance]);
+
   if (!fontsLoaded && !fontError) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider value={resolvedScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <StatusBar style="auto" />
+          <StatusBar style={resolvedScheme === 'dark' ? 'light' : 'dark'} />
           <Stack
             screenOptions={{
               contentStyle: { backgroundColor: colors.background },

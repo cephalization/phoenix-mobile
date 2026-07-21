@@ -24,6 +24,7 @@ export const Colors = {
     brandSecondary: '#18BAB6',
     success: '#008F5D',
     danger: '#EA3829',
+    ripple: 'rgba(0, 0, 0, 0.07)',
   },
   dark: {
     text: '#FFFFFF',
@@ -39,6 +40,7 @@ export const Colors = {
     brandSecondary: '#18BAB6',
     success: '#0FB5AE',
     danger: '#F9634C',
+    ripple: 'rgba(255, 255, 255, 0.10)',
   },
 } as const;
 

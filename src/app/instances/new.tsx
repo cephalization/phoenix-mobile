@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, ReduceMotion, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { z } from 'zod';
@@ -12,7 +12,7 @@ import { MotionPressable } from '@/components/motion-pressable';
 import { PhoenixLogo } from '@/components/phoenix-logo';
 import { AppFonts, MaxContentWidth, useAppColors } from '@/constants/theme';
 import { haptics } from '@/lib/haptics';
-import { createInstanceId, createPhoenixClient, normalizePhoenixUrl } from '@/lib/phoenix';
+import { createInstanceId, createPhoenixClient, normalizePhoenixUrl, PhoenixUrlError } from '@/lib/phoenix';
 import { useInstanceStore } from '@/store/instances';
 import type { PhoenixInstance } from '@/types/instance';
 
@@ -45,7 +45,8 @@ export default function NewInstanceScreen() {
       let baseUrl: string;
       try {
         baseUrl = normalizePhoenixUrl(values.host);
-      } catch {
+      } catch (error) {
+        if (error instanceof PhoenixUrlError) throw error;
         throw new Error('Enter a valid host, such as 192.168.1.10:6006.');
       }
 
@@ -75,7 +76,7 @@ export default function NewInstanceScreen() {
     },
   });
 
-  return (
+  const content = (
     <ScrollView
       automaticallyAdjustKeyboardInsets
       contentContainerStyle={styles.scrollContent}
@@ -203,6 +204,16 @@ export default function NewInstanceScreen() {
           </View>
       </View>
     </ScrollView>
+  );
+
+  // iOS form-sheet sizing requires the ScrollView as the screen root, and the
+  // keyboard-inset props above are iOS-only; Android needs explicit avoidance,
+  // matching the height behavior device-verified for the chat screen.
+  if (Platform.OS !== 'android') return content;
+  return (
+    <KeyboardAvoidingView behavior="height" style={styles.screen}>
+      {content}
+    </KeyboardAvoidingView>
   );
 }
 

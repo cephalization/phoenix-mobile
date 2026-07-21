@@ -26,6 +26,7 @@ import { MotionPressable } from '@/components/motion-pressable';
 import { PxiGlyph } from '@/components/pxi-glyph';
 import { AppFonts, MaxContentWidth, useAppColors } from '@/constants/theme';
 import { createPxiId, createPxiTransport, formatPxiError } from '@/features/pxi/client';
+import { finalizeInterruptedMessages } from '@/features/pxi/message-state';
 import { isSameModel, usePxiModelCatalog } from '@/features/pxi/model-catalog';
 import type { ModelSelection, PxiMessage } from '@/features/pxi/types';
 import { haptics } from '@/lib/haptics';
@@ -166,10 +167,10 @@ export default function PxiChatScreen() {
   return (
     <SafeAreaView edges={['top', 'bottom']} style={[styles.screen, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <MotionPressable accessibilityLabel="Close PXI" accessibilityRole="button" haptic="selection" onPress={closeChat} style={styles.headerIcon}>
+        <MotionPressable accessibilityLabel="Close PXI" accessibilityRole="button" onPress={closeChat} style={styles.headerIcon}>
           <SymbolView name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }} size={23} tintColor={colors.text} />
         </MotionPressable>
-        <MotionPressable accessibilityLabel="Open chat history" accessibilityRole="button" haptic="selection" onPress={() => setHistoryVisible(true)} style={styles.headerIcon}>
+        <MotionPressable accessibilityLabel="Open chat history" accessibilityRole="button" onPress={() => setHistoryVisible(true)} style={styles.headerIcon}>
           <SymbolView name={{ ios: 'clock.arrow.circlepath', android: 'history', web: 'history' }} size={21} tintColor={colors.text} />
         </MotionPressable>
         <View style={styles.headerTitleGroup}>
@@ -210,7 +211,7 @@ export default function PxiChatScreen() {
       ) : (
         <ChatSession
           generation={sessionGeneration}
-          initialMessages={savedSession.data?.messages ?? []}
+          initialMessages={finalizeInterruptedMessages(savedSession.data?.messages ?? [])}
           initialRevision={savedSession.data?.revision ?? activeSummary?.revision ?? 0}
           instance={instance}
           key={`${sessionId}:${sessionGeneration}:${modelIdentity(selectedModel)}:${sessionRuntimeVersion}`}
@@ -300,7 +301,8 @@ function ChatSession({
   const submitting = useRef(false);
   const persistMessages = useCallback(async (nextMessages: PxiMessage[]): Promise<boolean> => {
     if (nextMessages.length === 0) return true;
-    const serialized = JSON.stringify(nextMessages);
+    const finalizedMessages = finalizeInterruptedMessages(nextMessages);
+    const serialized = JSON.stringify(finalizedMessages);
     if (serialized === persistedMessages.current) {
       await persistenceQueue.current;
       return persistenceSucceeded.current;
@@ -311,7 +313,7 @@ function ChatSession({
         generation,
         id: sessionId,
         instanceId: instance.id,
-        messages: nextMessages,
+        messages: finalizedMessages,
         model,
         revision: revision.current,
       });
@@ -491,7 +493,7 @@ function ChatSession({
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.chat}>
       <View style={[styles.modelBar, { borderBottomColor: colors.border }]}>
-        <MotionPressable accessibilityLabel={`Change model, currently ${modelLabel}`} accessibilityRole="button" haptic="selection" onPress={onChooseModel} style={[styles.modelButton, { backgroundColor: colors.backgroundSelected }]}>
+        <MotionPressable accessibilityLabel={`Change model, currently ${modelLabel}`} accessibilityRole="button" onPress={onChooseModel} style={[styles.modelButton, { backgroundColor: colors.backgroundSelected }]}>
           <View style={[styles.modelStatus, { backgroundColor: colors.success }]} />
           <Text numberOfLines={1} style={[styles.modelLabel, { color: colors.text }]}>{modelLabel}</Text>
           <View style={styles.modelChevron}>
@@ -559,7 +561,7 @@ function ChatSession({
       />
 
       {showJump && (
-        <MotionPressable accessibilityLabel="Jump to latest response" accessibilityRole="button" haptic="selection" onPress={scrollToLatest} style={[styles.jumpButton, { backgroundColor: colors.text }]}>
+        <MotionPressable accessibilityLabel="Jump to latest response" accessibilityRole="button" onPress={scrollToLatest} style={[styles.jumpButton, { backgroundColor: colors.text }]}>
           <Text style={[styles.jumpText, { color: colors.background }]}>Latest ↓</Text>
         </MotionPressable>
       )}
@@ -600,7 +602,7 @@ function ChatSession({
             accessibilityLabel={isStreaming ? 'Stop response' : isPersistingSubmission ? 'Saving message' : 'Send message'}
             accessibilityRole="button"
             disabled={sendDisabled || (!isStreaming && input.trim().length === 0)}
-            haptic={isStreaming ? 'selection' : 'light'}
+            haptic={isStreaming ? 'selection' : 'none'}
             onPress={() => isStreaming ? void stop().then(() => setWasStopped(true)) : void submit()}
             scaleTo={0.9}
             style={[

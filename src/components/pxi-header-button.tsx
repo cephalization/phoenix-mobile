@@ -14,7 +14,6 @@ export function PxiHeaderButton({ instance }: { instance: PhoenixInstance }) {
     <MotionPressable
       accessibilityLabel={`Open PXI for ${instance.name}`}
       accessibilityRole="button"
-      haptic="selection"
       onPress={() => router.push({ pathname: '/instances/[id]/chat', params: { id: instance.id } })}
       scaleTo={0.92}
       style={Platform.OS === 'ios'
