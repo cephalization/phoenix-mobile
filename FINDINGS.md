@@ -13,6 +13,17 @@ This is the project's living technical memory. Record discoveries that would oth
 
 ## Active Constraints
 
+### 2026-07-22 - Trace Range Statistics Require REST Pagination
+
+**Status:** Decision
+**Area:** traces, observability, networking
+
+The typed Phoenix REST contract supports inclusive `start_time` and exclusive `end_time` bounds on trace and span lists, but does not expose aggregate trace statistics. Project trace range statistics therefore paginate every trace summary in the selected bounded range and fetch root-span statuses in page-sized batches. The visible trace feed uses the same bounds with independent cursor pagination.
+
+Each range selection receives a stable cache identity. Streaming can then advance that selection's boundaries and refetch all currently loaded infinite-query pages in place instead of creating a new cache entry and collapsing the feed to its first page. Streaming pauses when the route is unfocused or the app is not active.
+
+**Implication:** Keep statistics and list queries on the same range-selection identity and request boundaries. Range-wide statistics are exact but their request cost scales with trace volume, so avoid unbounded presets and prefer a server aggregate endpoint if Phoenix adds one.
+
 ### 2026-07-17 - Android Predictive Back And Sheet Keyboard Await Device Validation
 
 **Status:** Watch
@@ -275,6 +286,17 @@ The targeted Metro resolver shim fixed iOS and Android bundling without polyfill
 **Implication:** Prefer a narrow empty-module shim over broad Node polyfills. Track upstream compatibility when upgrading.
 
 ## Design Decisions
+
+### 2026-07-21 - Trace Lists Combine Summaries With Root Spans
+
+**Status:** Decision
+**Area:** Projects, traces, performance
+
+The project trace feed pages through `GET /v1/projects/{project_identifier}/traces` without `include_spans`, then fetches only root spans for that page's trace IDs. Trace summaries supply aggregate latency and token counts; root spans supply the operation name, kind, and status. Error filtering uses the root-span endpoint directly. Summary metrics are explicitly scoped to the first page of up to 30 recent traces rather than presented as project-wide aggregates.
+
+The Phoenix client declares the project-traces route and span status filters available from Phoenix 13.15.0, while filtering spans by trace IDs requires 13.9.0.
+
+**Implication:** Keep full span trees lazy until a trace detail view exists, preserve cursor pagination and virtualized rendering, and do not relabel sample metrics as project-wide statistics. Older Phoenix servers should receive an understandable compatibility error rather than triggering an unbounded fallback scan.
 
 ### 2026-07-17 - Touch Feedback Is Platform-Idiomatic And Haptics Are Reserved For State Changes
 
