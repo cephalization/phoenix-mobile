@@ -1,3 +1,4 @@
+import { Host, Slider } from '@expo/ui';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -18,7 +19,10 @@ import { AppFonts, MaxContentWidth, Spacing, useAppColors } from '@/constants/th
 import {
   type PhoenixTraceFilter,
   type PhoenixTraceListItem,
+  type PhoenixTraceRange,
+  type PhoenixTraceSummary,
   usePhoenixProjects,
+  usePhoenixProjectTraceSummary,
   usePhoenixProjectTraces,
 } from '@/hooks/use-phoenix-data';
 import { haptics } from '@/lib/haptics';
@@ -30,6 +34,19 @@ const FILTERS: { label: string; value: PhoenixTraceFilter }[] = [
   { label: 'Slowest', value: 'slowest' },
 ];
 
+type TraceRangePreset = 'hour' | 'day' | 'week' | 'month';
+
+type TraceRangeSelection = PhoenixTraceRange & {
+  preset: TraceRangePreset;
+};
+
+const RANGE_PRESETS: { durationMs: number; label: string; shortLabel: string; value: TraceRangePreset }[] = [
+  { durationMs: 60 * 60 * 1000, label: 'Last hour', shortLabel: '1h', value: 'hour' },
+  { durationMs: 24 * 60 * 60 * 1000, label: 'Last 24 hours', shortLabel: '24h', value: 'day' },
+  { durationMs: 7 * 24 * 60 * 60 * 1000, label: 'Last 7 days', shortLabel: '7d', value: 'week' },
+  { durationMs: 30 * 24 * 60 * 60 * 1000, label: 'Last 30 days', shortLabel: '30d', value: 'month' },
+];
+
 export default function ProjectTracesScreen() {
   const { id, projectId } = useLocalSearchParams<{ id: string; projectId: string }>();
   const colors = useAppColors();
@@ -37,14 +54,14 @@ export default function ProjectTracesScreen() {
   const { width } = useWindowDimensions();
   const isWide = width >= 700;
   const [filter, setFilter] = useState<PhoenixTraceFilter>('recent');
+  const [range, setRange] = useState<TraceRangeSelection>(() => createTraceRange('day'));
   const instance = useInstanceStore((state) => state.instances.find((candidate) => candidate.id === id));
   const projects = usePhoenixProjects(instance);
   const project = projects.data?.find((candidate) => candidate.id === projectId);
-  const recentTraces = usePhoenixProjectTraces(instance, projectId, 'recent');
-  const activeTraces = usePhoenixProjectTraces(instance, projectId, filter);
+  const summary = usePhoenixProjectTraceSummary(instance, projectId, range);
+  const activeTraces = usePhoenixProjectTraces(instance, projectId, filter, range);
   const traces = activeTraces.data?.pages.flatMap((page) => page.items) ?? [];
-  const sample = recentTraces.data?.pages[0]?.items ?? [];
-  const refreshing = activeTraces.isRefetching && !activeTraces.isFetchingNextPage;
+  const refreshing = (activeTraces.isRefetching && !activeTraces.isFetchingNextPage) || summary.isRefetching;
 
   if (!instance) {
     return <UnavailableState message="This Phoenix connection is no longer on this device." title="Instance not found" />;
@@ -57,10 +74,7 @@ export default function ProjectTracesScreen() {
   const refresh = async () => {
     if (refreshing) return;
     haptics.selection();
-    const results = await Promise.all([
-      activeTraces.refetch(),
-      ...(filter === 'recent' ? [] : [recentTraces.refetch()]),
-    ]);
+    const results = await Promise.all([activeTraces.refetch(), summary.refetch()]);
     if (results.some((result) => result.isError)) haptics.error();
     else haptics.light();
   };
@@ -107,11 +121,15 @@ export default function ProjectTracesScreen() {
               )}
             </View>
 
-            <View style={styles.sampleHeading}>
-              <Text style={[styles.eyebrow, { color: colors.textSecondary }]}>Latest sample</Text>
-              <Text style={[styles.sampleNote, { color: colors.textSecondary }]}>Up to 30 recent traces</Text>
-            </View>
-            <TraceSummary isLoading={recentTraces.isPending} isWide={isWide} traces={sample} />
+            <TraceRangeSelector
+              onChange={(preset) => {
+                if (preset === range.preset) return;
+                haptics.selection();
+                setRange(createTraceRange(preset));
+              }}
+              range={range}
+            />
+            <TraceSummary isLoading={summary.isPending} isWide={isWide} summary={summary.data} />
 
             <View style={styles.traceHeading}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Traces</Text>
@@ -194,27 +212,18 @@ function UnavailableState({ message, title }: { message: string; title: string }
 function TraceSummary({
   isLoading,
   isWide,
-  traces,
+  summary,
 }: {
   isLoading: boolean;
   isWide: boolean;
-  traces: PhoenixTraceListItem[];
+  summary: PhoenixTraceSummary | undefined;
 }) {
   const colors = useAppColors();
-  const latencies = traces.map((trace) => trace.latencyMs).sort((a, b) => a - b);
-  const middle = Math.floor(latencies.length / 2);
-  const median = latencies.length === 0
-    ? null
-    : latencies.length % 2 === 0
-      ? (latencies[middle - 1] + latencies[middle]) / 2
-      : latencies[middle];
-  const errors = traces.filter((trace) => trace.statusCode === 'ERROR').length;
-  const tokens = traces.reduce((total, trace) => total + (trace.tokenCountTotal ?? 0), 0);
   const metrics = [
-    { label: 'Traces', value: String(traces.length) },
-    { label: 'Errors', value: traces.length > 0 ? `${Math.round((errors / traces.length) * 100)}%` : '—' },
-    { label: 'Median', value: median == null ? '—' : formatDuration(median) },
-    { label: 'Tokens', value: traces.some((trace) => trace.tokenCountTotal != null) ? formatCompactNumber(tokens) : '—' },
+    { label: 'Traces', value: summary ? formatCompactNumber(summary.traceCount) : '—' },
+    { label: 'Errors', value: summary && summary.traceCount > 0 ? `${Math.round((summary.errorCount / summary.traceCount) * 100)}%` : '—' },
+    { label: 'Median', value: summary?.medianLatencyMs == null ? '—' : formatDuration(summary.medianLatencyMs) },
+    { label: 'Tokens', value: summary?.tokenCountTotal == null ? '—' : formatCompactNumber(summary.tokenCountTotal) },
   ];
 
   return (
@@ -236,6 +245,58 @@ function TraceSummary({
           )}
         </View>
       ))}
+    </View>
+  );
+}
+
+function TraceRangeSelector({
+  onChange,
+  range,
+}: {
+  onChange: (preset: TraceRangePreset) => void;
+  range: TraceRangeSelection;
+}) {
+  const colors = useAppColors();
+  const selectedIndex = RANGE_PRESETS.findIndex((option) => option.value === range.preset);
+  const selected = RANGE_PRESETS[selectedIndex];
+
+  return (
+    <View style={styles.rangeSection}>
+      <View style={styles.rangeHeading}>
+        <Text style={[styles.eyebrow, { color: colors.textSecondary }]}>Time range</Text>
+        <Text style={[styles.rangeValue, { color: colors.text }]}>{selected.label}</Text>
+      </View>
+      <View style={styles.rangeControl}>
+        <Host ignoreSafeArea="all" seedColor={colors.brand} style={styles.sliderHost}>
+          <Slider
+            max={RANGE_PRESETS.length - 1}
+            min={0}
+            onValueChange={(value) => onChange(RANGE_PRESETS[Math.round(value)].value)}
+            step={1}
+            value={selectedIndex}
+          />
+        </Host>
+        <View style={styles.rangeLabels}>
+          {RANGE_PRESETS.map((option) => {
+            const isSelected = option.value === range.preset;
+            return (
+              <MotionPressable
+                accessibilityLabel={option.label}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+                haptic="none"
+                key={option.value}
+                onPress={() => onChange(option.value)}
+                style={styles.rangeLabelButton}>
+                <Text style={[styles.rangeLabel, { color: isSelected ? colors.text : colors.textSecondary }]}>
+                  {option.shortLabel}
+                </Text>
+              </MotionPressable>
+            );
+          })}
+        </View>
+        <Text style={[styles.rangeDates, { color: colors.textSecondary }]}>{formatRange(range)}</Text>
+      </View>
     </View>
   );
 }
@@ -378,6 +439,26 @@ function formatStartTime(value: string) {
   return date.toLocaleDateString([], { day: 'numeric', month: 'short' });
 }
 
+function createTraceRange(preset: TraceRangePreset): TraceRangeSelection {
+  const selected = RANGE_PRESETS.find((option) => option.value === preset) ?? RANGE_PRESETS[1];
+  const endTime = new Date();
+  return {
+    endTime: endTime.toISOString(),
+    preset,
+    startTime: new Date(endTime.getTime() - selected.durationMs).toISOString(),
+  };
+}
+
+function formatRange(range: PhoenixTraceRange) {
+  const start = new Date(range.startTime);
+  const end = new Date(range.endTime);
+  const spansMultipleDays = start.toDateString() !== end.toDateString();
+  const options: Intl.DateTimeFormatOptions = spansMultipleDays
+    ? { day: 'numeric', month: 'short' }
+    : { hour: 'numeric', minute: '2-digit' };
+  return `${start.toLocaleString([], options)} – ${end.toLocaleString([], options)}`;
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   unavailableScreen: { alignItems: 'center', flex: 1, gap: 8, justifyContent: 'center', padding: 24 },
@@ -387,9 +468,16 @@ const styles = StyleSheet.create({
   projectIntro: { gap: 7, paddingBottom: 28 },
   title: { fontFamily: AppFonts.semibold, fontSize: 32, letterSpacing: -1, lineHeight: 38 },
   description: { fontFamily: AppFonts.regular, fontSize: 16, lineHeight: 23, maxWidth: 620 },
-  sampleHeading: { alignItems: 'baseline', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 10 },
   eyebrow: { fontFamily: AppFonts.semibold, fontSize: 13 },
-  sampleNote: { fontFamily: AppFonts.regular, fontSize: 12 },
+  rangeSection: { gap: 8, paddingBottom: 18 },
+  rangeHeading: { alignItems: 'baseline', flexDirection: 'row', justifyContent: 'space-between' },
+  rangeValue: { fontFamily: AppFonts.medium, fontSize: 13 },
+  rangeControl: { paddingHorizontal: 6 },
+  sliderHost: { height: 32, width: '100%' },
+  rangeLabels: { flexDirection: 'row', justifyContent: 'space-between' },
+  rangeLabelButton: { alignItems: 'center', justifyContent: 'center', minHeight: 48, width: 52 },
+  rangeLabel: { fontFamily: AppFonts.medium, fontSize: 12 },
+  rangeDates: { fontFamily: AppFonts.regular, fontSize: 11, paddingTop: 2, textAlign: 'center' },
   summary: { borderRadius: 18, borderWidth: 1, flexDirection: 'row', flexWrap: 'wrap', overflow: 'hidden' },
   metric: { flexGrow: 1, gap: 6, minHeight: 86, paddingHorizontal: 16, paddingVertical: 14 },
   metricLabel: { fontFamily: AppFonts.regular, fontSize: 12 },

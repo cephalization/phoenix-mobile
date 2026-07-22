@@ -10,6 +10,11 @@ type PhoenixTrace = Types['V1']['components']['schemas']['TraceData'];
 
 export type PhoenixTraceFilter = 'recent' | 'errors' | 'slowest';
 
+export type PhoenixTraceRange = {
+  endTime: string;
+  startTime: string;
+};
+
 export type PhoenixTraceListItem = {
   endTime: string;
   id: string;
@@ -22,19 +27,36 @@ export type PhoenixTraceListItem = {
   traceId: string;
 };
 
+export type PhoenixTraceSummary = {
+  errorCount: number;
+  medianLatencyMs: number | null;
+  tokenCountTotal: number | null;
+  traceCount: number;
+};
+
 type PhoenixTracePage = {
   items: PhoenixTraceListItem[];
   nextCursor: string | null;
 };
 
+type PhoenixTracesResponse = {
+  data?: {
+    data: PhoenixTrace[];
+    next_cursor: string | null;
+  };
+};
+
 const TRACE_PAGE_SIZE = 30;
+const TRACE_SUMMARY_PAGE_SIZE = 100;
 
 export const phoenixQueryKeys = {
   all: ['phoenix'] as const,
   instance: (instanceId: string) => [...phoenixQueryKeys.all, 'instance', instanceId] as const,
   projects: (instanceId: string) => [...phoenixQueryKeys.instance(instanceId), 'projects'] as const,
-  traces: (instanceId: string, projectId: string, filter: PhoenixTraceFilter) =>
-    [...phoenixQueryKeys.instance(instanceId), 'project', projectId, 'traces', filter] as const,
+  traceSummary: (instanceId: string, projectId: string, range: PhoenixTraceRange) =>
+    [...phoenixQueryKeys.instance(instanceId), 'project', projectId, 'trace-summary', range.startTime, range.endTime] as const,
+  traces: (instanceId: string, projectId: string, filter: PhoenixTraceFilter, range: PhoenixTraceRange) =>
+    [...phoenixQueryKeys.instance(instanceId), 'project', projectId, 'traces', filter, range.startTime, range.endTime] as const,
   version: (instanceId: string) => [...phoenixQueryKeys.instance(instanceId), 'version'] as const,
 };
 
@@ -75,10 +97,11 @@ export function usePhoenixProjects(instance: PhoenixInstance | undefined) {
 export function usePhoenixProjectTraces(
   instance: PhoenixInstance | undefined,
   projectId: string | undefined,
-  filter: PhoenixTraceFilter
+  filter: PhoenixTraceFilter,
+  range: PhoenixTraceRange
 ) {
   return useInfiniteQuery({
-    queryKey: phoenixQueryKeys.traces(instance?.id ?? 'missing', projectId ?? 'missing', filter),
+    queryKey: phoenixQueryKeys.traces(instance?.id ?? 'missing', projectId ?? 'missing', filter, range),
     queryFn: async ({ pageParam }): Promise<PhoenixTracePage> => {
       if (!instance || !projectId) throw new Error('Phoenix project not found.');
       const client = createPhoenixClient(instance);
@@ -88,10 +111,12 @@ export function usePhoenixProjectTraces(
           params: {
             path: { project_identifier: projectId },
             query: {
-              cursor: pageParam,
-              limit: TRACE_PAGE_SIZE,
-              parent_id: 'null',
-              status_code: ['ERROR'],
+               cursor: pageParam,
+               end_time: range.endTime,
+               limit: TRACE_PAGE_SIZE,
+               parent_id: 'null',
+               start_time: range.startTime,
+               status_code: ['ERROR'],
             },
           },
         });
@@ -107,11 +132,13 @@ export function usePhoenixProjectTraces(
         params: {
           path: { project_identifier: projectId },
           query: {
-            cursor: pageParam,
-            include_spans: false,
-            limit: TRACE_PAGE_SIZE,
-            order: 'desc',
-            sort: filter === 'slowest' ? 'latency_ms' : 'start_time',
+             cursor: pageParam,
+             end_time: range.endTime,
+             include_spans: false,
+             limit: TRACE_PAGE_SIZE,
+             order: 'desc',
+             sort: filter === 'slowest' ? 'latency_ms' : 'start_time',
+             start_time: range.startTime,
           },
         },
       });
@@ -144,6 +171,88 @@ export function usePhoenixProjectTraces(
     },
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: Boolean(instance && projectId),
+  });
+}
+
+export function usePhoenixProjectTraceSummary(
+  instance: PhoenixInstance | undefined,
+  projectId: string | undefined,
+  range: PhoenixTraceRange
+) {
+  return useQuery({
+    queryKey: phoenixQueryKeys.traceSummary(instance?.id ?? 'missing', projectId ?? 'missing', range),
+    queryFn: async (): Promise<PhoenixTraceSummary> => {
+      if (!instance || !projectId) throw new Error('Phoenix project not found.');
+      const client = createPhoenixClient(instance);
+      const latencies: number[] = [];
+      let cursor: string | null = null;
+      let errorCount = 0;
+      let tokenCountTotal = 0;
+      let hasTokenCounts = false;
+
+      do {
+        const tracesResponse: PhoenixTracesResponse = await client.GET('/v1/projects/{project_identifier}/traces', {
+          params: {
+            path: { project_identifier: projectId },
+            query: {
+              cursor,
+              end_time: range.endTime,
+              include_spans: false,
+              limit: TRACE_SUMMARY_PAGE_SIZE,
+              order: 'desc',
+              sort: 'start_time',
+              start_time: range.startTime,
+            },
+          },
+        });
+        if (!tracesResponse.data) throw new Error('Phoenix could not load trace statistics.');
+
+        const traces = tracesResponse.data.data;
+        const traceIds = traces.map((trace) => trace.trace_id);
+        if (traceIds.length > 0) {
+          const spansResponse = await client.GET('/v1/projects/{project_identifier}/spans', {
+            params: {
+              path: { project_identifier: projectId },
+              query: {
+                limit: TRACE_SUMMARY_PAGE_SIZE,
+                parent_id: 'null',
+                trace_id: traceIds,
+              },
+            },
+          });
+          if (!spansResponse.data) throw new Error('Phoenix could not load trace statistics.');
+          errorCount += spansResponse.data.data.filter((span) => span.status_code === 'ERROR').length;
+        }
+
+        for (const trace of traces) {
+          latencies.push(durationMs(trace.start_time, trace.end_time));
+          if (trace.token_count_total != null) {
+            hasTokenCounts = true;
+            tokenCountTotal += trace.token_count_total;
+          }
+        }
+
+        const nextCursor = tracesResponse.data.next_cursor;
+        if (!nextCursor || nextCursor === cursor) break;
+        cursor = nextCursor;
+      } while (true);
+
+      latencies.sort((a, b) => a - b);
+      const middle = Math.floor(latencies.length / 2);
+      const medianLatencyMs = latencies.length === 0
+        ? null
+        : latencies.length % 2 === 0
+          ? (latencies[middle - 1] + latencies[middle]) / 2
+          : latencies[middle];
+
+      return {
+        errorCount,
+        medianLatencyMs,
+        tokenCountTotal: hasTokenCounts ? tokenCountTotal : null,
+        traceCount: latencies.length,
+      };
+    },
     enabled: Boolean(instance && projectId),
   });
 }

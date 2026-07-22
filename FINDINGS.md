@@ -13,6 +13,15 @@ This is the project's living technical memory. Record discoveries that would oth
 
 ## Active Constraints
 
+### 2026-07-22 - Trace Range Statistics Require REST Pagination
+
+**Status:** Decision
+**Area:** traces, observability, networking
+
+The typed Phoenix REST contract supports inclusive `start_time` and exclusive `end_time` bounds on trace and span lists, but does not expose aggregate trace statistics. Project trace range statistics therefore paginate every trace summary in the selected bounded range and fetch root-span statuses in page-sized batches. The visible trace feed uses the same fixed bounds with independent cursor pagination.
+
+**Implication:** Keep statistics and list query keys scoped to both range boundaries. Range-wide statistics are exact but their request cost scales with trace volume, so avoid unbounded presets and prefer a server aggregate endpoint if Phoenix adds one.
+
 ### 2026-07-17 - Android Predictive Back And Sheet Keyboard Await Device Validation
 
 **Status:** Watch
