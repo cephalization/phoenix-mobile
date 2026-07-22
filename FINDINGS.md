@@ -175,9 +175,9 @@ CSS can color the document but cannot remove normal iOS Safari toolbars. The app
 
 Expo SDK 57's `MenuView` uses an internal React Native `Pressable` as its Android trigger. That outer trigger claims the gesture, so nested press handlers do not fire; iOS uses a SwiftUI context-menu host and does not exhibit the same responder conflict. Wrapping a PXI tool disclosure in `MenuView` therefore prevented Android users from expanding tool and subagent details.
 
-Tool disclosure controls now remain outside the context-menu trigger. Long-press copy actions wrap only the expanded, non-interactive detail surface.
+Tool disclosure controls now remain outside the context-menu trigger. Long-press copy actions wrap only non-interactive detail surfaces; scrollable JSON details use explicit copy controls instead.
 
-**Implication:** Do not place pressable controls, links, or other tap interactions inside `NativeContextMenu`. Attach the menu to a non-interactive surface or provide a separate trigger, and verify both tap and long-press behavior on Android.
+**Implication:** Do not place pressable controls, links, scroll views, or other gesture interactions inside `NativeContextMenu`. Attach the menu to a non-interactive surface or provide a separate trigger, and verify tap, scroll, and long-press behavior on Android.
 
 ### 2026-07-17 - Native Surfaces Follow The Platform Scheme, Not App State
 

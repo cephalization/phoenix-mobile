@@ -1,7 +1,13 @@
-import { MarkdownStream, type MarkdownStyleMap } from '@ronradtke/react-native-markdown-display';
+import {
+  MarkdownStream,
+  renderRules,
+  type MarkdownStyleMap,
+  type RenderRules,
+} from '@ronradtke/react-native-markdown-display';
 import * as WebBrowser from 'expo-web-browser';
-import { Platform } from 'react-native';
+import { Platform, Text } from 'react-native';
 
+import { JsonBlock } from '@/components/json-block';
 import { AppFonts, Colors, useAppColors } from '@/constants/theme';
 
 const monoFont = Platform.select({
@@ -79,6 +85,20 @@ export function MessageMarkdown({ onInteraction, streaming, text }: { onInteract
     td: { padding: 8 },
     hr: { backgroundColor: colors.border, height: 1, marginVertical: 14 },
   };
+  const defaultRules = renderRules(Text);
+  const rules: RenderRules = {
+    code_block: (node, children, parents, styles, ...extra) => {
+      if (looksLikeJson(node.content)) return <JsonBlock key={node.key} onInteraction={onInteraction} value={node.content} />;
+      return defaultRules.code_block?.(node, children, parents, styles, ...extra);
+    },
+    fence: (node, children, parents, styles, ...extra) => {
+      const language = typeof node.sourceInfo === 'string' ? node.sourceInfo.trim().split(/\s+/)[0]?.toLowerCase() : '';
+      if (language === 'json' || language === 'jsonc') {
+        return <JsonBlock key={node.key} onInteraction={onInteraction} value={node.content} />;
+      }
+      return defaultRules.fence?.(node, children, parents, styles, ...extra);
+    },
+  };
 
   return (
     <MarkdownStream
@@ -88,11 +108,23 @@ export function MessageMarkdown({ onInteraction, streaming, text }: { onInteract
         onInteraction?.();
         return openMarkdownLink(url);
       }}
+      rules={rules}
       streaming={streaming}
       style={markdownStyles}>
       {text}
     </MarkdownStream>
   );
+}
+
+function looksLikeJson(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return false;
+  try {
+    JSON.parse(trimmed);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function openMarkdownLink(url: string): boolean {

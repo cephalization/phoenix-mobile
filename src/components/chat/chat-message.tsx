@@ -7,6 +7,7 @@ import { ActivityIndicator, Share, StyleSheet, Text, View } from 'react-native';
 
 import { MotionPressable } from '@/components/motion-pressable';
 import { MessageMarkdown } from '@/components/chat/message-markdown';
+import { isJsonValue, JsonBlock } from '@/components/json-block';
 import { NativeContextMenu, type NativeContextMenuAction } from '@/components/native-context-menu';
 import { PxiGlyph } from '@/components/pxi-glyph';
 import { AppFonts, Fonts, useAppColors } from '@/constants/theme';
@@ -107,17 +108,11 @@ function ToolPart({ onInteraction, part }: { onInteraction?: () => void; part: P
   const detailOutput = stdout ?? part.output;
   const hasDetails = detailInput !== undefined || (complete && detailOutput !== undefined) || error !== undefined;
   const stateLabel = failed ? 'Failed' : denied ? 'Denied' : approval ? 'Approval needed' : complete ? '' : 'Running';
-  const menuActions: NativeContextMenuAction[] = [
-    ...(detailInput !== undefined ? [{ id: 'copy-input', systemImage: 'doc.on.doc', title: command ? 'Copy command' : 'Copy input' }] : []),
-    ...(complete && detailOutput !== undefined ? [{ id: 'copy-output', systemImage: 'doc.on.clipboard', title: stdout !== undefined ? 'Copy output' : 'Copy result' }] : []),
-    ...(error !== undefined ? [{ id: 'copy-error', systemImage: 'exclamationmark.triangle', title: 'Copy error' }] : []),
-  ];
-
   const details = expanded && hasDetails ? (
     <View style={[styles.toolDetails, { backgroundColor: colors.backgroundElement }]}>
-      {detailInput !== undefined ? <ToolDetail label={command ? 'Command' : 'Input'} value={detailInput} /> : null}
-      {complete && detailOutput !== undefined ? <ToolDetail label={stdout !== undefined ? 'Output' : 'Result'} value={detailOutput} separated={detailInput !== undefined} /> : null}
-      {error !== undefined ? <ToolDetail danger label="Error" value={error} separated={detailInput !== undefined || detailOutput !== undefined} /> : null}
+      {detailInput !== undefined ? <ToolDetail label={command ? 'Command' : 'Input'} onInteraction={onInteraction} value={detailInput} /> : null}
+      {complete && detailOutput !== undefined ? <ToolDetail label={stdout !== undefined ? 'Output' : 'Result'} onInteraction={onInteraction} value={detailOutput} separated={detailInput !== undefined} /> : null}
+      {error !== undefined ? <ToolDetail danger label="Error" onInteraction={onInteraction} value={error} separated={detailInput !== undefined || detailOutput !== undefined} /> : null}
     </View>
   ) : null;
 
@@ -171,27 +166,46 @@ function ToolPart({ onInteraction, part }: { onInteraction?: () => void; part: P
           </View>
         ) : null}
       </MotionPressable>
-      {details && menuActions.length > 0 ? (
-        <NativeContextMenu
-          actions={menuActions}
-          onAction={(id) => {
-            onInteraction?.();
-            const value = id === 'copy-input' ? detailInput : id === 'copy-output' ? detailOutput : error;
-            if (value !== undefined) void Clipboard.setStringAsync(serialize(value)).then(haptics.success);
-          }}>
-          {details}
-        </NativeContextMenu>
-      ) : details}
+      {details}
     </View>
   );
 }
 
-function ToolDetail({ danger = false, label, separated = false, value }: { danger?: boolean; label: string; separated?: boolean; value: unknown }) {
+function ToolDetail({
+  danger = false,
+  label,
+  onInteraction,
+  separated = false,
+  value,
+}: {
+  danger?: boolean;
+  label: string;
+  onInteraction?: () => void;
+  separated?: boolean;
+  value: unknown;
+}) {
   const colors = useAppColors();
   return (
     <View style={[styles.toolDetailSection, separated && { borderTopColor: colors.border, borderTopWidth: 1 }]}>
-      <Text style={[styles.toolDetailLabel, { color: danger ? colors.danger : colors.textSecondary }]}>{label}</Text>
-      <Text selectable style={[styles.toolDetailText, { color: danger ? colors.danger : colors.textSecondary }]}>{serialize(value)}</Text>
+      <View style={styles.toolDetailHeading}>
+        <Text style={[styles.toolDetailLabel, { color: danger ? colors.danger : colors.textSecondary }]}>{label}</Text>
+        <MotionPressable
+          accessibilityLabel={`Copy ${label.toLowerCase()}`}
+          accessibilityRole="button"
+          haptic="selection"
+          onPress={() => {
+            onInteraction?.();
+            void Clipboard.setStringAsync(serialize(value)).then(haptics.success);
+          }}
+          style={styles.toolDetailCopyButton}>
+          <Text style={[styles.toolDetailCopyLabel, { color: colors.textSecondary }]}>Copy</Text>
+        </MotionPressable>
+      </View>
+      {isJsonValue(value) ? (
+        <JsonBlock onInteraction={onInteraction} value={value} />
+      ) : (
+        <Text selectable style={[styles.toolDetailText, { color: danger ? colors.danger : colors.textSecondary }]}>{serialize(value)}</Text>
+      )}
     </View>
   );
 }
@@ -322,7 +336,10 @@ const styles = StyleSheet.create({
   disclosure: { alignItems: 'center', height: 28, justifyContent: 'center', width: 24 },
   toolDetails: { borderRadius: 11, marginBottom: 8, marginLeft: 27, overflow: 'hidden' },
   toolDetailSection: { gap: 5, paddingHorizontal: 12, paddingVertical: 10 },
+  toolDetailHeading: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', minHeight: 48 },
   toolDetailLabel: { fontFamily: AppFonts.semibold, fontSize: 10, letterSpacing: 0.7, textTransform: 'uppercase' },
+  toolDetailCopyButton: { alignItems: 'center', justifyContent: 'center', minHeight: 48, minWidth: 48 },
+  toolDetailCopyLabel: { fontFamily: AppFonts.medium, fontSize: 11 },
   toolDetailText: { fontFamily: Fonts.mono, fontSize: 12, lineHeight: 18 },
   source: { borderRadius: 12, maxWidth: '100%', paddingHorizontal: 10, paddingVertical: 7 },
   sourceText: { fontFamily: AppFonts.medium, fontSize: 12, maxWidth: 260 },

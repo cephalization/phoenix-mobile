@@ -6,6 +6,7 @@ import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View }
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MotionPressable } from '@/components/motion-pressable';
+import { isJsonValue, JsonBlock } from '@/components/json-block';
 import { PxiHeaderButton } from '@/components/pxi-header-button';
 import { AppFonts, MaxContentWidth, Spacing, useAppColors } from '@/constants/theme';
 import { type PhoenixSpan, usePhoenixProjects, usePhoenixTrace } from '@/hooks/use-phoenix-data';
@@ -317,13 +318,13 @@ function SpanRow({
         <View style={[styles.spanDetails, { backgroundColor: colors.backgroundSelected }]}>
           {span.status_message ? <DetailValue label="Status message" value={span.status_message} /> : null}
           {importantAttributes.map((attribute) => (
-            <DetailValue key={attribute.key} label={attribute.label} value={formatValue(attribute.value)} />
+            <DetailValue key={attribute.key} label={attribute.label} value={attribute.value} />
           ))}
           {span.events?.map((event, index) => (
             <DetailValue
               key={`${event.timestamp}:${event.name}:${index}`}
               label={`${event.name} at ${formatTime(event.timestamp)}`}
-              value={formatValue(event.attributes ?? {})}
+              value={event.attributes ?? {}}
             />
           ))}
           {span.attributes && Object.keys(span.attributes).length > 0 ? (
@@ -337,7 +338,7 @@ function SpanRow({
                 <Text style={[styles.disclosure, { color: colors.textSecondary }]}>{rawExpanded ? '-' : '+'}</Text>
               </MotionPressable>
               {rawExpanded ? (
-                <Text selectable style={[styles.rawValue, { color: colors.textSecondary }]}>{formatValue(span.attributes)}</Text>
+                <JsonBlock value={span.attributes} />
               ) : null}
             </>
           ) : null}
@@ -347,12 +348,16 @@ function SpanRow({
   );
 }
 
-function DetailValue({ label, value }: { label: string; value: string }) {
+function DetailValue({ label, value }: { label: string; value: unknown }) {
   const colors = useAppColors();
   return (
     <View style={styles.detailValue}>
       <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{label}</Text>
-      <Text selectable style={[styles.detailCopy, { color: colors.text }]}>{value}</Text>
+      {isJsonValue(value) ? (
+        <JsonBlock value={value} />
+      ) : (
+        <Text selectable style={[styles.detailCopy, { color: colors.text }]}>{formatValue(value)}</Text>
+      )}
     </View>
   );
 }
@@ -546,7 +551,6 @@ const styles = StyleSheet.create({
   detailCopy: { fontFamily: AppFonts.regular, fontSize: 14, lineHeight: 20 },
   rawButton: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', minHeight: 48 },
   rawButtonLabel: { fontFamily: AppFonts.semibold, fontSize: 14 },
-  rawValue: { fontFamily: 'monospace', fontSize: 12, lineHeight: 18 },
   actions: { flexDirection: 'row', gap: Spacing.two },
   actionButton: { alignItems: 'center', borderRadius: 16, borderWidth: 1, flex: 1, justifyContent: 'center', minHeight: 50, paddingHorizontal: 10 },
   actionLabel: { fontFamily: AppFonts.semibold, fontSize: 14 },
