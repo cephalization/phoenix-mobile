@@ -1,8 +1,10 @@
-import { Host, Slider } from '@expo/ui';
-import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { Host, Slider, Switch } from '@expo/ui';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
+import { useCallback, useEffect, useEffectEvent, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   FlatList,
   Platform,
   RefreshControl,
@@ -13,6 +15,13 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { MotionPressable } from '@/components/motion-pressable';
 import { AppFonts, MaxContentWidth, Spacing, useAppColors } from '@/constants/theme';
@@ -27,14 +36,13 @@ import {
 } from '@/hooks/use-phoenix-data';
 import { haptics } from '@/lib/haptics';
 import { useInstanceStore } from '@/store/instances';
+import { type TraceRangePreset, useSettingsStore } from '@/store/settings';
 
 const FILTERS: { label: string; value: PhoenixTraceFilter }[] = [
   { label: 'Recent', value: 'recent' },
   { label: 'Errors', value: 'errors' },
   { label: 'Slowest', value: 'slowest' },
 ];
-
-type TraceRangePreset = 'hour' | 'day' | 'week' | 'month';
 
 type TraceRangeSelection = PhoenixTraceRange & {
   preset: TraceRangePreset;
@@ -54,14 +62,55 @@ export default function ProjectTracesScreen() {
   const { width } = useWindowDimensions();
   const isWide = width >= 700;
   const [filter, setFilter] = useState<PhoenixTraceFilter>('recent');
-  const [range, setRange] = useState<TraceRangeSelection>(() => createTraceRange('day'));
+  const [range, setRange] = useState<TraceRangeSelection>(() =>
+    createTraceRange(useSettingsStore.getState().traceRangePreset)
+  );
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+  const [screenFocused, setScreenFocused] = useState(true);
+  const [appState, setAppState] = useState(AppState.currentState);
+  const [pollTick, setPollTick] = useState(0);
+  const streaming = useSettingsStore((state) => state.traceStreaming);
+  const setTraceRangePreset = useSettingsStore((state) => state.setTraceRangePreset);
+  const setStreaming = useSettingsStore((state) => state.setTraceStreaming);
   const instance = useInstanceStore((state) => state.instances.find((candidate) => candidate.id === id));
   const projects = usePhoenixProjects(instance);
   const project = projects.data?.find((candidate) => candidate.id === projectId);
   const summary = usePhoenixProjectTraceSummary(instance, projectId, range);
   const activeTraces = usePhoenixProjectTraces(instance, projectId, filter, range);
   const traces = activeTraces.data?.pages.flatMap((page) => page.items) ?? [];
-  const refreshing = (activeTraces.isRefetching && !activeTraces.isFetchingNextPage) || summary.isRefetching;
+  const dataRefreshing = (activeTraces.isRefetching && !activeTraces.isFetchingNextPage) || summary.isRefetching;
+  const pollRange = useEffectEvent(() => {
+    if (dataRefreshing) return;
+    setRange((current) => createTraceRange(current.preset, current.cacheKey));
+    setPollTick((current) => current + 1);
+  });
+  const refetchPolledRange = useEffectEvent(() => {
+    void Promise.all([activeTraces.refetch(), summary.refetch()]);
+  });
+
+  useFocusEffect(useCallback(() => {
+    setScreenFocused(true);
+    return () => setScreenFocused(false);
+  }, []));
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', setAppState);
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!streaming || !screenFocused || appState !== 'active') return;
+    const initialPoll = setTimeout(pollRange, 0);
+    const interval = setInterval(pollRange, 10_000);
+    return () => {
+      clearTimeout(initialPoll);
+      clearInterval(interval);
+    };
+  }, [appState, screenFocused, streaming]);
+
+  useEffect(() => {
+    if (pollTick > 0) refetchPolledRange();
+  }, [pollTick]);
 
   if (!instance) {
     return <UnavailableState message="This Phoenix connection is no longer on this device." title="Instance not found" />;
@@ -72,11 +121,16 @@ export default function ProjectTracesScreen() {
   }
 
   const refresh = async () => {
-    if (refreshing) return;
+    if (dataRefreshing || manualRefreshing) return;
     haptics.selection();
-    const results = await Promise.all([activeTraces.refetch(), summary.refetch()]);
-    if (results.some((result) => result.isError)) haptics.error();
-    else haptics.light();
+    setManualRefreshing(true);
+    try {
+      const results = await Promise.all([activeTraces.refetch(), summary.refetch()]);
+      if (results.some((result) => result.isError)) haptics.error();
+      else haptics.light();
+    } finally {
+      setManualRefreshing(false);
+    }
   };
 
   return (
@@ -125,15 +179,20 @@ export default function ProjectTracesScreen() {
               onChange={(preset) => {
                 if (preset === range.preset) return;
                 haptics.selection();
+                setTraceRangePreset(preset);
                 setRange(createTraceRange(preset));
               }}
               range={range}
+              streaming={streaming}
+              onStreamingChange={(value) => {
+                haptics.selection();
+                setStreaming(value);
+              }}
             />
             <TraceSummary isLoading={summary.isPending} isWide={isWide} summary={summary.data} />
 
             <View style={styles.traceHeading}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Traces</Text>
-              <Text style={[styles.resultCount, { color: colors.textSecondary }]}>{traces.length} loaded</Text>
             </View>
             <ScrollView
               contentContainerStyle={styles.filters}
@@ -176,7 +235,7 @@ export default function ProjectTracesScreen() {
             colors={[colors.brand]}
             onRefresh={refresh}
             progressBackgroundColor={colors.backgroundElement}
-            refreshing={refreshing}
+            refreshing={manualRefreshing}
             tintColor={colors.brand}
           />
         }
@@ -251,52 +310,117 @@ function TraceSummary({
 
 function TraceRangeSelector({
   onChange,
+  onStreamingChange,
   range,
+  streaming,
 }: {
   onChange: (preset: TraceRangePreset) => void;
+  onStreamingChange: (value: boolean) => void;
   range: TraceRangeSelection;
+  streaming: boolean;
 }) {
   const colors = useAppColors();
+  const reduceMotion = useReducedMotion();
+  const [expanded, setExpanded] = useState(false);
+  const [controlsHeight, setControlsHeight] = useState(220);
+  const expansion = useSharedValue(0);
   const selectedIndex = RANGE_PRESETS.findIndex((option) => option.value === range.preset);
   const selected = RANGE_PRESETS[selectedIndex];
+  const streamingLabel = streaming ? 'Streaming' : 'Paused';
+  const controlsStyle = useAnimatedStyle(() => ({
+    height: controlsHeight * expansion.get(),
+    opacity: expansion.get(),
+  }));
+  const chevronStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${expansion.get() * 90}deg` }],
+  }));
+  const toggleExpanded = () => {
+    const nextExpanded = !expanded;
+    setExpanded(nextExpanded);
+    expansion.set(withTiming(nextExpanded ? 1 : 0, {
+      duration: reduceMotion ? 0 : 220,
+      easing: Easing.out(Easing.cubic),
+    }));
+  };
 
   return (
-    <View style={styles.rangeSection}>
-      <View style={styles.rangeHeading}>
-        <Text style={[styles.eyebrow, { color: colors.textSecondary }]}>Time range</Text>
-        <Text style={[styles.rangeValue, { color: colors.text }]}>{selected.label}</Text>
-      </View>
-      <View style={styles.rangeControl}>
-        <Host ignoreSafeArea="all" seedColor={colors.brand} style={styles.sliderHost}>
-          <Slider
-            max={RANGE_PRESETS.length - 1}
-            min={0}
-            onValueChange={(value) => onChange(RANGE_PRESETS[Math.round(value)].value)}
-            step={1}
-            value={selectedIndex}
-          />
-        </Host>
-        <View style={styles.rangeLabels}>
-          {RANGE_PRESETS.map((option) => {
-            const isSelected = option.value === range.preset;
-            return (
-              <MotionPressable
-                accessibilityLabel={option.label}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isSelected }}
-                haptic="none"
-                key={option.value}
-                onPress={() => onChange(option.value)}
-                style={styles.rangeLabelButton}>
-                <Text style={[styles.rangeLabel, { color: isSelected ? colors.text : colors.textSecondary }]}>
-                  {option.shortLabel}
-                </Text>
-              </MotionPressable>
-            );
-          })}
+    <View style={[styles.rangeDisclosure, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}>
+      <MotionPressable
+        accessibilityLabel={`Time range, ${selected.label}, ${streamingLabel}`}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        haptic="selection"
+        onPress={toggleExpanded}
+        style={styles.rangeSummaryRow}>
+        <View style={styles.rangeSummaryCopy}>
+          <Text style={[styles.eyebrow, { color: colors.textSecondary }]}>Time range</Text>
+          <View style={styles.rangeSummaryState}>
+            <View style={[styles.streamingDot, { backgroundColor: streaming ? colors.brandSecondary : colors.textSecondary }]} />
+            <Text numberOfLines={1} style={[styles.rangeSummaryValue, { color: colors.text }]}>
+              {selected.label} · {streamingLabel}
+            </Text>
+          </View>
         </View>
-        <Text style={[styles.rangeDates, { color: colors.textSecondary }]}>{formatRange(range)}</Text>
-      </View>
+        <Animated.View style={chevronStyle}>
+          <SymbolView
+            accessibilityElementsHidden
+            name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }}
+            size={17}
+            tintColor={colors.textSecondary}
+            weight="semibold"
+          />
+        </Animated.View>
+      </MotionPressable>
+
+      <Animated.View
+        accessibilityElementsHidden={!expanded}
+        importantForAccessibility={expanded ? 'auto' : 'no-hide-descendants'}
+        pointerEvents={expanded ? 'auto' : 'none'}
+        style={[styles.rangeControlsClip, controlsStyle]}>
+        <View
+          onLayout={({ nativeEvent }) => {
+            if (nativeEvent.layout.height > 0) setControlsHeight(nativeEvent.layout.height);
+          }}
+          style={[styles.rangeControls, { borderTopColor: colors.border }]}>
+          <View style={styles.rangeControl}>
+            <Host ignoreSafeArea="all" seedColor={colors.brand} style={styles.sliderHost}>
+              <Slider
+                max={RANGE_PRESETS.length - 1}
+                min={0}
+                onValueChange={(value) => onChange(RANGE_PRESETS[Math.round(value)].value)}
+                step={1}
+                value={selectedIndex}
+              />
+            </Host>
+            <View style={styles.rangeLabels}>
+              {RANGE_PRESETS.map((option) => {
+                const isSelected = option.value === range.preset;
+                return (
+                  <MotionPressable
+                    accessibilityLabel={option.label}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
+                    haptic="none"
+                    key={option.value}
+                    onPress={() => onChange(option.value)}
+                    style={styles.rangeLabelButton}>
+                    <Text style={[styles.rangeLabel, { color: isSelected ? colors.text : colors.textSecondary }]}>
+                      {option.shortLabel}
+                    </Text>
+                  </MotionPressable>
+                );
+              })}
+            </View>
+            <Text style={[styles.rangeDates, { color: colors.textSecondary }]}>{formatRange(range)}</Text>
+          </View>
+          <View style={[styles.streamingRow, { borderTopColor: colors.border }]}>
+            <Text style={[styles.streamingLabel, { color: colors.text }]}>Streaming</Text>
+            <Host ignoreSafeArea="all" matchContents seedColor={colors.brand}>
+              <Switch onValueChange={onStreamingChange} value={streaming} />
+            </Host>
+          </View>
+        </View>
+      </Animated.View>
     </View>
   );
 }
@@ -439,10 +563,11 @@ function formatStartTime(value: string) {
   return date.toLocaleDateString([], { day: 'numeric', month: 'short' });
 }
 
-function createTraceRange(preset: TraceRangePreset): TraceRangeSelection {
+function createTraceRange(preset: TraceRangePreset, cacheKey?: string): TraceRangeSelection {
   const selected = RANGE_PRESETS.find((option) => option.value === preset) ?? RANGE_PRESETS[1];
   const endTime = new Date();
   return {
+    cacheKey: cacheKey ?? `${preset}:${endTime.toISOString()}`,
     endTime: endTime.toISOString(),
     preset,
     startTime: new Date(endTime.getTime() - selected.durationMs).toISOString(),
@@ -469,15 +594,22 @@ const styles = StyleSheet.create({
   title: { fontFamily: AppFonts.semibold, fontSize: 32, letterSpacing: -1, lineHeight: 38 },
   description: { fontFamily: AppFonts.regular, fontSize: 16, lineHeight: 23, maxWidth: 620 },
   eyebrow: { fontFamily: AppFonts.semibold, fontSize: 13 },
-  rangeSection: { gap: 8, paddingBottom: 18 },
-  rangeHeading: { alignItems: 'baseline', flexDirection: 'row', justifyContent: 'space-between' },
-  rangeValue: { fontFamily: AppFonts.medium, fontSize: 13 },
+  rangeDisclosure: { borderRadius: 16, borderWidth: 1, marginBottom: 16, overflow: 'hidden' },
+  rangeSummaryRow: { alignItems: 'center', flexDirection: 'row', gap: 12, minHeight: 64, paddingHorizontal: 16, paddingVertical: 10 },
+  rangeSummaryCopy: { flex: 1, gap: 5, minWidth: 0 },
+  rangeSummaryState: { alignItems: 'center', flexDirection: 'row', gap: 8 },
+  rangeSummaryValue: { flex: 1, fontFamily: AppFonts.medium, fontSize: 14 },
+  streamingDot: { borderRadius: 4, height: 8, width: 8 },
+  rangeControlsClip: { overflow: 'hidden' },
+  rangeControls: { borderTopWidth: StyleSheet.hairlineWidth, paddingBottom: 16, paddingHorizontal: 16, paddingTop: 14 },
   rangeControl: { paddingHorizontal: 6 },
   sliderHost: { height: 32, width: '100%' },
   rangeLabels: { flexDirection: 'row', justifyContent: 'space-between' },
   rangeLabelButton: { alignItems: 'center', justifyContent: 'center', minHeight: 48, width: 52 },
   rangeLabel: { fontFamily: AppFonts.medium, fontSize: 12 },
-  rangeDates: { fontFamily: AppFonts.regular, fontSize: 11, paddingTop: 2, textAlign: 'center' },
+  rangeDates: { fontFamily: AppFonts.regular, fontSize: 12, paddingTop: 6, textAlign: 'center' },
+  streamingRow: { alignItems: 'center', borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', marginTop: 22, minHeight: 64, paddingTop: 12 },
+  streamingLabel: { flex: 1, fontFamily: AppFonts.medium, fontSize: 14 },
   summary: { borderRadius: 18, borderWidth: 1, flexDirection: 'row', flexWrap: 'wrap', overflow: 'hidden' },
   metric: { flexGrow: 1, gap: 6, minHeight: 86, paddingHorizontal: 16, paddingVertical: 14 },
   metricLabel: { fontFamily: AppFonts.regular, fontSize: 12 },
@@ -485,7 +617,6 @@ const styles = StyleSheet.create({
   metricLoader: { alignSelf: 'flex-start', height: 28 },
   traceHeading: { alignItems: 'baseline', flexDirection: 'row', justifyContent: 'space-between', paddingTop: 30 },
   sectionTitle: { fontFamily: AppFonts.semibold, fontSize: 20, letterSpacing: -0.3 },
-  resultCount: { fontFamily: AppFonts.regular, fontSize: 12 },
   filterScroller: { marginHorizontal: -20 },
   filters: { gap: 8, paddingHorizontal: 20, paddingVertical: 14 },
   filter: { alignItems: 'center', borderRadius: 24, borderWidth: 1, justifyContent: 'center', minHeight: 48, paddingHorizontal: 18 },

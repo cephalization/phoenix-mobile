@@ -11,6 +11,7 @@ type PhoenixTrace = Types['V1']['components']['schemas']['TraceData'];
 export type PhoenixTraceFilter = 'recent' | 'errors' | 'slowest';
 
 export type PhoenixTraceRange = {
+  cacheKey: string;
   endTime: string;
   startTime: string;
 };
@@ -54,9 +55,9 @@ export const phoenixQueryKeys = {
   instance: (instanceId: string) => [...phoenixQueryKeys.all, 'instance', instanceId] as const,
   projects: (instanceId: string) => [...phoenixQueryKeys.instance(instanceId), 'projects'] as const,
   traceSummary: (instanceId: string, projectId: string, range: PhoenixTraceRange) =>
-    [...phoenixQueryKeys.instance(instanceId), 'project', projectId, 'trace-summary', range.startTime, range.endTime] as const,
+    [...phoenixQueryKeys.instance(instanceId), 'project', projectId, 'trace-summary', range.cacheKey] as const,
   traces: (instanceId: string, projectId: string, filter: PhoenixTraceFilter, range: PhoenixTraceRange) =>
-    [...phoenixQueryKeys.instance(instanceId), 'project', projectId, 'traces', filter, range.startTime, range.endTime] as const,
+    [...phoenixQueryKeys.instance(instanceId), 'project', projectId, 'traces', filter, range.cacheKey] as const,
   version: (instanceId: string) => [...phoenixQueryKeys.instance(instanceId), 'version'] as const,
 };
 
