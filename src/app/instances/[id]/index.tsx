@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { type Href, router, Stack, useLocalSearchParams } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useEffect } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -175,6 +176,7 @@ export default function InstanceScreen() {
                 {projects.data.map((project, index) => (
                   <ProjectRow
                     index={index}
+                    instanceId={instance.id}
                     key={project.id}
                     project={project}
                     showDivider={index < projects.data.length - 1}
@@ -194,10 +196,12 @@ export default function InstanceScreen() {
 
 function ProjectRow({
   index,
+  instanceId,
   project,
   showDivider,
 }: {
   index: number;
+  instanceId: string;
   project: PhoenixProject;
   showDivider: boolean;
 }) {
@@ -222,21 +226,40 @@ function ProjectRow({
   return (
     <Animated.View
       style={[
-        styles.project,
+        styles.projectRow,
         showDivider && { borderBottomColor: colors.border, borderBottomWidth: 1 },
         entranceStyle,
       ]}>
-      <View style={[styles.projectMark, { backgroundColor: colors.accentSoft }]}>
-        <Text style={[styles.projectInitial, { color: colors.accent }]}>{project.name.charAt(0).toUpperCase()}</Text>
-      </View>
-      <View style={styles.projectContent}>
-        <Text style={[styles.projectName, { color: colors.text }]}>{project.name}</Text>
-        {project.description && (
-          <Text numberOfLines={2} style={[styles.projectDescription, { color: colors.textSecondary }]}>
-            {project.description}
-          </Text>
-        )}
-      </View>
+      <MotionPressable
+        accessibilityHint="Opens recent traces for this project"
+        accessibilityRole="button"
+        onPress={() =>
+          router.push(
+            `/instances/${encodeURIComponent(instanceId)}/projects/${encodeURIComponent(project.id)}` as Href
+          )
+        }
+        scaleTo={0.99}
+        style={styles.project}>
+        <View style={[styles.projectMark, { backgroundColor: colors.accentSoft }]}>
+          <Text style={[styles.projectInitial, { color: colors.accent }]}>{project.name.charAt(0).toUpperCase()}</Text>
+        </View>
+        <View style={styles.projectContent}>
+          <Text numberOfLines={1} style={[styles.projectName, { color: colors.text }]}>{project.name}</Text>
+          {project.description && (
+            <Text numberOfLines={2} style={[styles.projectDescription, { color: colors.textSecondary }]}>
+              {project.description}
+            </Text>
+          )}
+        </View>
+        <View style={styles.projectArrow}>
+          <SymbolView
+            name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
+            size={15}
+            tintColor={colors.textSecondary}
+            weight="semibold"
+          />
+        </View>
+      </MotionPressable>
     </Animated.View>
   );
 }
@@ -268,12 +291,14 @@ const styles = StyleSheet.create({
   messageTitle: { fontFamily: AppFonts.semibold, fontSize: 16 },
   messageCopy: { fontFamily: AppFonts.regular, fontSize: 14, lineHeight: 21 },
   projectList: { borderRadius: 18, borderWidth: 1, overflow: 'hidden' },
+  projectRow: { overflow: 'hidden' },
   project: { alignItems: 'center', flexDirection: 'row', gap: Spacing.three, minHeight: 74, padding: 14 },
   projectMark: { alignItems: 'center', borderRadius: 11, height: 42, justifyContent: 'center', width: 42 },
   projectInitial: { fontFamily: AppFonts.semibold, fontSize: 15 },
   projectContent: { flex: 1, gap: Spacing.one },
   projectName: { fontFamily: AppFonts.medium, fontSize: 15 },
   projectDescription: { fontFamily: AppFonts.regular, fontSize: 13, lineHeight: 19 },
+  projectArrow: { alignItems: 'center', height: 32, justifyContent: 'center', width: 20 },
   removeButton: { alignItems: 'center', minHeight: 48, padding: Spacing.three },
   removeText: { fontFamily: AppFonts.medium, fontSize: 14 },
   emptyTitle: { fontFamily: AppFonts.semibold, fontSize: 20 },

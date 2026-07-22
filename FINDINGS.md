@@ -276,6 +276,17 @@ The targeted Metro resolver shim fixed iOS and Android bundling without polyfill
 
 ## Design Decisions
 
+### 2026-07-21 - Trace Lists Combine Summaries With Root Spans
+
+**Status:** Decision
+**Area:** Projects, traces, performance
+
+The project trace feed pages through `GET /v1/projects/{project_identifier}/traces` without `include_spans`, then fetches only root spans for that page's trace IDs. Trace summaries supply aggregate latency and token counts; root spans supply the operation name, kind, and status. Error filtering uses the root-span endpoint directly. Summary metrics are explicitly scoped to the first page of up to 30 recent traces rather than presented as project-wide aggregates.
+
+The Phoenix client declares the project-traces route and span status filters available from Phoenix 13.15.0, while filtering spans by trace IDs requires 13.9.0.
+
+**Implication:** Keep full span trees lazy until a trace detail view exists, preserve cursor pagination and virtualized rendering, and do not relabel sample metrics as project-wide statistics. Older Phoenix servers should receive an understandable compatibility error rather than triggering an unbounded fallback scan.
+
 ### 2026-07-17 - Touch Feedback Is Platform-Idiomatic And Haptics Are Reserved For State Changes
 
 **Status:** Decision
