@@ -80,6 +80,7 @@ export default function RootLayout() {
             />
             <Stack.Screen name="instances/[id]/index" options={{ title: 'Instance' }} />
             <Stack.Screen name="instances/[id]/projects/[projectId]" options={{ title: 'Project' }} />
+            <Stack.Screen name="instances/[id]/projects/[projectId]/traces/[traceId]" options={{ title: 'Trace' }} />
             <Stack.Screen name="instances/[id]/chat" options={{ headerShown: false }} />
             <Stack.Screen
               name="settings"

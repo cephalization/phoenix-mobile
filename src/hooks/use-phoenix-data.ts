@@ -5,7 +5,7 @@ import { createPhoenixClient } from '@/lib/phoenix';
 import type { PhoenixInstance } from '@/types/instance';
 
 export type PhoenixProject = Types['V1']['components']['schemas']['Project'];
-type PhoenixSpan = Types['V1']['components']['schemas']['Span'];
+export type PhoenixSpan = Types['V1']['components']['schemas']['Span'];
 type PhoenixTrace = Types['V1']['components']['schemas']['TraceData'];
 
 export type PhoenixTraceFilter = 'recent' | 'errors' | 'slowest';
@@ -47,6 +47,13 @@ type PhoenixTracesResponse = {
   };
 };
 
+type PhoenixSpansResponse = {
+  data?: {
+    data: PhoenixSpan[];
+    next_cursor: string | null;
+  };
+};
+
 const TRACE_PAGE_SIZE = 30;
 const TRACE_SUMMARY_PAGE_SIZE = 100;
 
@@ -58,6 +65,8 @@ export const phoenixQueryKeys = {
     [...phoenixQueryKeys.instance(instanceId), 'project', projectId, 'trace-summary', range.cacheKey] as const,
   traces: (instanceId: string, projectId: string, filter: PhoenixTraceFilter, range: PhoenixTraceRange) =>
     [...phoenixQueryKeys.instance(instanceId), 'project', projectId, 'traces', filter, range.cacheKey] as const,
+  trace: (instanceId: string, projectId: string, traceId: string) =>
+    [...phoenixQueryKeys.instance(instanceId), 'project', projectId, 'trace', traceId] as const,
   version: (instanceId: string) => [...phoenixQueryKeys.instance(instanceId), 'version'] as const,
 };
 
@@ -255,6 +264,44 @@ export function usePhoenixProjectTraceSummary(
       };
     },
     enabled: Boolean(instance && projectId),
+  });
+}
+
+export function usePhoenixTrace(
+  instance: PhoenixInstance | undefined,
+  projectId: string | undefined,
+  traceId: string | undefined
+) {
+  return useQuery({
+    queryKey: phoenixQueryKeys.trace(instance?.id ?? 'missing', projectId ?? 'missing', traceId ?? 'missing'),
+    queryFn: async (): Promise<PhoenixSpan[]> => {
+      if (!instance || !projectId || !traceId) throw new Error('Phoenix trace not found.');
+      const client = createPhoenixClient(instance);
+      const spans: PhoenixSpan[] = [];
+      let cursor: string | null = null;
+
+      do {
+        const response: PhoenixSpansResponse = await client.GET('/v1/projects/{project_identifier}/spans', {
+          params: {
+            path: { project_identifier: projectId },
+            query: {
+              cursor,
+              limit: 100,
+              trace_id: [traceId],
+            },
+          },
+        });
+        if (!response.data) throw new Error('Phoenix could not load this trace.');
+        spans.push(...response.data.data);
+
+        const nextCursor: string | null = response.data.next_cursor;
+        if (!nextCursor || nextCursor === cursor) break;
+        cursor = nextCursor;
+      } while (true);
+
+      return spans;
+    },
+    enabled: Boolean(instance && projectId && traceId),
   });
 }
 

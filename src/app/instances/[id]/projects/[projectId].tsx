@@ -24,6 +24,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { MotionPressable } from '@/components/motion-pressable';
+import { PxiHeaderButton } from '@/components/pxi-header-button';
 import { AppFonts, MaxContentWidth, Spacing, useAppColors } from '@/constants/theme';
 import {
   type PhoenixTraceFilter,
@@ -138,8 +139,15 @@ export default function ProjectTracesScreen() {
       <Stack.Screen
         options={{
           headerBackTitle: instance?.name ?? 'Instance',
+          headerRight: () => <PxiHeaderButton instance={instance} />,
           scrollEdgeEffects: { bottom: 'soft' },
           title: project?.name ?? 'Project',
+          unstable_headerRightItems: () => [
+            {
+              element: <PxiHeaderButton instance={instance} />,
+              type: 'custom',
+            },
+          ],
         }}
       />
       <FlatList
@@ -240,7 +248,16 @@ export default function ProjectTracesScreen() {
           />
         }
         removeClippedSubviews={Platform.OS === 'android'}
-        renderItem={({ item }) => <TraceRow isWide={isWide} trace={item} />}
+        renderItem={({ item }) => (
+          <TraceRow
+            isWide={isWide}
+            onPress={() => router.push({
+              pathname: '/instances/[id]/projects/[projectId]/traces/[traceId]',
+              params: { id: instance.id, projectId, traceId: item.traceId },
+            })}
+            trace={item}
+          />
+        )}
         style={styles.list}
         windowSize={7}
       />
@@ -438,7 +455,7 @@ function TraceTableHeader() {
   );
 }
 
-function TraceRow({ isWide, trace }: { isWide: boolean; trace: PhoenixTraceListItem }) {
+function TraceRow({ isWide, onPress, trace }: { isWide: boolean; onPress: () => void; trace: PhoenixTraceListItem }) {
   const colors = useAppColors();
   const isError = trace.statusCode === 'ERROR';
   const statusColor = isError ? colors.danger : trace.statusCode === 'OK' ? colors.success : colors.textSecondary;
@@ -446,8 +463,11 @@ function TraceRow({ isWide, trace }: { isWide: boolean; trace: PhoenixTraceListI
 
   if (isWide) {
     return (
-      <View
+      <MotionPressable
         accessibilityLabel={`${trace.name}, ${statusLabel}, ${formatDuration(trace.latencyMs)}`}
+        accessibilityHint="Opens trace details"
+        accessibilityRole="button"
+        onPress={onPress}
         style={[styles.tableRow, { borderBottomColor: colors.border }]}>
         <View style={styles.operationColumn}>
           <Text numberOfLines={1} style={[styles.traceName, { color: colors.text }]}>{trace.name}</Text>
@@ -462,13 +482,16 @@ function TraceRow({ isWide, trace }: { isWide: boolean; trace: PhoenixTraceListI
         <Text style={[styles.tableCell, styles.startedColumn, { color: colors.textSecondary }]}>{formatStartTime(trace.startTime)}</Text>
         <Text style={[styles.tableCell, styles.latencyColumn, { color: colors.text }]}>{formatDuration(trace.latencyMs)}</Text>
         <Text style={[styles.tableCell, styles.tokensColumn, { color: colors.text }]}>{formatTokens(trace.tokenCountTotal)}</Text>
-      </View>
+      </MotionPressable>
     );
   }
 
   return (
-    <View
+    <MotionPressable
       accessibilityLabel={`${trace.name}, ${statusLabel}, ${formatDuration(trace.latencyMs)}`}
+      accessibilityHint="Opens trace details"
+      accessibilityRole="button"
+      onPress={onPress}
       style={[styles.mobileRow, { borderBottomColor: colors.border }]}>
       <View style={styles.mobilePrimaryRow}>
         <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
@@ -488,7 +511,7 @@ function TraceRow({ isWide, trace }: { isWide: boolean; trace: PhoenixTraceListI
           </>
         ) : null}
       </View>
-    </View>
+    </MotionPressable>
   );
 }
 

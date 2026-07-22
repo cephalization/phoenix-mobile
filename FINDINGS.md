@@ -13,6 +13,15 @@ This is the project's living technical memory. Record discoveries that would oth
 
 ## Active Constraints
 
+### 2026-07-22 - Trace Details Are Reconstructed From Full Spans
+
+**Status:** Decision
+**Area:** traces, observability, networking
+
+The Phoenix REST API can delete a trace by identifier but does not expose a corresponding single-trace read endpoint, and the project trace-list endpoint cannot filter by trace ID. Trace details therefore paginate `GET /v1/projects/{project_identifier}/spans` with the OpenTelemetry trace ID and reconstruct the root, hierarchy, timing, status, token totals, and attention signals from the returned full spans.
+
+**Implication:** Keep trace detail queries scoped by instance, project, and trace ID; do not pass span payloads through route parameters or make the trace list include all spans. Token totals derived from LLM spans avoid double-counting root or agent spans that may repeat aggregate usage.
+
 ### 2026-07-22 - Trace Range Statistics Require REST Pagination
 
 **Status:** Decision
