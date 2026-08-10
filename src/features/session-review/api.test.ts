@@ -8,10 +8,16 @@ import {
   createSessionAnnotationBatches,
   createAuthenticatedAnnotationIdentifier,
   createSessionReviewIdentifier,
+  isPxiSpanNote,
   nextUnseenCursor,
   SessionReviewValidationError,
 } from './api';
-import type { SessionAnnotationConfig, SessionAnnotationDraft, SessionTurn } from './types';
+import type {
+  SessionAnnotationConfig,
+  SessionAnnotationDraft,
+  SessionTurn,
+  SpanNoteAnnotation,
+} from './types';
 
 vi.mock('@/lib/phoenix', () => ({ createPhoenixClient: vi.fn() }));
 
@@ -263,6 +269,25 @@ describe('annotation config creation', () => {
       { id: 'config-2', name: 'quality', type: 'FREEFORM' } as SessionAnnotationConfig,
       data
     )).toBe(false);
+  });
+});
+
+describe('PXI span notes', () => {
+  const note = {
+    id: 'annotation-1',
+    name: 'note',
+    identifier: 'pxi',
+    annotator_kind: 'HUMAN',
+    span_id: 'aaaaaaaaaaaaaaaa',
+    result: { explanation: 'The agent looped on the same failing tool call.' },
+  } as SpanNoteAnnotation;
+
+  it('accepts only note annotations with the pxi identifier and non-empty text', () => {
+    expect(isPxiSpanNote(note)).toBe(true);
+    expect(isPxiSpanNote({ ...note, identifier: 'px-app:VXNlcjox' } as SpanNoteAnnotation)).toBe(false);
+    expect(isPxiSpanNote({ ...note, name: 'quality' } as SpanNoteAnnotation)).toBe(false);
+    expect(isPxiSpanNote({ ...note, result: { explanation: '   ' } } as SpanNoteAnnotation)).toBe(false);
+    expect(isPxiSpanNote({ ...note, result: null } as SpanNoteAnnotation)).toBe(false);
   });
 });
 

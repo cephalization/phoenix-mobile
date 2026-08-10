@@ -9,6 +9,7 @@ import {
   fetchSession,
   fetchSessionAnnotations,
   fetchSessionPage,
+  fetchSessionPxiNotes,
   fetchSessionTurns,
   writeSessionAnnotation,
   writeSessionAnnotations,
@@ -21,6 +22,7 @@ import type {
   SessionData,
   SessionDatasetWrite,
   SessionNoteWrite,
+  SessionTurn,
 } from '@/features/session-review/types';
 import { phoenixQueryKeys } from '@/hooks/use-phoenix-data';
 import type { PhoenixInstance } from '@/types/instance';
@@ -52,6 +54,8 @@ export const phoenixSessionQueryKeys = {
   ] as const,
   datasets: (instanceId: string) =>
     [...phoenixQueryKeys.instance(instanceId), 'datasets'] as const,
+  pxiNotes: (instanceId: string, projectId: string, sessionId: string) =>
+    [...phoenixSessionQueryKeys.project(instanceId, projectId), 'pxi-notes', sessionId] as const,
 };
 
 export function usePhoenixProjectSessions(
@@ -143,6 +147,32 @@ export function useCreatePhoenixAnnotationConfig(
         queryKey: phoenixSessionQueryKeys.annotationConfigs(instance.id, projectId),
       });
     },
+  });
+}
+
+export function usePhoenixSessionPxiNotes(
+  instance: PhoenixInstance | undefined,
+  projectId: string | undefined,
+  sessionId: string | undefined,
+  turns: SessionTurn[] | undefined
+) {
+  const spanIds = (turns ?? [])
+    .flatMap((turn) => (turn.rootSpan ? [turn.rootSpan.context.span_id] : []))
+    .sort();
+  return useQuery({
+    queryKey: [
+      ...phoenixSessionQueryKeys.pxiNotes(
+        instance?.id ?? missing,
+        projectId ?? missing,
+        sessionId ?? missing
+      ),
+      spanIds,
+    ],
+    queryFn: () => {
+      if (!instance || !projectId) throw new Error('Phoenix project not found.');
+      return fetchSessionPxiNotes(instance, projectId, spanIds);
+    },
+    enabled: Boolean(instance && projectId && sessionId && spanIds.length > 0),
   });
 }
 

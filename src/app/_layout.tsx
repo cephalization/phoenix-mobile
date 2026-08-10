@@ -118,6 +118,16 @@ export default function RootLayout() {
             />
             <Stack.Screen name="instances/[id]/chat" options={{ headerShown: false }} />
             <Stack.Screen
+              name="instances/[id]/pxi-action"
+              options={{
+                presentation: 'formSheet',
+                sheetAllowedDetents: [0.72, 0.95],
+                sheetCornerRadius: 28,
+                sheetGrabberVisible: true,
+                title: 'PXI',
+              }}
+            />
+            <Stack.Screen
               name="settings"
               options={{
                 presentation: 'formSheet',

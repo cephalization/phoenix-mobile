@@ -15,9 +15,19 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { MessageMarkdown } from '@/components/chat/message-markdown';
+import { ModelPicker } from '@/components/chat/model-picker';
 import { isJsonValue, JsonBlock } from '@/components/json-block';
 import { MotionPressable } from '@/components/motion-pressable';
+import { PxiGlyph } from '@/components/pxi-glyph';
 import { AppFonts, MaxContentWidth, useAppColors } from '@/constants/theme';
+import {
+  createPxiInvestigationKey,
+  usePxiInvestigationStore,
+  type PxiInvestigationStatus,
+} from '@/features/pxi/investigation';
+import { isSameModel, usePxiModelCatalog } from '@/features/pxi/model-catalog';
+import type { ModelSelection } from '@/features/pxi/types';
 import { classifySessionReview, latestOwnedAnnotation } from '@/features/session-review/classifier';
 import {
   createAuthenticatedAnnotationIdentifier,
@@ -28,12 +38,14 @@ import type {
   SessionAnnotationConfig,
   SessionAnnotationDraft,
   SessionTurn,
+  SpanNoteAnnotation,
 } from '@/features/session-review/types';
 import { usePhoenixProjects, usePhoenixViewer } from '@/hooks/use-phoenix-data';
 import {
   usePhoenixProjectAnnotationConfigs,
   usePhoenixSession,
   usePhoenixSessionAnnotations,
+  usePhoenixSessionPxiNotes,
   usePhoenixSessionTurns,
   useWritePhoenixSessionAnnotations,
   useWritePhoenixSessionNote,
@@ -92,10 +104,22 @@ export default function SessionDetailScreen() {
     // installation already saved a note; the classifier ignores notes.
     settings.requiredConfigNames.length > 0 ? [...settings.requiredConfigNames, 'note'] : []
   );
+  const pxiNotes = usePhoenixSessionPxiNotes(instance, projectId, session.data?.session_id, turns.data);
+  const catalog = usePxiModelCatalog(instance);
+  const preferredPxiModel = useInstanceStore((state) => state.pxiModels[id]);
+  const setPxiModel = useInstanceStore((state) => state.setPxiModel);
+  const [modelPickerVisible, setModelPickerVisible] = useState(false);
+  const investigationKey = session.data
+    ? createPxiInvestigationKey('investigate-session', id, projectId, session.data.session_id)
+    : null;
+  const investigation = usePxiInvestigationStore(
+    (state) => (investigationKey ? state.runs[investigationKey] : undefined)
+  );
   const isRefreshing = session.isRefetching
     || turns.isRefetching
     || configsQuery.isRefetching
     || annotations.isRefetching
+    || pxiNotes.isRefetching
     || viewer.isRefetching;
 
   useEffect(() => {
@@ -105,6 +129,42 @@ export default function SessionDetailScreen() {
   if (!instance) return <UnavailableState title="Instance not found" message="This Phoenix connection is no longer on this device." />;
   if (projects.isSuccess && !project) return <UnavailableState title="Project not found" message="This project is no longer available." />;
 
+  const openInvestigationSheet = (model?: ModelSelection) => {
+    if (!session.data) return;
+    router.push({
+      pathname: '/instances/[id]/pxi-action',
+      params: {
+        action: 'investigate-session',
+        id,
+        projectId,
+        sessionId: session.data.session_id,
+        sessionNodeId: session.data.id,
+        ...(model
+          ? {
+              modelName: model.modelName,
+              modelProviderType: model.providerType,
+              ...(model.providerType === 'builtin'
+                ? { modelProvider: model.provider }
+                : { modelProviderId: model.providerId }),
+            }
+          : {}),
+      },
+    });
+  };
+  const investigate = () => {
+    // An existing run (live or finished while the sheet was closed) reopens the
+    // transcript; the model choice only applies to a brand-new investigation.
+    if (investigation) {
+      openInvestigationSheet();
+      return;
+    }
+    if (!catalog.data || catalog.data.options.length === 0) {
+      openInvestigationSheet();
+      return;
+    }
+    setModelPickerVisible(true);
+  };
+
   const refresh = async () => {
     haptics.selection();
     const sessionResult = await session.refetch();
@@ -112,7 +172,7 @@ export default function SessionDetailScreen() {
       configsQuery.refetch(),
       annotations.refetch(),
       viewer.refetch(),
-      ...(sessionResult.isError ? [] : [turns.refetch()]),
+      ...(sessionResult.isError ? [] : [turns.refetch(), pxiNotes.refetch()]),
     ]);
     if (sessionResult.isError || results.some((result) => result.isError)) haptics.error();
     else haptics.light();
@@ -138,7 +198,13 @@ export default function SessionDetailScreen() {
           keyExtractor={(turn) => turn.traceId}
           ListHeaderComponent={
             <>
-              <SessionHeader instanceId={id} projectId={projectId} session={session.data} />
+              <SessionHeader
+                instanceId={id}
+                investigationStatus={investigation?.status ?? null}
+                onInvestigate={investigate}
+                projectId={projectId}
+                session={session.data}
+              />
               <SessionMetrics session={session.data} />
               <View style={styles.section}>
               <View style={styles.sectionHeading}>
@@ -156,6 +222,8 @@ export default function SessionDetailScreen() {
             </>
           }
           ListFooterComponent={
+            <>
+            <PxiNotesSection notes={pxiNotes} turns={turns.data ?? []} />
             <ReviewForm
               allAnnotations={annotations.data ?? []}
               annotationsError={annotations.error}
@@ -175,6 +243,7 @@ export default function SessionDetailScreen() {
               viewerError={viewer.error}
               viewerSuccess={viewer.isSuccess}
             />
+            </>
           }
           maxToRenderPerBatch={3}
           refreshControl={
@@ -194,16 +263,43 @@ export default function SessionDetailScreen() {
           windowSize={5}
         />
       )}
+      {catalog.data && catalog.data.options.length > 0 ? (
+        <ModelPicker
+          onClose={() => setModelPickerVisible(false)}
+          onSelect={(model) => {
+            setPxiModel(id, model);
+            setModelPickerVisible(false);
+            openInvestigationSheet(model);
+          }}
+          options={catalog.data.options}
+          selected={
+            catalog.data.options.find(
+              (option) => preferredPxiModel && isSameModel(option.selection, preferredPxiModel)
+            )?.selection
+              ?? catalog.data.defaultSelection
+              ?? catalog.data.options[0].selection
+          }
+          visible={modelPickerVisible}
+        />
+      ) : null}
     </KeyboardAvoidingView>
   );
 }
 
-function SessionHeader({ instanceId, projectId, session }: {
+function SessionHeader({ instanceId, investigationStatus, onInvestigate, projectId, session }: {
   instanceId: string;
+  investigationStatus: PxiInvestigationStatus | null;
+  onInvestigate: () => void;
   projectId: string;
   session: NonNullable<ReturnType<typeof usePhoenixSession>['data']>;
 }) {
   const colors = useAppColors();
+  const investigating = investigationStatus === 'running';
+  const investigateLabel = investigating
+    ? 'PXI is investigating…'
+    : investigationStatus != null
+      ? 'View PXI investigation'
+      : 'Investigate with PXI';
   return (
     <View style={styles.hero}>
       <Text style={[styles.eyebrow, { color: colors.brandText }]}>REMOTE PHOENIX SESSION</Text>
@@ -229,6 +325,22 @@ function SessionHeader({ instanceId, projectId, session }: {
           })}
           style={[styles.copyButton, { borderColor: colors.border }]}>
           <Text style={[styles.copyLabel, { color: colors.text }]}>Add to dataset</Text>
+        </MotionPressable>
+        <MotionPressable
+          accessibilityHint={investigationStatus != null
+            ? 'Opens the running PXI investigation for this session'
+            : 'Choose a model, then PXI open codes this session and saves notes for reviewers'}
+          accessibilityLabel={investigateLabel}
+          accessibilityRole="button"
+          haptic="selection"
+          onPress={onInvestigate}
+          style={[styles.copyButton, styles.pxiButton, { borderColor: colors.border }]}>
+          {investigating ? (
+            <ActivityIndicator color={colors.brand} size="small" />
+          ) : (
+            <PxiGlyph color={colors.brand} size={13} />
+          )}
+          <Text style={[styles.copyLabel, { color: colors.text }]}>{investigateLabel}</Text>
         </MotionPressable>
       </View>
     </View>
@@ -330,6 +442,96 @@ function ConversationValue({ empty, io, label, tone }: { empty: string; io?: Ses
       ) : null}
       {expanded && value.length > MAX_TEXT_LENGTH ? (
         <Text style={[styles.truncated, { color: colors.textSecondary }]}>Showing the first {formatCount(MAX_TEXT_LENGTH)} characters.</Text>
+      ) : null}
+    </View>
+  );
+}
+
+function PxiNotesSection({ notes, turns }: {
+  notes: ReturnType<typeof usePhoenixSessionPxiNotes>;
+  turns: SessionTurn[];
+}) {
+  const colors = useAppColors();
+  const turnIndexBySpanId = new Map<string, number>();
+  turns.forEach((turn, index) => {
+    if (turn.rootSpan) turnIndexBySpanId.set(turn.rootSpan.context.span_id, index);
+  });
+  const data = [...(notes.data ?? [])].sort((left, right) =>
+    (turnIndexBySpanId.get(left.span_id) ?? Number.MAX_SAFE_INTEGER)
+    - (turnIndexBySpanId.get(right.span_id) ?? Number.MAX_SAFE_INTEGER)
+  );
+  if (!notes.isError && data.length === 0) return null;
+
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeading}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>PXI notes</Text>
+        {data.length > 0 ? (
+          <Text style={[styles.sectionMeta, { color: colors.textSecondary }]}>
+            {data.length} note{data.length === 1 ? '' : 's'}
+          </Text>
+        ) : null}
+      </View>
+      {notes.isError ? (
+        <InlineState
+          action="Retry"
+          copy={notes.error.message}
+          onPress={() => notes.refetch()}
+          title="Couldn’t load PXI notes"
+        />
+      ) : (
+        <>
+          {data.map((note) => {
+            const turnIndex = turnIndexBySpanId.get(note.span_id);
+            return (
+              <PxiNoteCard
+                key={note.id}
+                note={note}
+                title={turnIndex != null ? `Turn ${turnIndex + 1}` : 'Session'}
+              />
+            );
+          })}
+          <Text style={[styles.pxiNoteHint, { color: colors.textSecondary }]}>
+            PXI wrote these open-coding notes on this session’s turns. Weigh them against the conversation before annotating; they never mark a session reviewed.
+          </Text>
+        </>
+      )}
+    </View>
+  );
+}
+
+// Notes lead with a one-sentence code summary (part of the investigate-session
+// prompt contract), so the collapsed preview reads as a labeled finding.
+const PXI_NOTE_PREVIEW_LINES = 4;
+const PXI_NOTE_PREVIEW_THRESHOLD = 320;
+
+function PxiNoteCard({ note, title }: { note: SpanNoteAnnotation; title: string }) {
+  const colors = useAppColors();
+  const [expanded, setExpanded] = useState(false);
+  const text = note.result?.explanation ?? '';
+  const collapsible = text.length > PXI_NOTE_PREVIEW_THRESHOLD;
+  return (
+    <View style={[styles.pxiNote, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}>
+      <View style={styles.pxiNoteHeader}>
+        <PxiGlyph color={colors.brand} size={13} />
+        <Text style={[styles.pxiNoteTitle, { color: colors.text }]}>{title}</Text>
+        <Text style={[styles.pxiNoteTime, { color: colors.textSecondary }]}>{formatDate(note.updated_at)}</Text>
+      </View>
+      {collapsible && !expanded ? (
+        <Text numberOfLines={PXI_NOTE_PREVIEW_LINES} style={[styles.pxiNotePreview, { color: colors.text }]}>
+          {text}
+        </Text>
+      ) : (
+        <MessageMarkdown streaming={false} text={text} />
+      )}
+      {collapsible ? (
+        <MotionPressable
+          accessibilityLabel={expanded ? `Collapse the ${title} PXI note` : `Show the full ${title} PXI note`}
+          accessibilityRole="button"
+          onPress={() => setExpanded((current) => !current)}
+          style={[styles.expandButton, { borderColor: colors.border }]}>
+          <Text style={[styles.expandLabel, { color: colors.text }]}>{expanded ? 'Show less' : 'Show full note'}</Text>
+        </MotionPressable>
       ) : null}
     </View>
   );
@@ -831,6 +1033,13 @@ const styles = StyleSheet.create({
   heroActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   copyButton: { borderRadius: 14, borderWidth: 1, justifyContent: 'center', marginTop: 5, minHeight: 48, paddingHorizontal: 16 },
   copyLabel: { fontFamily: AppFonts.semibold, fontSize: 13 },
+  pxiButton: { alignItems: 'center', flexDirection: 'row', gap: 7, justifyContent: 'center', width: '100%' },
+  pxiNote: { borderRadius: 20, borderWidth: 1, gap: 8, padding: 16 },
+  pxiNotePreview: { fontFamily: AppFonts.regular, fontSize: 14, lineHeight: 21 },
+  pxiNoteHeader: { alignItems: 'center', flexDirection: 'row', gap: 7, marginBottom: 4 },
+  pxiNoteTitle: { flex: 1, fontFamily: AppFonts.semibold, fontSize: 15 },
+  pxiNoteTime: { fontFamily: AppFonts.regular, fontSize: 11 },
+  pxiNoteHint: { fontFamily: AppFonts.regular, fontSize: 12, lineHeight: 17 },
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   metric: { borderRadius: 16, borderWidth: 1, flexBasis: '47%', flexGrow: 1, gap: 4, minHeight: 78, padding: 14 },
   metricLabel: { fontFamily: AppFonts.medium, fontSize: 11, textTransform: 'uppercase' },

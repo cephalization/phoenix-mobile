@@ -9,6 +9,7 @@ A mobile companion for connecting to and monitoring self-hosted [Arize Phoenix](
 - Display the Phoenix server version and projects through `@arizeai/phoenix-client`
 - Refresh server data through TanStack Query
 - Stream PXI conversations and restore local chat history through Expo SQLite on native and IndexedDB on web
+- Run contextual PXI actions, like open coding a session into PXI notes that reviewers read before annotating
 - Support light, dark, mobile, tablet, and web layouts
 - Connect to unauthenticated servers or Phoenix 19+ instances through native OAuth 2; web currently supports unauthenticated connections only
 

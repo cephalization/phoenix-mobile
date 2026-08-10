@@ -5,6 +5,7 @@ type Schemas = Types['V1']['components']['schemas'];
 export type SessionData = Schemas['SessionData'];
 export type DatasetSummary = Schemas['Dataset'];
 export type SessionAnnotation = Schemas['SessionAnnotation'];
+export type SpanNoteAnnotation = Schemas['SpanAnnotation'];
 export type PhoenixSpan = Schemas['Span'];
 export type CategoricalAnnotationConfig = Schemas['CategoricalAnnotationConfig'];
 export type ContinuousAnnotationConfig = Schemas['ContinuousAnnotationConfig'];

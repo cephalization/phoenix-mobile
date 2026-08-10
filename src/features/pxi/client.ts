@@ -25,7 +25,7 @@ export function toLocalISOWithOffset(date = new Date()): string {
   return `${localDate.toISOString().slice(0, -1)}${sign}${hours}:${minutes}`;
 }
 
-export function buildPxiContexts(): PxiContext[] {
+export function buildPxiContexts(extraContexts: PxiContext[] = []): PxiContext[] {
   return [
     {
       type: 'app',
@@ -35,14 +35,17 @@ export function buildPxiContexts(): PxiContext[] {
     { type: 'graphql', mutationsEnabled: false },
     { type: 'web_access', enabled: true },
     { type: 'subagents', enabled: true },
+    ...extraContexts,
   ];
 }
 
 export function buildPxiRequest({
+  contexts = [],
   messages,
   model,
   sessionId,
 }: {
+  contexts?: PxiContext[];
   messages: PxiMessage[];
   model: ModelSelection;
   sessionId: string;
@@ -55,7 +58,7 @@ export function buildPxiRequest({
     exportRemoteTraces: false,
     attachUserId: false,
     editPermission: 'manual',
-    contexts: buildPxiContexts(),
+    contexts: buildPxiContexts(contexts),
     model,
   };
 }
@@ -65,10 +68,12 @@ export function buildInstanceHeaders(instance: PhoenixInstance): Promise<Record<
 }
 
 export function createPxiTransport({
+  contexts,
   instance,
   model,
   sessionId,
 }: {
+  contexts?: PxiContext[];
   instance: PhoenixInstance;
   model: ModelSelection;
   sessionId: string;
@@ -101,7 +106,7 @@ export function createPxiTransport({
     },
     fetch: streamFetch,
     prepareSendMessagesRequest: ({ messages }) => ({
-      body: buildPxiRequest({ messages, model, sessionId }),
+      body: buildPxiRequest({ contexts, messages, model, sessionId }),
     }),
   });
 }

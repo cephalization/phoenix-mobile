@@ -20,6 +20,7 @@ import type {
   SessionPage,
   SessionTurn,
   SessionTurnIO,
+  SpanNoteAnnotation,
 } from './types';
 
 type SessionAnnotationData =
@@ -376,6 +377,62 @@ export async function fetchSessionAnnotations(
     }
 
     return [...annotations.values()];
+  });
+}
+
+export const PXI_SPAN_NOTE_IDENTIFIER = 'pxi';
+
+// PXI's write_span_note tool stores open-coding findings as span annotations
+// named `note` with the reserved `pxi` identifier on each turn's root span.
+export function isPxiSpanNote(annotation: SpanNoteAnnotation): boolean {
+  return (
+    annotation.name === 'note' &&
+    annotation.identifier === PXI_SPAN_NOTE_IDENTIFIER &&
+    Boolean(annotation.result?.explanation?.trim())
+  );
+}
+
+export async function fetchSessionPxiNotes(
+  instance: PhoenixInstance,
+  projectId: string,
+  spanIds: readonly string[]
+): Promise<SpanNoteAnnotation[]> {
+  const ids = [...new Set(spanIds.map((id) => id.trim()).filter(Boolean))];
+  if (ids.length === 0) return [];
+
+  return withSessionApiError('Phoenix could not load PXI notes', async () => {
+    const client = await compatibleClient(
+      instance,
+      'Session review',
+      sessionReviewCompatibility.sessions
+    );
+    const notes = new Map<string, SpanNoteAnnotation>();
+
+    for (let index = 0; index < ids.length; index += ANNOTATION_SESSION_BATCH_SIZE) {
+      const batch = ids.slice(index, index + ANNOTATION_SESSION_BATCH_SIZE);
+      const seenCursors = new Set<string>();
+      let cursor: string | null = null;
+      do {
+        const response = await client.GET('/v1/projects/{project_identifier}/span_annotations', {
+          params: {
+            path: { project_identifier: projectId },
+            query: {
+              cursor,
+              include_annotation_names: ['note'],
+              limit: API_PAGE_SIZE,
+              span_ids: batch,
+            },
+          },
+        });
+        if (!response.data) throw new Error('The server returned an empty span annotation response.');
+        for (const annotation of response.data.data) {
+          if (isPxiSpanNote(annotation)) notes.set(annotation.id, annotation);
+        }
+        cursor = nextUnseenCursor(response.data.next_cursor, seenCursors);
+      } while (cursor);
+    }
+
+    return [...notes.values()];
   });
 }
 

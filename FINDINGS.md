@@ -13,6 +13,17 @@ This is the project's living technical memory. Record discoveries that would oth
 
 ## Active Constraints
 
+### 2026-08-09 - Contextual PXI Actions Attach Typed Contexts And Write Span Notes
+
+**Status:** Decision
+**Area:** PXI, sessions, annotations, navigation
+
+The server-agent chat request's `contexts` array accepts the same typed page-context payloads the Phoenix web assistant sends. `{ "type": "session", "projectNodeId", "sessionNodeId" }` (camelCase aliases, relay GlobalIDs, Phoenix ≥ 17.7) scopes PXI to one session. PXI writes open-coding findings through its built-in `write_span_note` tool (Phoenix ≥ 17.25): a span annotation named `note` with the reserved identifier `pxi`, `HUMAN` annotator kind, upserted per span, denied to Viewer roles, and available even though the app keeps GraphQL mutations disabled. The mobile app reads these notes over `GET /v1/projects/{id}/span_annotations` filtered by the session's root-span IDs plus `include_annotation_names=["note"]` (route since 9.0), then filters to the `pxi` identifier client-side.
+
+Investigation runs are owned by the module-level `usePxiInvestigationStore`, not by the action sheet: each run holds an AI SDK `Chat` instance keyed by action, instance, project, and session, so streaming and the finish-time note invalidation continue when the sheet — or the whole session screen — is dismissed (verified on a physical Pixel: a run finished and its notes appeared after both were closed). The sheet subscribes through `useChat({ chat })` and screens read only run status; a settled run is cleared when the sheet unmounts, while transcripts are never persisted to local chat history because the durable output is the server-side span note. Starting a new run prompts for a model through the shared catalog `ModelPicker` and updates the per-instance PXI model preference. On Android, formSheet content is laid out at full container height, so a view pinned below a flexed list is unreachable at a fractional detent — sheet controls must live inside the scrollable content (the review-queue sheets already follow this pattern).
+
+**Implication:** Add new contextual PXI actions by extending `resolvePxiAction` with a prompt, typed contexts, and a minimum server version, and reuse the action sheet rather than building bespoke chat surfaces. Keep sheet actions inside scroll content, keep PXI note reads on the root-span ID filter, and never count `pxi`-identifier notes toward review completion. The investigate prompt requires each note to begin with a single-sentence code summary; the session screen's collapsed note preview depends on that lead line, so preserve the contract when editing the prompt.
+
 ### 2026-08-09 - Annotation Configs Are Created Over REST Then Assigned To The Project
 
 **Status:** Decision
