@@ -87,6 +87,16 @@ export default function RootLayout() {
             <Stack.Screen name="instances/[id]/projects/[projectId]/sessions/index" options={{ title: 'Sessions' }} />
             <Stack.Screen name="instances/[id]/projects/[projectId]/sessions/[sessionId]" options={{ title: 'Session' }} />
             <Stack.Screen
+              name="instances/[id]/projects/[projectId]/sessions/add-to-dataset"
+              options={{
+                presentation: 'formSheet',
+                sheetAllowedDetents: [0.72, 0.95],
+                sheetCornerRadius: 28,
+                sheetGrabberVisible: true,
+                title: 'Add to dataset',
+              }}
+            />
+            <Stack.Screen
               name="instances/[id]/projects/[projectId]/sessions/settings"
               options={{
                 presentation: 'formSheet',

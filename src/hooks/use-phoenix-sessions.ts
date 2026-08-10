@@ -1,7 +1,9 @@
 import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
+  addSessionToDataset,
   createSessionAnnotationBatches,
+  fetchDatasets,
   fetchProjectAnnotationConfigs,
   fetchSession,
   fetchSessionAnnotations,
@@ -15,6 +17,7 @@ import type {
   SessionAnnotationWrite,
   SessionAnnotationsWrite,
   SessionData,
+  SessionDatasetWrite,
   SessionNoteWrite,
 } from '@/features/session-review/types';
 import { phoenixQueryKeys } from '@/hooks/use-phoenix-data';
@@ -45,6 +48,8 @@ export const phoenixSessionQueryKeys = {
     [...sessionIds].sort(),
     [...annotationNames].sort(),
   ] as const,
+  datasets: (instanceId: string) =>
+    [...phoenixQueryKeys.instance(instanceId), 'datasets'] as const,
 };
 
 export function usePhoenixProjectSessions(
@@ -198,6 +203,33 @@ export function useWritePhoenixSessionAnnotations(
       if (!instance || !projectId) return;
       await queryClient.invalidateQueries({
         queryKey: phoenixSessionQueryKeys.annotations(instance.id, projectId),
+      });
+    },
+  });
+}
+
+export function usePhoenixDatasets(instance: PhoenixInstance | undefined) {
+  return useQuery({
+    queryKey: phoenixSessionQueryKeys.datasets(instance?.id ?? missing),
+    queryFn: () => {
+      if (!instance) throw new Error('Phoenix instance not found.');
+      return fetchDatasets(instance);
+    },
+    enabled: Boolean(instance),
+  });
+}
+
+export function useAddPhoenixSessionToDataset(instance: PhoenixInstance | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SessionDatasetWrite) => {
+      if (!instance) throw new Error('Phoenix instance not found.');
+      return addSessionToDataset(instance, input);
+    },
+    onSuccess: async () => {
+      if (!instance) return;
+      await queryClient.invalidateQueries({
+        queryKey: phoenixSessionQueryKeys.datasets(instance.id),
       });
     },
   });

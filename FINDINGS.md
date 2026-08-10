@@ -13,6 +13,17 @@ This is the project's living technical memory. Record discoveries that would oth
 
 ## Active Constraints
 
+### 2026-08-08 - Session Dataset Flagging Uses JSON Upload With Caught Conflicts
+
+**Status:** Decision
+**Area:** sessions, datasets, networking
+
+Flag-to-dataset saves session turns as dataset examples through `POST /v1/datasets/upload?sync=true` with parallel `inputs`/`outputs`/`metadata` arrays and `span_ids`, which the server stores as each example's `source.span_id` link back to the originating span. JSON upload has existed since Phoenix 4.6.0, but the `span_ids` field only since 12.31.0, so the write gates on `datasetSpanLinks: [12, 31, 0]`. `action: "append"` silently creates a missing dataset, so the create path is only used to attach a description and to surface name collisions. Turns without a root span carry no input/output payload and are skipped client-side.
+
+The `@arizeai/phoenix-client` middleware throws `Error("<url>: <status> <statusText>")` on every non-2xx response, so `response.response.status` is never reachable for error handling. The create-name 409 must be detected by catching the thrown error and matching the status in its message before rethrowing.
+
+**Implication:** Detect Phoenix HTTP error statuses in this codebase by catching thrown client errors, not by inspecting the response object. Keep dataset uploads on the JSON body (not multipart) so `span_ids` linking works, and preserve the append-only default with create reserved for explicitly new datasets.
+
 ### 2026-07-24 - Mobile Session Queues Scan Explicitly And Write Idempotently
 
 **Status:** Decision

@@ -4,6 +4,7 @@ import { createPhoenixClient } from '@/lib/phoenix';
 import type { PhoenixInstance } from '@/types/instance';
 
 import type {
+  DatasetSummary,
   PhoenixSpan,
   SessionAnnotation,
   SessionAnnotationConfig,
@@ -11,6 +12,8 @@ import type {
   SessionAnnotationWrite,
   SessionAnnotationsWrite,
   SessionData,
+  SessionDatasetWrite,
+  SessionDatasetWriteResult,
   SessionNoteWrite,
   SessionPage,
   SessionTurn,
@@ -32,6 +35,8 @@ export const sessionReviewCompatibility = {
   sessionAnnotations: [13, 5, 0] as const,
   sessionNotes: [14, 17, 0] as const,
   deterministicNoteIdentifiers: [15, 5, 0] as const,
+  datasets: [4, 6, 0] as const,
+  datasetSpanLinks: [12, 31, 0] as const,
 };
 
 export class SessionReviewCompatibilityError extends Error {
@@ -48,7 +53,7 @@ export class SessionReviewCompatibilityError extends Error {
 }
 
 export type SessionReviewValidationIssue = {
-  field: 'config' | 'explanation' | 'identifier' | 'label' | 'note' | 'projectId' | 'score' | 'sessionId' | 'turns';
+  field: 'config' | 'datasetName' | 'explanation' | 'identifier' | 'label' | 'note' | 'projectId' | 'score' | 'sessionId' | 'turns';
   message: string;
 };
 
@@ -314,6 +319,109 @@ export async function writeSessionNote(
     if (!response.data?.data) throw new Error('The server did not return the saved note ID.');
     return response.data.data;
   });
+}
+
+export async function fetchDatasets(instance: PhoenixInstance): Promise<DatasetSummary[]> {
+  return withSessionApiError('Phoenix could not load datasets', async () => {
+    const client = await compatibleClient(instance, 'Datasets', sessionReviewCompatibility.datasets);
+    const datasets = new Map<string, DatasetSummary>();
+    const seenCursors = new Set<string>();
+    let cursor: string | null = null;
+    do {
+      const response = await client.GET('/v1/datasets', {
+        params: { query: { cursor, limit: API_PAGE_SIZE } },
+      });
+      if (!response.data) throw new Error('The server returned an empty datasets response.');
+      for (const dataset of response.data.data) datasets.set(dataset.id, dataset);
+      cursor = nextUnseenCursor(response.data.next_cursor, seenCursors);
+    } while (cursor);
+    return [...datasets.values()];
+  });
+}
+
+export async function addSessionToDataset(
+  instance: PhoenixInstance,
+  input: SessionDatasetWrite
+): Promise<SessionDatasetWriteResult> {
+  const { body } = buildSessionDatasetUpload(input);
+  return withSessionApiError('Phoenix could not add this session to the dataset', async () => {
+    const client = await compatibleClient(
+      instance,
+      'Dataset span linking',
+      sessionReviewCompatibility.datasetSpanLinks
+    );
+    let response;
+    try {
+      response = await client.POST('/v1/datasets/upload', {
+        params: { query: { sync: true } },
+        body,
+      });
+    } catch (uploadError) {
+      // The Phoenix client middleware throws on non-2xx responses, so the
+      // create-name conflict arrives here rather than as a response status.
+      if (uploadError instanceof Error && /:\s409\b/.test(uploadError.message)) {
+        throw new SessionReviewValidationError([
+          {
+            field: 'datasetName',
+            message: `A dataset named “${body.name}” already exists. Append to it or choose another name.`,
+          },
+        ]);
+      }
+      throw uploadError;
+    }
+    if (!response.data?.data) throw new Error('The server did not confirm the dataset upload.');
+    return {
+      datasetId: response.data.data.dataset_id,
+      exampleCount: response.data.data.num_created_examples,
+    };
+  });
+}
+
+export type SessionDatasetUploadBody = {
+  action: 'create' | 'append';
+  name: string;
+  description?: string;
+  inputs: Record<string, unknown>[];
+  outputs: Record<string, unknown>[];
+  metadata: Record<string, unknown>[];
+  span_ids: string[];
+};
+
+// Turns without a root span carry no input/output payload, so they cannot
+// become dataset examples and are skipped rather than uploaded empty.
+export function buildSessionDatasetUpload(input: SessionDatasetWrite): {
+  body: SessionDatasetUploadBody;
+  skippedTurnCount: number;
+} {
+  const name = requiredText(input.datasetName, 'datasetName', 'Dataset name is required.');
+  const sessionId = requiredText(input.sessionId, 'sessionId', 'Session ID is required.');
+  const turns = input.turns.filter(
+    (turn): turn is SessionTurn & { rootSpan: PhoenixSpan } => turn.rootSpan != null
+  );
+  if (turns.length === 0) {
+    throw new SessionReviewValidationError([
+      { field: 'turns', message: 'This session has no turns with a root span to save as examples.' },
+    ]);
+  }
+  const description = input.description?.trim();
+  return {
+    body: {
+      action: input.action,
+      name,
+      ...(input.action === 'create' && description ? { description } : {}),
+      inputs: turns.map((turn) => ({ input: turn.input?.value ?? '' })),
+      outputs: turns.map((turn) => ({ output: turn.output?.value ?? '' })),
+      metadata: turns.map((turn) => ({
+        session_id: sessionId,
+        source: 'phoenix-mobile',
+        span_name: turn.rootSpan.name,
+        start_time: turn.startTime,
+        trace_id: turn.traceId,
+      })),
+      span_ids: turns.map((turn) => turn.rootSpan.context.span_id),
+    },
+    skippedTurnCount: input.turns.length - turns.length,
+  };
 }
 
 export function buildSessionAnnotationData(input: SessionAnnotationWrite): SessionAnnotationData {

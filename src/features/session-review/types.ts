@@ -3,6 +3,7 @@ import type { Types } from '@arizeai/phoenix-client';
 type Schemas = Types['V1']['components']['schemas'];
 
 export type SessionData = Schemas['SessionData'];
+export type DatasetSummary = Schemas['Dataset'];
 export type SessionAnnotation = Schemas['SessionAnnotation'];
 export type PhoenixSpan = Schemas['Span'];
 export type CategoricalAnnotationConfig = Schemas['CategoricalAnnotationConfig'];
@@ -65,3 +66,15 @@ export type SessionNoteWrite = {
   sessionId: string;
 };
 
+export type SessionDatasetWrite = {
+  action: 'create' | 'append';
+  datasetName: string;
+  description?: string;
+  sessionId: string;
+  turns: SessionTurn[];
+};
+
+export type SessionDatasetWriteResult = {
+  datasetId: string;
+  exampleCount: number;
+};

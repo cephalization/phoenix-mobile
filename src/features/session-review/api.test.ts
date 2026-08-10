@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildSessionAnnotationData,
+  buildSessionDatasetUpload,
   compareVersions,
   createSessionAnnotationBatches,
   createAuthenticatedAnnotationIdentifier,
@@ -8,7 +9,7 @@ import {
   nextUnseenCursor,
   SessionReviewValidationError,
 } from './api';
-import type { SessionAnnotationConfig, SessionAnnotationDraft } from './types';
+import type { SessionAnnotationConfig, SessionAnnotationDraft, SessionTurn } from './types';
 
 vi.mock('@/lib/phoenix', () => ({ createPhoenixClient: vi.fn() }));
 
@@ -81,6 +82,92 @@ describe('annotation draft validation', () => {
     expect(() => build({ ...freeform, name: 'note' } as SessionAnnotationConfig, {
       type: 'FREEFORM',
       explanation: 'not a review',
+    })).toThrow(SessionReviewValidationError);
+  });
+});
+
+describe('session dataset uploads', () => {
+  const turn = (spanId: string, input?: string, output?: string): SessionTurn => ({
+    endTime: '2026-08-08T00:01:00Z',
+    startTime: '2026-08-08T00:00:00Z',
+    traceId: `trace-${spanId}`,
+    ...(spanId
+      ? {
+          rootSpan: {
+            context: { span_id: spanId, trace_id: `trace-${spanId}` },
+            name: 'handle_user_message',
+            start_time: '2026-08-08T00:00:00Z',
+          } as SessionTurn['rootSpan'],
+          ...(input != null ? { input: { value: input } } : {}),
+          ...(output != null ? { output: { value: output } } : {}),
+        }
+      : {}),
+  });
+
+  it('maps turns to parallel example arrays with span links and skips rootless turns', () => {
+    const { body, skippedTurnCount } = buildSessionDatasetUpload({
+      action: 'append',
+      datasetName: ' flagged ',
+      sessionId: ' session-1 ',
+      turns: [turn('aaa', 'question', 'answer'), turn(''), turn('bbb', 'follow-up')],
+    });
+    expect(skippedTurnCount).toBe(1);
+    expect(body).toEqual({
+      action: 'append',
+      name: 'flagged',
+      inputs: [{ input: 'question' }, { input: 'follow-up' }],
+      outputs: [{ output: 'answer' }, { output: '' }],
+      metadata: [
+        {
+          session_id: 'session-1',
+          source: 'phoenix-mobile',
+          span_name: 'handle_user_message',
+          start_time: '2026-08-08T00:00:00Z',
+          trace_id: 'trace-aaa',
+        },
+        {
+          session_id: 'session-1',
+          source: 'phoenix-mobile',
+          span_name: 'handle_user_message',
+          start_time: '2026-08-08T00:00:00Z',
+          trace_id: 'trace-bbb',
+        },
+      ],
+      span_ids: ['aaa', 'bbb'],
+    });
+  });
+
+  it('includes the description only when creating', () => {
+    const create = buildSessionDatasetUpload({
+      action: 'create',
+      datasetName: 'flagged',
+      description: ' first pass ',
+      sessionId: 'session-1',
+      turns: [turn('aaa')],
+    });
+    expect(create.body.description).toBe('first pass');
+    const append = buildSessionDatasetUpload({
+      action: 'append',
+      datasetName: 'flagged',
+      description: 'ignored',
+      sessionId: 'session-1',
+      turns: [turn('aaa')],
+    });
+    expect(append.body.description).toBeUndefined();
+  });
+
+  it('rejects empty names and sessions without a usable turn', () => {
+    expect(() => buildSessionDatasetUpload({
+      action: 'create',
+      datasetName: '  ',
+      sessionId: 'session-1',
+      turns: [turn('aaa')],
+    })).toThrow(SessionReviewValidationError);
+    expect(() => buildSessionDatasetUpload({
+      action: 'append',
+      datasetName: 'flagged',
+      sessionId: 'session-1',
+      turns: [turn('')],
     })).toThrow(SessionReviewValidationError);
   });
 });

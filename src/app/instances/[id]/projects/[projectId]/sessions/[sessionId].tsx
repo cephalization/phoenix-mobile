@@ -218,6 +218,18 @@ function SessionHeader({ instanceId, projectId, session }: {
           style={[styles.copyButton, { borderColor: colors.border }]}>
           <Text style={[styles.copyLabel, { color: colors.text }]}>Copy session ID</Text>
         </MotionPressable>
+        <MotionPressable
+          accessibilityHint="Saves this session’s turns as dataset examples"
+          accessibilityLabel="Add to dataset"
+          accessibilityRole="button"
+          haptic="selection"
+          onPress={() => router.push({
+            pathname: '/instances/[id]/projects/[projectId]/sessions/add-to-dataset',
+            params: { id: instanceId, projectId, sessionId: session.session_id },
+          })}
+          style={[styles.copyButton, { borderColor: colors.border }]}>
+          <Text style={[styles.copyLabel, { color: colors.text }]}>Add to dataset</Text>
+        </MotionPressable>
       </View>
     </View>
   );
