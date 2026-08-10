@@ -16,6 +16,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { AppFonts, Spacing, useAppColors } from '@/constants/theme';
+import { PhoenixAuthError } from '@/features/auth/oauth';
+import { usePhoenixViewer } from '@/hooks/use-phoenix-data';
 import { haptics } from '@/lib/haptics';
 import { useInstanceStore } from '@/store/instances';
 import type { PhoenixInstance } from '@/types/instance';
@@ -33,6 +35,15 @@ export function InstanceCard({ index, instance, onRemove }: InstanceCardProps) {
   const reduceMotion = useReducedMotion();
   const entrance = useSharedValue(reduceMotion ? 1 : 0);
   const setActiveInstanceId = useInstanceStore((state) => state.setActiveInstanceId);
+  const viewer = usePhoenixViewer(instance);
+  const loginRequired = viewer.error instanceof PhoenixAuthError && viewer.error.code === 'login_required';
+  const status = viewer.isPending
+    ? { color: colors.textSecondary, label: 'Checking connection', problem: null }
+    : loginRequired
+      ? { color: colors.danger, label: 'Sign-in required', problem: 'Sign-in required' }
+      : viewer.isError
+        ? { color: colors.danger, label: 'Unreachable', problem: 'Can’t reach this instance' }
+        : { color: colors.success, label: 'Connected', problem: null };
 
   useEffect(() => {
     entrance.set(
@@ -66,6 +77,7 @@ export function InstanceCard({ index, instance, onRemove }: InstanceCardProps) {
         <MotionPressable
           accessibilityActions={[{ name: 'delete', label: 'Remove connection' }]}
           accessibilityHint="Opens this Phoenix instance"
+          accessibilityLabel={`${instance.name}, ${instance.baseUrl}, ${status.label}`}
           accessibilityRole="button"
           onAccessibilityAction={(event) => {
             if (event.nativeEvent.actionName === 'delete') onRemove(instance);
@@ -84,11 +96,14 @@ export function InstanceCard({ index, instance, onRemove }: InstanceCardProps) {
               {instance.name}
             </Text>
             <View style={styles.hostRow}>
-              <View style={[styles.statusDot, { backgroundColor: colors.success }]} />
+              <View style={[styles.statusDot, { backgroundColor: status.color }]} />
               <Text numberOfLines={1} style={[styles.host, { color: colors.textSecondary }]}>
                 {instance.baseUrl}
               </Text>
             </View>
+            {status.problem ? (
+              <Text numberOfLines={1} style={[styles.problem, { color: colors.danger }]}>{status.problem}</Text>
+            ) : null}
           </View>
           <View style={styles.arrow}>
             <SymbolView
@@ -153,6 +168,7 @@ const styles = StyleSheet.create({
   hostRow: { alignItems: 'center', flexDirection: 'row', gap: 6 },
   name: { fontFamily: AppFonts.semibold, fontSize: 16 },
   host: { flex: 1, fontFamily: AppFonts.regular, fontSize: 13 },
+  problem: { fontFamily: AppFonts.medium, fontSize: 12 },
   arrow: { alignItems: 'center', height: 32, justifyContent: 'center', width: 24 },
   removeAction: { width: 92 },
   removeActionButton: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingHorizontal: 12 },

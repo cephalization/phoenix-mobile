@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { type Href, router, Stack, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -20,10 +20,13 @@ import { MotionPressable } from '@/components/motion-pressable';
 import { PhoenixLogo } from '@/components/phoenix-logo';
 import { PxiHeaderButton } from '@/components/pxi-header-button';
 import { AppFonts, MaxContentWidth, Spacing, useAppColors } from '@/constants/theme';
+import { runOAuthLogin } from '@/features/auth/login';
+import { PhoenixAuthError } from '@/features/auth/oauth';
 import {
   phoenixQueryKeys,
   type PhoenixProject,
   usePhoenixProjects,
+  usePhoenixViewer,
   usePhoenixVersion,
 } from '@/hooks/use-phoenix-data';
 import { haptics } from '@/lib/haptics';
@@ -39,8 +42,11 @@ export default function InstanceScreen() {
   const removeInstance = useInstanceStore((state) => state.removeInstance);
   const setActiveInstanceId = useInstanceStore((state) => state.setActiveInstanceId);
   const version = usePhoenixVersion(instance);
+  const viewer = usePhoenixViewer(instance);
   const projects = usePhoenixProjects(instance);
-  const isRefreshing = version.isRefetching || projects.isRefetching;
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
+  const isRefreshing = version.isRefetching || viewer.isRefetching || projects.isRefetching;
 
   useEffect(() => {
     if (instance) setActiveInstanceId(instance.id);
@@ -49,7 +55,7 @@ export default function InstanceScreen() {
   const refresh = async () => {
     if (!instance || isRefreshing) return;
     haptics.selection();
-    const results = await Promise.all([version.refetch(), projects.refetch()]);
+    const results = await Promise.all([version.refetch(), viewer.refetch(), projects.refetch()]);
     if (results.some((result) => result.isError)) haptics.error();
     else haptics.light();
   };
@@ -73,6 +79,22 @@ export default function InstanceScreen() {
     });
   };
 
+  const signIn = async () => {
+    if (!instance || instance.auth.type !== 'oauth2' || isSigningIn) return;
+    setIsSigningIn(true);
+    setSignInError(null);
+    try {
+      await runOAuthLogin(instance);
+      await queryClient.invalidateQueries({ queryKey: phoenixQueryKeys.instance(instance.id) });
+      haptics.success();
+    } catch (error) {
+      haptics.error();
+      setSignInError(error instanceof Error ? error.message : 'Phoenix sign-in failed.');
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
   if (!instance) {
     return (
       <SafeAreaView style={[styles.center, { backgroundColor: colors.background }]}>
@@ -83,6 +105,17 @@ export default function InstanceScreen() {
       </SafeAreaView>
     );
   }
+
+  const loginRequired = viewer.error instanceof PhoenixAuthError && viewer.error.code === 'login_required';
+  const authStatus = viewer.isPending
+    ? { label: 'Checking authentication', color: colors.textSecondary }
+    : loginRequired
+      ? { label: 'Sign-in required', color: colors.danger }
+      : viewer.isError
+        ? { label: 'Network check failed', color: colors.danger }
+        : viewer.data.auth_method === 'ANONYMOUS'
+          ? { label: 'Connected anonymously', color: colors.success }
+          : { label: 'Authenticated', color: colors.success };
 
   return (
     <ScrollView
@@ -114,19 +147,36 @@ export default function InstanceScreen() {
       />
       <View style={[styles.content, { paddingBottom: 20 + insets.bottom }]}>
           <View style={styles.hero}>
-            <View style={[styles.statusRow, { backgroundColor: colors.backgroundSelected }]}>
-              <View style={[styles.statusDot, { backgroundColor: projects.isError ? colors.danger : colors.success }]} />
-              <Text style={[styles.status, { color: colors.textSecondary }]}>
-                {projects.isError ? 'Connection issue' : 'Connected without authentication'}
-              </Text>
+            <View style={styles.authStatusLine}>
+              <View style={[styles.statusRow, { backgroundColor: colors.backgroundSelected }]}>
+                <View style={[styles.statusDot, { backgroundColor: authStatus.color }]} />
+                <Text style={[styles.status, { color: colors.textSecondary }]}>{authStatus.label}</Text>
+              </View>
+              {loginRequired && instance.auth.type === 'oauth2' && (
+                <MotionPressable
+                  accessibilityRole="button"
+                  disabled={isSigningIn}
+                  onPress={signIn}
+                  style={[styles.signInButton, { backgroundColor: colors.accent }]}>
+                  <Text style={[styles.signInText, { color: colors.accentForeground }]}>
+                    {isSigningIn ? 'Signing in…' : 'Sign in again'}
+                  </Text>
+                </MotionPressable>
+              )}
             </View>
+            {signInError && <Text style={[styles.authError, { color: colors.danger }]}>{signInError}</Text>}
             <View style={styles.instanceTitleRow}>
               <PhoenixLogo loading={version.isPending || projects.isPending} size={36} />
               <Text style={[styles.title, { color: colors.text }]}>{instance.name}</Text>
             </View>
-            <Text selectable style={[styles.host, { color: colors.textSecondary }]}>
-              {instance.baseUrl}
-            </Text>
+             <Text selectable style={[styles.host, { color: colors.textSecondary }]}>
+               {instance.baseUrl}
+             </Text>
+             {viewer.data && viewer.data.auth_method !== 'ANONYMOUS' && (
+               <Text style={[styles.identity, { color: colors.textSecondary }]}>
+                 Signed in as {viewer.data.username || viewer.data.email} · {viewer.data.role}
+               </Text>
+             )}
           </View>
 
           <View style={[styles.metrics, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}>
@@ -270,12 +320,17 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1 },
   content: { alignSelf: 'center', gap: 30, maxWidth: MaxContentWidth, padding: 20, width: '100%' },
   hero: { gap: 10 },
+  authStatusLine: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   statusRow: { alignItems: 'center', alignSelf: 'flex-start', borderRadius: 14, flexDirection: 'row', gap: 7, paddingHorizontal: 10, paddingVertical: 6 },
   statusDot: { borderRadius: 4, height: 8, width: 8 },
   status: { fontFamily: AppFonts.medium, fontSize: 12 },
+  signInButton: { borderRadius: 12, justifyContent: 'center', minHeight: 48, paddingHorizontal: 14 },
+  signInText: { fontFamily: AppFonts.semibold, fontSize: 13 },
+  authError: { fontFamily: AppFonts.regular, fontSize: 13, lineHeight: 19 },
   instanceTitleRow: { alignItems: 'center', flexDirection: 'row', gap: 11, paddingTop: 7 },
   title: { flex: 1, fontFamily: AppFonts.semibold, fontSize: 32, letterSpacing: -1.1, lineHeight: 38 },
   host: { fontFamily: AppFonts.regular, fontSize: 14 },
+  identity: { fontFamily: AppFonts.medium, fontSize: 13, lineHeight: 19 },
   metrics: { borderRadius: 18, borderWidth: 1, flexDirection: 'row', paddingVertical: 18 },
   metric: { flex: 1, gap: 7, paddingHorizontal: 18 },
   metricDivider: { width: 1 },

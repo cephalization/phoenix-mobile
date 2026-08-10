@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -11,12 +11,17 @@ import { z } from 'zod';
 import { MotionPressable } from '@/components/motion-pressable';
 import { PhoenixLogo } from '@/components/phoenix-logo';
 import { AppFonts, MaxContentWidth, useAppColors } from '@/constants/theme';
+import { runOAuthLogin } from '@/features/auth/login';
+import { assertPhoenix19, discoverOAuth, probePhoenixAuth, registerOAuthClient } from '@/features/auth/oauth';
+import { revokeAndDeleteCredentials } from '@/features/auth/session';
+import { phoenixQueryKeys } from '@/hooks/use-phoenix-data';
 import { haptics } from '@/lib/haptics';
 import { createInstanceId, createPhoenixClient, normalizePhoenixUrl, PhoenixUrlError } from '@/lib/phoenix';
 import { useInstanceStore } from '@/store/instances';
 import type { PhoenixInstance } from '@/types/instance';
 
 const connectionSchema = z.object({
+  allowInsecureOAuth: z.boolean(),
   name: z.string().trim().max(60, 'Use 60 characters or fewer.'),
   host: z.string().trim().min(1, 'Enter a Phoenix host and port.'),
 });
@@ -26,9 +31,13 @@ type ConnectionForm = z.infer<typeof connectionSchema>;
 export default function NewInstanceScreen() {
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const reduceMotion = useReducedMotion();
-  const [connectionStatus, setConnectionStatus] = useState<'idle' | 'verifying' | 'success'>('idle');
+  const [connectionStatus, setConnectionStatus] = useState<'idle' | 'verifying' | 'authorizing' | 'success'>('idle');
   const addInstance = useInstanceStore((state) => state.addInstance);
+  const instances = useInstanceStore((state) => state.instances);
+  const pendingOAuthRegistrations = useInstanceStore((state) => state.pendingOAuthRegistrations);
+  const savePendingOAuthRegistration = useInstanceStore((state) => state.savePendingOAuthRegistration);
   const {
     control,
     handleSubmit,
@@ -36,7 +45,7 @@ export default function NewInstanceScreen() {
     setError,
   } = useForm<ConnectionForm>({
     resolver: zodResolver(connectionSchema),
-    defaultValues: { host: '', name: '' },
+    defaultValues: { allowInsecureOAuth: false, host: '', name: '' },
   });
 
   const connect = useMutation({
@@ -59,13 +68,71 @@ export default function NewInstanceScreen() {
         createdAt: new Date().toISOString(),
       };
 
-      await createPhoenixClient(instance).getServerVersion();
-      return instance;
+      const version = (await (await createPhoenixClient(instance)).getServerVersion()).join('.');
+      const authMode = await probePhoenixAuth(baseUrl);
+      if (authMode === 'anonymous') return instance;
+
+      assertPhoenix19(version);
+      if (Platform.OS === 'web') {
+        throw new Error('This Phoenix server requires OAuth. Add it from the Phoenix Mobile iOS or Android app; web does not store tokens.');
+      }
+      setConnectionStatus('authorizing');
+      const metadata = await discoverOAuth(baseUrl, values.allowInsecureOAuth);
+      const existingAuth = instances.find((item) => item.baseUrl === baseUrl && item.auth.type === 'oauth2')?.auth;
+      const pendingRegistration = pendingOAuthRegistrations[baseUrl];
+      const reusableClientId = existingAuth?.type === 'oauth2' &&
+        existingAuth.issuer === metadata.issuer &&
+        existingAuth.registrationEndpoint === metadata.registrationEndpoint
+        ? existingAuth.clientId
+        : pendingRegistration &&
+            pendingRegistration.baseUrl === baseUrl &&
+            typeof pendingRegistration.clientId === 'string' &&
+            pendingRegistration.clientId.length > 0 &&
+            pendingRegistration.issuer === metadata.issuer &&
+            pendingRegistration.registrationEndpoint === metadata.registrationEndpoint
+          ? pendingRegistration.clientId
+          : null;
+      const clientId = reusableClientId ?? await registerOAuthClient(metadata);
+      if (!reusableClientId) {
+        if (!metadata.registrationEndpoint) {
+          throw new Error('This Phoenix server does not allow dynamic client registration for Phoenix Mobile.');
+        }
+        savePendingOAuthRegistration({
+          baseUrl,
+          clientId,
+          issuer: metadata.issuer,
+          registrationEndpoint: metadata.registrationEndpoint,
+          createdAt: Date.now(),
+        });
+      }
+      const authenticated: PhoenixInstance = {
+        ...instance,
+        auth: {
+          ...metadata,
+          clientId,
+          credentialKey: `phoenix.oauth.${instance.id}`,
+        },
+      };
+      const connected = await runOAuthLogin(authenticated);
+      try {
+        const viewer = await (await createPhoenixClient(connected)).GET('/v1/user');
+        if (!viewer.data || viewer.data.data.auth_method === 'ANONYMOUS') {
+          throw new Error('Phoenix did not return an authenticated user after sign-in.');
+        }
+      } catch (error) {
+        await revokeAndDeleteCredentials(connected).catch(() => undefined);
+        throw error;
+      }
+      return connected;
     },
     onSuccess: async (instance) => {
       setConnectionStatus('success');
       haptics.success();
-      addInstance(instance);
+      const replacedIds = instances
+        .filter((item) => item.baseUrl === instance.baseUrl && item.id !== instance.id)
+        .map((item) => item.id);
+      await addInstance(instance);
+      for (const id of replacedIds) queryClient.removeQueries({ queryKey: phoenixQueryKeys.instance(id) });
       if (!reduceMotion) await new Promise((resolve) => setTimeout(resolve, 480));
       router.replace({ pathname: '/instances/[id]', params: { id: instance.id } });
     },
@@ -87,7 +154,7 @@ export default function NewInstanceScreen() {
           <View style={styles.heading}>
             <View style={styles.connectionType}>
               <PhoenixLogo size={25} />
-              <Text style={[styles.connectionTypeText, { color: colors.brand }]}>Unauthenticated connection</Text>
+              <Text style={[styles.connectionTypeText, { color: colors.brand }]}>Automatic authentication</Text>
             </View>
             <Text style={[styles.title, { color: colors.text }]}>Connect your Phoenix</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
@@ -154,17 +221,42 @@ export default function NewInstanceScreen() {
               )}
             />
 
-            <View style={[styles.notice, { backgroundColor: colors.backgroundSelected, borderColor: colors.border }]}>
+            <View style={[styles.notice, { backgroundColor: colors.backgroundSelected, borderColor: colors.border }]}> 
               <View style={styles.noticeHeader}>
                 <Text style={[styles.noticeTitle, { color: colors.text }]}>Authentication</Text>
                 <View style={[styles.soonBadge, { backgroundColor: colors.accentSoft }]}>
-                  <Text style={[styles.soonBadgeText, { color: colors.brand }]}>COMING SOON</Text>
+                  <Text style={[styles.soonBadgeText, { color: colors.brand }]}>OAUTH 2</Text>
                 </View>
               </View>
-              <Text style={[styles.noticeCopy, { color: colors.textSecondary }]}>
-                OAuth 2 connections are next. For now, connect to an instance with authentication disabled.
+              <Text style={[styles.noticeCopy, { color: colors.textSecondary }]}> 
+                Anonymous servers connect directly. Phoenix 19+ servers that require authentication open a system-browser sign-in. OAuth uses HTTPS unless you explicitly allow local HTTP below.
               </Text>
             </View>
+
+            <Controller
+              control={control}
+              name="allowInsecureOAuth"
+              render={({ field: { onChange, value } }) => (
+                <MotionPressable
+                  accessibilityLabel="Allow OAuth credentials over insecure HTTP"
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: value }}
+                  haptic="selection"
+                  onPress={() => onChange(!value)}
+                  style={[styles.insecureOption, { borderColor: value ? colors.danger : colors.border }]}>
+                  <View style={[
+                    styles.checkbox,
+                    { backgroundColor: value ? colors.danger : 'transparent', borderColor: value ? colors.danger : colors.border },
+                  ]}>
+                    {value ? <Text style={styles.checkmark}>✓</Text> : null}
+                  </View>
+                  <View style={styles.insecureCopy}>
+                    <Text style={[styles.insecureTitle, { color: colors.text }]}>Allow local HTTP authentication</Text>
+                    <Text style={[styles.noticeCopy, { color: colors.textSecondary }]}>Development only. Passwords and OAuth tokens can be intercepted on the network.</Text>
+                  </View>
+                </MotionPressable>
+              )}
+            />
 
             {errors.root && <Text style={[styles.rootError, { color: colors.danger }]}>{errors.root.message}</Text>}
 
@@ -179,7 +271,7 @@ export default function NewInstanceScreen() {
                 entering={FadeIn.duration(160).reduceMotion(ReduceMotion.System)}
                 exiting={FadeOut.duration(100).reduceMotion(ReduceMotion.System)}
                 style={styles.submitContent}>
-                {connectionStatus === 'verifying' && <PhoenixLogo loading size={25} />}
+                {(connectionStatus === 'verifying' || connectionStatus === 'authorizing') && <PhoenixLogo loading size={25} />}
                 {connectionStatus === 'success' && (
                   <View style={[styles.successIcon, { backgroundColor: colors.success }]}>
                     <Text style={styles.successIconText}>✓</Text>
@@ -188,6 +280,8 @@ export default function NewInstanceScreen() {
                 <Text style={[styles.submitText, { color: colors.accentForeground }]}>
                   {connectionStatus === 'verifying'
                     ? 'Verifying Phoenix…'
+                    : connectionStatus === 'authorizing'
+                      ? 'Waiting for sign-in…'
                     : connectionStatus === 'success'
                       ? 'Connected'
                       : 'Verify and connect'}
@@ -250,6 +344,11 @@ const styles = StyleSheet.create({
   soonBadge: { borderRadius: 5, paddingHorizontal: 7, paddingVertical: 4 },
   soonBadgeText: { fontFamily: AppFonts.medium, fontSize: 9, letterSpacing: 0.9 },
   noticeCopy: { fontFamily: AppFonts.regular, fontSize: 14, lineHeight: 21 },
+  insecureOption: { alignItems: 'flex-start', borderRadius: 16, borderWidth: 1, flexDirection: 'row', gap: 12, minHeight: 64, padding: 14 },
+  checkbox: { alignItems: 'center', borderRadius: 6, borderWidth: 1, height: 24, justifyContent: 'center', marginTop: 1, width: 24 },
+  checkmark: { color: '#FFFFFF', fontFamily: AppFonts.semibold, fontSize: 14 },
+  insecureCopy: { flex: 1, gap: 4 },
+  insecureTitle: { fontFamily: AppFonts.semibold, fontSize: 14 },
   rootError: { fontFamily: AppFonts.regular, fontSize: 14, lineHeight: 21 },
   submit: { alignItems: 'center', borderRadius: 15, justifyContent: 'center', minHeight: 54 },
   submitContent: { alignItems: 'center', flexDirection: 'row', gap: 9, justifyContent: 'center' },

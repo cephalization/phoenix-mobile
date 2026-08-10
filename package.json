@@ -16,6 +16,7 @@
     "expo-build-properties": "~57.0.5",
     "expo-clipboard": "~57.0.1",
     "expo-constants": "~57.0.3",
+    "expo-crypto": "~57.0.1",
     "expo-dev-client": "~57.0.6",
     "expo-device": "~57.0.1",
     "expo-font": "~57.0.0",
@@ -50,7 +51,8 @@
     "@types/react": "~19.2.2",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.0",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "^4.1.10"
   },
   "scripts": {
     "start": "expo start",
@@ -63,6 +65,7 @@
     "ios:device": "expo run:ios --device",
     "ios:device:clean": "./scripts/rebuild-ios-device.sh",
     "web": "expo start --web",
+    "test": "vitest run",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit"
   },

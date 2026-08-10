@@ -1,15 +1,22 @@
 import { createClient, type PhoenixClient } from '@arizeai/phoenix-client';
 
+import { authenticatedFetch, getAuthorizationHeaders } from '@/features/auth/session';
 import type { PhoenixInstance } from '@/types/instance';
 
-export function createPhoenixClient(instance: PhoenixInstance): PhoenixClient {
-  if (instance.auth.type !== 'none') {
-    throw new Error('OAuth connections are not supported yet.');
-  }
-
+export async function createPhoenixClient(instance: PhoenixInstance): Promise<PhoenixClient> {
+  const headers = await getAuthorizationHeaders(instance);
   return createClient({
     getEnvironmentOptions: () => ({}),
-    options: { baseUrl: instance.baseUrl },
+    options: {
+      baseUrl: instance.baseUrl,
+      headers,
+      fetch: (request) => authenticatedFetch(
+        instance,
+        request,
+        undefined,
+        request.method === 'GET' || request.method === 'HEAD'
+      ),
+    },
   });
 }
 

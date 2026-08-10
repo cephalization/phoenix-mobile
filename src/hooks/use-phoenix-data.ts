@@ -6,6 +6,7 @@ import type { PhoenixInstance } from '@/types/instance';
 
 export type PhoenixProject = Types['V1']['components']['schemas']['Project'];
 export type PhoenixSpan = Types['V1']['components']['schemas']['Span'];
+export type PhoenixViewer = Types['V1']['components']['schemas']['GetViewerResponseBody']['data'];
 type PhoenixTrace = Types['V1']['components']['schemas']['TraceData'];
 
 export type PhoenixTraceFilter = 'recent' | 'errors' | 'slowest';
@@ -68,6 +69,7 @@ export const phoenixQueryKeys = {
   trace: (instanceId: string, projectId: string, traceId: string) =>
     [...phoenixQueryKeys.instance(instanceId), 'project', projectId, 'trace', traceId] as const,
   version: (instanceId: string) => [...phoenixQueryKeys.instance(instanceId), 'version'] as const,
+  viewer: (instanceId: string) => [...phoenixQueryKeys.instance(instanceId), 'viewer'] as const,
 };
 
 export function usePhoenixVersion(instance: PhoenixInstance | undefined) {
@@ -75,7 +77,7 @@ export function usePhoenixVersion(instance: PhoenixInstance | undefined) {
     queryKey: phoenixQueryKeys.version(instance?.id ?? 'missing'),
     queryFn: async () => {
       if (!instance) throw new Error('Phoenix instance not found.');
-      const version = await createPhoenixClient(instance).getServerVersion();
+      const version = await (await createPhoenixClient(instance)).getServerVersion();
       return version.join('.');
     },
     enabled: Boolean(instance),
@@ -87,7 +89,7 @@ export function usePhoenixProjects(instance: PhoenixInstance | undefined) {
     queryKey: phoenixQueryKeys.projects(instance?.id ?? 'missing'),
     queryFn: async (): Promise<PhoenixProject[]> => {
       if (!instance) throw new Error('Phoenix instance not found.');
-      const response = await createPhoenixClient(instance).GET('/v1/projects', {
+      const response = await (await createPhoenixClient(instance)).GET('/v1/projects', {
         params: {
           query: {
             include_dataset_evaluator_projects: false,
@@ -104,6 +106,19 @@ export function usePhoenixProjects(instance: PhoenixInstance | undefined) {
   });
 }
 
+export function usePhoenixViewer(instance: PhoenixInstance | undefined) {
+  return useQuery({
+    queryKey: phoenixQueryKeys.viewer(instance?.id ?? 'missing'),
+    queryFn: async (): Promise<PhoenixViewer> => {
+      if (!instance) throw new Error('Phoenix instance not found.');
+      const response = await (await createPhoenixClient(instance)).GET('/v1/user');
+      if (!response.data) throw new Error('Phoenix returned an empty user response.');
+      return response.data.data;
+    },
+    enabled: Boolean(instance),
+  });
+}
+
 export function usePhoenixProjectTraces(
   instance: PhoenixInstance | undefined,
   projectId: string | undefined,
@@ -114,7 +129,7 @@ export function usePhoenixProjectTraces(
     queryKey: phoenixQueryKeys.traces(instance?.id ?? 'missing', projectId ?? 'missing', filter, range),
     queryFn: async ({ pageParam }): Promise<PhoenixTracePage> => {
       if (!instance || !projectId) throw new Error('Phoenix project not found.');
-      const client = createPhoenixClient(instance);
+      const client = await createPhoenixClient(instance);
 
       if (filter === 'errors') {
         const response = await client.GET('/v1/projects/{project_identifier}/spans', {
@@ -194,7 +209,7 @@ export function usePhoenixProjectTraceSummary(
     queryKey: phoenixQueryKeys.traceSummary(instance?.id ?? 'missing', projectId ?? 'missing', range),
     queryFn: async (): Promise<PhoenixTraceSummary> => {
       if (!instance || !projectId) throw new Error('Phoenix project not found.');
-      const client = createPhoenixClient(instance);
+      const client = await createPhoenixClient(instance);
       const latencies: number[] = [];
       let cursor: string | null = null;
       let errorCount = 0;
@@ -276,7 +291,7 @@ export function usePhoenixTrace(
     queryKey: phoenixQueryKeys.trace(instance?.id ?? 'missing', projectId ?? 'missing', traceId ?? 'missing'),
     queryFn: async (): Promise<PhoenixSpan[]> => {
       if (!instance || !projectId || !traceId) throw new Error('Phoenix trace not found.');
-      const client = createPhoenixClient(instance);
+      const client = await createPhoenixClient(instance);
       const spans: PhoenixSpan[] = [];
       let cursor: string | null = null;
 

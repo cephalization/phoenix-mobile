@@ -1,6 +1,8 @@
 import { DefaultChatTransport } from 'ai';
 import { fetch as expoFetch } from 'expo/fetch';
 
+import { assertBearerRequestTarget } from '@/features/auth/oauth';
+import { getAuthorizationHeaders } from '@/features/auth/session';
 import type { PhoenixInstance } from '@/types/instance';
 
 import type { ModelSelection, PxiChatRequest, PxiContext, PxiMessage } from './types';
@@ -58,11 +60,8 @@ export function buildPxiRequest({
   };
 }
 
-export function buildInstanceHeaders(instance: PhoenixInstance): Record<string, string> {
-  if (instance.auth.type !== 'none') {
-    throw new Error('Sign in to this Phoenix instance again before using PXI.');
-  }
-  return {};
+export function buildInstanceHeaders(instance: PhoenixInstance): Promise<Record<string, string>> {
+  return getAuthorizationHeaders(instance);
 }
 
 export function createPxiTransport({
@@ -74,10 +73,33 @@ export function createPxiTransport({
   model: ModelSelection;
   sessionId: string;
 }) {
+  let sentAccessToken: string | undefined;
+  const streamFetch: typeof globalThis.fetch = async (input, init) => {
+    if (instance.auth.type === 'oauth2') assertBearerRequestTarget(instance, input);
+    const response = await (expoFetch as unknown as typeof globalThis.fetch)(input, {
+      ...init,
+      ...(instance.auth.type === 'oauth2' ? { redirect: 'error' as const } : {}),
+    });
+    if (response.status === 401 && instance.auth.type === 'oauth2') {
+      // A streaming POST is never replayed. Coordinate one forced rotation so
+      // a later explicit user retry starts with fresh credentials, then return
+      // the original HTTP response so AI SDK preserves its status and detail.
+      try {
+        await getAuthorizationHeaders(instance, true, sentAccessToken);
+      } catch {
+        throw new Error('Phoenix streaming request failed with HTTP 401. Sign in again before retrying.');
+      }
+    }
+    return response;
+  };
   return new DefaultChatTransport<PxiMessage>({
     api: buildServerAgentChatUrl(instance.baseUrl, sessionId),
-    headers: buildInstanceHeaders(instance),
-    fetch: expoFetch as unknown as typeof globalThis.fetch,
+    headers: async () => {
+      const headers = await buildInstanceHeaders(instance);
+      sentAccessToken = headers.Authorization?.replace(/^Bearer\s+/i, '');
+      return headers;
+    },
+    fetch: streamFetch,
     prepareSendMessagesRequest: ({ messages }) => ({
       body: buildPxiRequest({ messages, model, sessionId }),
     }),

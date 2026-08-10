@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 
 import type { PhoenixInstance } from '@/types/instance';
+import { revokeAndDeleteCredentials } from '@/features/auth/session';
 import type { ModelSelection } from '@/features/pxi/types';
 import { clearPxiSessions, deletePxiSessionsForInstance } from '@/lib/pxi-session-db';
 
@@ -11,14 +12,26 @@ type InstanceState = {
   instances: PhoenixInstance[];
   activeInstanceId: string | null;
   pxiModels: Record<string, ModelSelection>;
+  pendingOAuthRegistrations: Record<string, PendingOAuthRegistration>;
   hasHydrated: boolean;
-  addInstance: (instance: PhoenixInstance) => void;
+  addInstance: (instance: PhoenixInstance) => Promise<void>;
   clearInstances: () => Promise<void>;
   removeInstance: (id: string) => Promise<void>;
   setActiveInstanceId: (id: string | null) => void;
   setHasHydrated: (hasHydrated: boolean) => void;
   setPxiModel: (instanceId: string, model: ModelSelection) => void;
+  savePendingOAuthRegistration: (registration: PendingOAuthRegistration) => void;
 };
+
+export type PendingOAuthRegistration = {
+  baseUrl: string;
+  clientId: string;
+  issuer: string;
+  registrationEndpoint: string;
+  createdAt: number;
+};
+
+const PENDING_REGISTRATION_TTL_MS = 6 * 24 * 60 * 60_000;
 
 const serverStorage: StateStorage = {
   getItem: () => null,
@@ -36,16 +49,39 @@ export const useInstanceStore = create<InstanceState>()(
       instances: [],
       activeInstanceId: null,
       pxiModels: {},
+      pendingOAuthRegistrations: {},
       hasHydrated: false,
-      addInstance: (instance) =>
+      addInstance: async (instance) => {
+        const replacedInstances = useInstanceStore.getState().instances.filter(
+          (item) => item.baseUrl === instance.baseUrl
+        );
+        const replaced = replacedInstances[0];
+        if (replaced && replaced.auth.type === 'oauth2' && (
+          instance.auth.type !== 'oauth2' || replaced.auth.credentialKey !== instance.auth.credentialKey
+        )) {
+          try {
+            await revokeAndDeleteCredentials(replaced, true);
+          } catch (error) {
+            await revokeAndDeleteCredentials(instance).catch(() => undefined);
+            throw error;
+          }
+        }
         set((state) => ({
           instances: [...state.instances.filter((item) => item.baseUrl !== instance.baseUrl), instance],
-        })),
+          pendingOAuthRegistrations: Object.fromEntries(
+            Object.entries(state.pendingOAuthRegistrations).filter(([baseUrl]) => baseUrl !== instance.baseUrl)
+          ),
+        }));
+      },
       clearInstances: async () => {
+        const instances = useInstanceStore.getState().instances;
+        await Promise.all(instances.map((instance) => revokeAndDeleteCredentials(instance, true)));
         await clearPxiSessions();
-        set({ activeInstanceId: null, instances: [], pxiModels: {} });
+        set({ activeInstanceId: null, instances: [], pendingOAuthRegistrations: {}, pxiModels: {} });
       },
       removeInstance: async (id) => {
+        const instance = useInstanceStore.getState().instances.find((item) => item.id === id);
+        if (instance) await revokeAndDeleteCredentials(instance, true);
         await deletePxiSessionsForInstance(id);
         set((state) => {
           const { [id]: _removedModel, ...pxiModels } = state.pxiModels;
@@ -60,6 +96,13 @@ export const useInstanceStore = create<InstanceState>()(
       setHasHydrated: (hasHydrated) => set({ hasHydrated }),
       setPxiModel: (instanceId, model) =>
         set((state) => ({ pxiModels: { ...state.pxiModels, [instanceId]: model } })),
+      savePendingOAuthRegistration: (registration) =>
+        set((state) => ({
+          pendingOAuthRegistrations: {
+            ...state.pendingOAuthRegistrations,
+            [registration.baseUrl]: registration,
+          },
+        })),
     }),
     {
       name: 'phoenix-instances',
@@ -67,10 +110,17 @@ export const useInstanceStore = create<InstanceState>()(
       partialize: (state) => ({
         activeInstanceId: state.activeInstanceId,
         instances: state.instances,
+        pendingOAuthRegistrations: state.pendingOAuthRegistrations,
         pxiModels: state.pxiModels,
       }),
       onRehydrateStorage: (initialState) => (restoredState) => {
         if (restoredState) {
+          const now = Date.now();
+          restoredState.pendingOAuthRegistrations = Object.fromEntries(
+            Object.entries(restoredState.pendingOAuthRegistrations ?? {}).filter(
+              ([, registration]) => now - registration.createdAt <= PENDING_REGISTRATION_TTL_MS
+            )
+          );
           if (
             restoredState.activeInstanceId &&
             !restoredState.instances.some((instance) => instance.id === restoredState.activeInstanceId)

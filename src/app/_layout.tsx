@@ -14,6 +14,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { featureFlags } from 'react-native-screens';
 
 import { Colors } from '@/constants/theme';
+import { PhoenixAuthError } from '@/features/auth/oauth';
 import { useSettingsStore } from '@/store/settings';
 
 SplashScreen.preventAutoHideAsync();
@@ -34,7 +35,8 @@ export default function RootLayout() {
       new QueryClient({
         defaultOptions: {
           queries: {
-            retry: 1,
+            retry: (failureCount, error) =>
+              !(error instanceof PhoenixAuthError) && failureCount < 1,
             staleTime: 30_000,
           },
         },
@@ -68,6 +70,7 @@ export default function RootLayout() {
               headerTitleStyle: { fontFamily: 'Geist_600SemiBold' },
             }}>
             <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="oauth/callback" options={{ headerShown: false }} />
             <Stack.Screen
               name="instances/new"
               options={{

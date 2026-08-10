@@ -10,7 +10,7 @@ A mobile companion for connecting to and monitoring self-hosted [Arize Phoenix](
 - Refresh server data through TanStack Query
 - Stream PXI conversations and restore local chat history through Expo SQLite on native and IndexedDB on web
 - Support light, dark, mobile, tablet, and web layouts
-- Model connections for future OAuth 2 credentials while currently allowing unauthenticated servers only
+- Connect to unauthenticated servers or Phoenix 19+ instances through native OAuth 2; web currently supports unauthenticated connections only
 
 ## Stack
 
@@ -20,7 +20,7 @@ A mobile companion for connecting to and monitoring self-hosted [Arize Phoenix](
 - Zustand and AsyncStorage for persisted instance metadata
 - Native Markdown rendering for streamed PXI responses
 - React Hook Form and Zod for connection validation
-- SecureStore installed for the upcoming OAuth credential flow
+- Expo SecureStore for native OAuth access and rotating refresh tokens
 
 ## Development
 
@@ -55,6 +55,7 @@ The clean script selects `/Applications/Xcode.app`, completes Xcode's first-laun
 For normal JavaScript and TypeScript development, leave the installed development client on the phone and run `npm start` for Fast Refresh. Use `npm run ios:device` only when an incremental native rebuild is needed.
 
 ```bash
+npm test
 npm run typecheck
 npm run lint
 ```

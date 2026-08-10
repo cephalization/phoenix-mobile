@@ -97,14 +97,18 @@ The mobile model catalog queries `modelProviders` and `playgroundModels`, then a
 
 **Implication:** Revalidate before each new app session, keep the allowlist synchronized with Phoenix's `agentCuratedModels.ts`, and show an actionable no-model state. Never request or persist model provider credentials on the phone.
 
-### 2026-07-14 - Authentication Is Deliberately Incomplete
+### 2026-07-24 - Phoenix OAuth Uses DCR, Private Callbacks, And Rotating Tokens
 
-**Status:** Active  
-**Area:** Connections, security
+**Status:** Decision
+**Area:** Connections, security, networking
 
-`PhoenixInstance.auth` supports `none` and reserves an `oauth2` shape, but client creation currently rejects authenticated instances. SecureStore is installed for the future token flow.
+Phoenix 19.6 OAuth is detected only after unauthenticated `GET /v1/user` returns `401`; auth-disabled servers return an `ANONYMOUS` viewer and retain the existing connection path. Authenticated connections use RFC 8414 metadata, dynamic public-client registration, the exact `phoenixmobile://oauth/callback` redirect, Authorization Code with S256 PKCE, and `resource` equal to the advertised issuer. Phoenix rotates refresh tokens and revokes the token family when a spent refresh token is replayed.
 
-**Implication:** Do not represent OAuth connections as unauthenticated requests or persist credentials in AsyncStorage. The eventual flow needs secure token storage, refresh behavior, and authenticated client construction.
+OAuth metadata and client IDs are non-secret instance metadata. A validated pending DCR client is retained for up to six days so cancelled first sign-ins do not exhaust Phoenix's registration limit. Versioned tokens and the active ten-minute login transaction are native SecureStore values. Credential records are bound to the instance ID, credential key, client ID, issuer, base URL, and transport policy; bearer and OAuth requests cannot redirect, and bearer tokens are sent only to the configured origin and root-path deployment. HTTPS is required by default. Authenticated HTTP is available only through an explicit per-connection local-development warning because credentials remain observable to the network. Web does not offer OAuth because SecureStore has no web implementation.
+
+Refresh, replacement, revocation, and deletion are serialized per credential key. Permanent removal raises a generation barrier before waiting for active work, so a late rotating refresh cannot restore a deleted credential; cleanup after a recoverable login failure uses the same serialization without permanently blocking a new sign-in.
+
+**Implication:** Do not silently enable authenticated HTTP, retry an ambiguous refresh, reuse an old rotating refresh token, persist callback parameters, or replay PXI stream posts. Idempotent REST reads and the read-only model-catalog GraphQL query may refresh and retry once; PXI resolves a token immediately before sending, coordinates one refresh after a `401` for the next explicit attempt, and requires a new user submission.
 
 ### 2026-07-14 - Phoenix Client Requires A Native Metro Shim
 
@@ -141,7 +145,7 @@ Self-hosted Phoenix commonly runs at an HTTP LAN address. Android blocks clearte
 
 ### 2026-07-14 - Form Sheets Are Native-First
 
-**Status:** Decision  
+**Status:** Decision
 **Area:** Navigation, UI
 
 Connection creation and settings use Expo Router `formSheet` presentations with detents, grabbers, and rounded corners. Web renders these routes as ordinary pages because native sheet presentation is unavailable.

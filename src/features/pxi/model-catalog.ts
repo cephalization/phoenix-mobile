@@ -1,9 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetch as expoFetch } from 'expo/fetch';
 
+import { authenticatedFetch, getAuthorizationHeaders } from '@/features/auth/session';
 import type { PhoenixInstance } from '@/types/instance';
 
-import { buildInstanceHeaders } from './client';
 import type {
   BuiltInProvider,
   ModelSelection,
@@ -76,14 +75,14 @@ export async function fetchPxiModelCatalog(
     controller.abort();
   }, MODEL_PREFLIGHT_TIMEOUT_MS);
 
-  let response: Awaited<ReturnType<typeof expoFetch>>;
+  let response: Response;
   try {
-    response = await expoFetch(`${instance.baseUrl.replace(/\/+$/, '')}/graphql`, {
+    response = await authenticatedFetch(instance, `${instance.baseUrl.replace(/\/+$/, '')}/graphql`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...buildInstanceHeaders(instance) },
+      headers: { 'content-type': 'application/json', ...(await getAuthorizationHeaders(instance)) },
       body: JSON.stringify({ query: MODEL_PREFLIGHT_QUERY }),
       signal: controller.signal,
-    });
+    }, true);
   } catch (error) {
     if (timedOut) throw new Error('Phoenix model discovery timed out. Check the instance address and network.');
     throw error;
