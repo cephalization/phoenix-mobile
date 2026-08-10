@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ChatBottomSheet } from '@/components/chat/chat-bottom-sheet';
 import { MessageMarkdown } from '@/components/chat/message-markdown';
 import { ModelPicker } from '@/components/chat/model-picker';
 import { isJsonValue, JsonBlock } from '@/components/json-block';
@@ -206,7 +207,9 @@ export default function SessionDetailScreen() {
                 session={session.data}
               />
               <SessionMetrics session={session.data} />
-              <View style={styles.section}>
+              {/* Turn cards are list items outside this container, so the heading
+                  carries the section's 13pt heading-to-content gap itself. */}
+              <View style={[styles.section, (turns.data?.length ?? 0) > 0 && styles.conversationLead]}>
               <View style={styles.sectionHeading}>
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>Conversation</Text>
                 <Text style={[styles.sectionMeta, { color: colors.textSecondary }]}>{session.data.traces.length} turn{session.data.traces.length === 1 ? '' : 's'}</Text>
@@ -830,6 +833,7 @@ function ReviewControl({ config, disabled, onChange, value }: {
   value: ReviewValue;
 }) {
   const colors = useAppColors();
+  const [explainVisible, setExplainVisible] = useState(false);
   const finiteRange = config.type === 'CONTINUOUS'
     && config.lower_bound != null
     && config.upper_bound != null
@@ -844,7 +848,20 @@ function ReviewControl({ config, disabled, onChange, value }: {
       : 0;
   return (
     <View style={[styles.reviewField, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}>
-      <Text style={[styles.fieldLabel, { color: colors.text }]}>{config.name}</Text>
+      <View style={styles.fieldHeader}>
+        <Text style={[styles.fieldLabel, { color: colors.text }]}>{config.name}</Text>
+        {config.type !== 'FREEFORM' ? (
+          <MotionPressable
+            accessibilityHint="Opens a sheet to write an optional explanation for this annotation"
+            accessibilityLabel={value.explanation.trim() ? `Edit the ${config.name} explanation` : `Explain the ${config.name} annotation`}
+            accessibilityRole="button"
+            disabled={disabled}
+            onPress={() => setExplainVisible(true)}
+            style={[styles.explainButton, { backgroundColor: colors.backgroundSelected, opacity: disabled ? 0.45 : 1 }]}>
+            <Text style={[styles.explainLabel, { color: colors.text }]}>Explain</Text>
+          </MotionPressable>
+        ) : null}
+      </View>
       {config.description ? <Text style={[styles.fieldDescription, { color: colors.textSecondary }]}>{config.description}</Text> : null}
       {config.type === 'CATEGORICAL' ? (
         <View accessibilityRole="radiogroup" style={styles.choices}>
@@ -918,20 +935,72 @@ function ReviewControl({ config, disabled, onChange, value }: {
           value={value.value}
         />
       )}
-      {config.type !== 'FREEFORM' ? (
-        <TextInput
-          accessibilityLabel={`${config.name} optional explanation`}
-          editable={!disabled}
-          multiline
-          onChangeText={(text) => onChange('explanation', text)}
-          placeholder="Optional explanation"
-          placeholderTextColor={colors.textSecondary}
-          style={[styles.explanationInput, { borderColor: colors.border, color: colors.text }]}
-          textAlignVertical="top"
+      {config.type !== 'FREEFORM' && value.explanation.trim() ? (
+        <Text numberOfLines={2} style={[styles.existingNote, { borderColor: colors.border, color: colors.textSecondary }]}>
+          {value.explanation}
+        </Text>
+      ) : null}
+      {config.type !== 'FREEFORM' && explainVisible ? (
+        <ExplanationSheet
+          configName={config.name}
+          onChange={(text) => onChange('explanation', text)}
+          onClose={() => setExplainVisible(false)}
           value={value.explanation}
         />
       ) : null}
     </View>
+  );
+}
+
+function ExplanationSheet({ configName, onChange, onClose, value }: {
+  configName: string;
+  onChange: (text: string) => void;
+  onClose: () => void;
+  value: string;
+}) {
+  const colors = useAppColors();
+  const inputRef = useRef<TextInput>(null);
+
+  // autoFocus inside the native bottom sheet places the cursor without raising
+  // the Android keyboard, so re-focus after the sheet has presented.
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      inputRef.current?.blur();
+      inputRef.current?.focus();
+    }, 350);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  return (
+    <ChatBottomSheet
+      onClose={onClose}
+      // 'full' presents at max height on both platforms, so the keyboard never
+      // clips the Done button; fractions resolve to 'half' on Android.
+      snapPoints={['full']}
+      subtitle="Optional context saved with this annotation."
+      title={`Explain ${configName}`}
+      visible>
+      <View style={styles.explainSheetBody}>
+        <TextInput
+          accessibilityLabel={`${configName} explanation`}
+          autoFocus
+          multiline
+          ref={inputRef}
+          onChangeText={onChange}
+          placeholder="Why did you choose this value?"
+          placeholderTextColor={colors.textSecondary}
+          style={[styles.textArea, styles.explainSheetInput, { borderColor: colors.border, color: colors.text }]}
+          textAlignVertical="top"
+          value={value}
+        />
+        <MotionPressable
+          accessibilityRole="button"
+          onPress={onClose}
+          style={[styles.explainDone, { backgroundColor: colors.accent }]}>
+          <Text style={[styles.explainDoneLabel, { color: colors.accentForeground }]}>Done</Text>
+        </MotionPressable>
+      </View>
+    </ChatBottomSheet>
   );
 }
 
@@ -1045,12 +1114,13 @@ const styles = StyleSheet.create({
   metricLabel: { fontFamily: AppFonts.medium, fontSize: 11, textTransform: 'uppercase' },
   metricValue: { fontFamily: AppFonts.semibold, fontSize: 20 },
   section: { gap: 13, paddingTop: 30 },
+  conversationLead: { paddingBottom: 13 },
   sectionHeading: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   sectionTitle: { fontFamily: AppFonts.semibold, fontSize: 21, letterSpacing: -0.3 },
   sectionMeta: { fontFamily: AppFonts.medium, fontSize: 13 },
   sectionLoader: { paddingVertical: 40 },
-  turnSeparator: { height: 14 },
-  turn: { borderRadius: 20, borderWidth: 1, gap: 12, padding: 14 },
+  turnSeparator: { height: 13 },
+  turn: { borderRadius: 20, borderWidth: 1, gap: 12, padding: 16 },
   turnHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   turnTitle: { fontFamily: AppFonts.semibold, fontSize: 16 },
   turnTitleRow: { alignItems: 'center', flexDirection: 'row', gap: 8 },
@@ -1075,7 +1145,7 @@ const styles = StyleSheet.create({
   readOnly: { borderRadius: 16, borderWidth: 1, gap: 5, padding: 15 },
   readOnlyTitle: { fontFamily: AppFonts.semibold, fontSize: 15 },
   reviewField: { borderRadius: 20, borderWidth: 1, gap: 10, padding: 16 },
-  fieldLabel: { fontFamily: AppFonts.semibold, fontSize: 17 },
+  fieldLabel: { flexShrink: 1, fontFamily: AppFonts.semibold, fontSize: 17 },
   fieldDescription: { fontFamily: AppFonts.regular, fontSize: 13, lineHeight: 18 },
   choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   choice: { alignItems: 'center', borderRadius: 16, borderWidth: 1, justifyContent: 'center', minHeight: 50, minWidth: 76, paddingHorizontal: 16 },
@@ -1086,7 +1156,13 @@ const styles = StyleSheet.create({
   bound: { fontFamily: AppFonts.regular, fontSize: 11 },
   existingNote: { borderLeftWidth: 2, fontFamily: AppFonts.regular, fontSize: 13, fontStyle: 'italic', lineHeight: 19, paddingLeft: 10 },
   textArea: { borderRadius: 14, borderWidth: 1, fontFamily: AppFonts.regular, fontSize: 15, lineHeight: 21, minHeight: 112, padding: 13 },
-  explanationInput: { borderRadius: 14, borderWidth: 1, fontFamily: AppFonts.regular, fontSize: 14, lineHeight: 20, minHeight: 76, padding: 13 },
+  fieldHeader: { alignItems: 'center', flexDirection: 'row', gap: 10, justifyContent: 'space-between' },
+  explainButton: { alignItems: 'center', borderRadius: 13, justifyContent: 'center', minHeight: 48, paddingHorizontal: 15 },
+  explainLabel: { fontFamily: AppFonts.semibold, fontSize: 13 },
+  explainSheetBody: { gap: 12 },
+  explainSheetInput: { maxHeight: 260, minHeight: 150 },
+  explainDone: { alignItems: 'center', borderRadius: 16, justifyContent: 'center', minHeight: 50 },
+  explainDoneLabel: { fontFamily: AppFonts.semibold, fontSize: 15 },
   error: { fontFamily: AppFonts.medium, fontSize: 13, lineHeight: 19 },
   submitActions: { flexDirection: 'row', gap: 10 },
   secondarySubmit: { alignItems: 'center', borderRadius: 16, borderWidth: 1, flex: 1, justifyContent: 'center', minHeight: 52, paddingHorizontal: 10 },
