@@ -2,6 +2,7 @@ import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } f
 
 import {
   addSessionToDataset,
+  createProjectAnnotationConfig,
   createSessionAnnotationBatches,
   fetchDatasets,
   fetchProjectAnnotationConfigs,
@@ -14,6 +15,7 @@ import {
   writeSessionNote,
 } from '@/features/session-review/api';
 import type {
+  AnnotationConfigWrite,
   SessionAnnotationWrite,
   SessionAnnotationsWrite,
   SessionData,
@@ -122,6 +124,25 @@ export function usePhoenixProjectAnnotationConfigs(
       return fetchProjectAnnotationConfigs(instance, projectId);
     },
     enabled: Boolean(instance && projectId),
+  });
+}
+
+export function useCreatePhoenixAnnotationConfig(
+  instance: PhoenixInstance | undefined,
+  projectId: string | undefined
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AnnotationConfigWrite) => {
+      if (!instance || !projectId) throw new Error('Phoenix project not found.');
+      return createProjectAnnotationConfig(instance, projectId, input);
+    },
+    onSuccess: async () => {
+      if (!instance || !projectId) return;
+      await queryClient.invalidateQueries({
+        queryKey: phoenixSessionQueryKeys.annotationConfigs(instance.id, projectId),
+      });
+    },
   });
 }
 

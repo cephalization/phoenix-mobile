@@ -4,6 +4,8 @@ import { createPhoenixClient } from '@/lib/phoenix';
 import type { PhoenixInstance } from '@/types/instance';
 
 import type {
+  AnnotationConfigCreateData,
+  AnnotationConfigWrite,
   DatasetSummary,
   PhoenixSpan,
   SessionAnnotation,
@@ -53,7 +55,7 @@ export class SessionReviewCompatibilityError extends Error {
 }
 
 export type SessionReviewValidationIssue = {
-  field: 'config' | 'datasetName' | 'explanation' | 'identifier' | 'label' | 'note' | 'projectId' | 'score' | 'sessionId' | 'turns';
+  field: 'bounds' | 'config' | 'configName' | 'datasetName' | 'explanation' | 'identifier' | 'label' | 'note' | 'projectId' | 'score' | 'sessionId' | 'turns' | 'values';
   message: string;
 };
 
@@ -184,6 +186,153 @@ export async function fetchProjectAnnotationConfigs(
 
     return [...configs.values()];
   });
+}
+
+export async function createProjectAnnotationConfig(
+  instance: PhoenixInstance,
+  projectId: string,
+  input: AnnotationConfigWrite
+): Promise<SessionAnnotationConfig> {
+  const data = buildAnnotationConfigData(input);
+  const project = requiredText(projectId, 'projectId', 'Project ID is required.');
+  return withSessionApiError('Phoenix could not create the annotation configuration', async () => {
+    const client = await compatibleClient(
+      instance,
+      'Annotation configuration management',
+      sessionReviewCompatibility.projectAnnotationConfigs
+    );
+    const config = await createOrRecoverAnnotationConfig(client, data);
+    const assigned = await client.PUT(
+      '/v1/projects/{project_identifier}/annotation_configs/{config_identifier}',
+      { params: { path: { config_identifier: config.id, project_identifier: project } } }
+    );
+    if (!assigned.data?.data) throw new Error('The server did not confirm the project assignment.');
+    return config;
+  });
+}
+
+async function createOrRecoverAnnotationConfig(
+  client: PhoenixClient,
+  data: AnnotationConfigCreateData
+): Promise<SessionAnnotationConfig> {
+  try {
+    const response = await client.POST('/v1/annotation_configs', { body: data });
+    if (!response.data?.data) {
+      throw new Error('The server did not return the created annotation configuration.');
+    }
+    return response.data.data;
+  } catch (createError) {
+    // The Phoenix client middleware throws on non-2xx responses, so the
+    // name conflict arrives here rather than as a response status.
+    if (!(createError instanceof Error) || !/:\s409\b/.test(createError.message)) throw createError;
+    // A conflict can also mean an earlier attempt created this exact config but
+    // failed before the project assignment, so recover it when it matches.
+    const existing = await client
+      .GET('/v1/annotation_configs/{config_identifier}', {
+        params: { path: { config_identifier: data.name } },
+      })
+      .catch(() => null);
+    const config = existing?.data?.data;
+    if (config && annotationConfigMatchesData(config, data)) return config;
+    throw new SessionReviewValidationError([
+      {
+        field: 'configName',
+        message: `An annotation configuration named “${data.name}” already exists. Choose another name.`,
+      },
+    ]);
+  }
+}
+
+export function annotationConfigMatchesData(
+  config: SessionAnnotationConfig,
+  data: AnnotationConfigCreateData
+): boolean {
+  if ((config.description ?? null) !== (data.description ?? null)) return false;
+  if (config.type === 'CATEGORICAL' && data.type === 'CATEGORICAL') {
+    return (
+      config.optimization_direction === data.optimization_direction &&
+      config.values.length === data.values.length &&
+      config.values.every(
+        (value, index) =>
+          value.label === data.values[index].label &&
+          (value.score ?? null) === (data.values[index].score ?? null)
+      )
+    );
+  }
+  if (config.type === 'CONTINUOUS' && data.type === 'CONTINUOUS') {
+    return (
+      config.optimization_direction === data.optimization_direction &&
+      (config.lower_bound ?? null) === (data.lower_bound ?? null) &&
+      (config.upper_bound ?? null) === (data.upper_bound ?? null)
+    );
+  }
+  return config.type === 'FREEFORM' && data.type === 'FREEFORM';
+}
+
+export function buildAnnotationConfigData(input: AnnotationConfigWrite): AnnotationConfigCreateData {
+  const name = requiredText(input.name, 'configName', 'Configuration name is required.');
+  if (name === 'note') {
+    throw new SessionReviewValidationError([
+      { field: 'configName', message: 'The name “note” is reserved for session notes.' },
+    ]);
+  }
+  const description = input.description?.trim();
+  const base = { name, ...(description ? { description } : {}) };
+  const draft = input.draft;
+
+  if (draft.type === 'CATEGORICAL') {
+    const seenLabels = new Set<string>();
+    const values = draft.values.map((value) => {
+      const label = value.label.trim();
+      if (!label) {
+        throw new SessionReviewValidationError([
+          { field: 'values', message: 'Every categorical value needs a label.' },
+        ]);
+      }
+      if (seenLabels.has(label)) {
+        throw new SessionReviewValidationError([
+          { field: 'values', message: `The label “${label}” is repeated. Labels must be unique.` },
+        ]);
+      }
+      seenLabels.add(label);
+      if (value.score != null && !Number.isFinite(value.score)) {
+        throw new SessionReviewValidationError([
+          { field: 'values', message: `The score for “${label}” must be a number.` },
+        ]);
+      }
+      return { label, ...(value.score != null ? { score: value.score } : {}) };
+    });
+    if (values.length === 0) {
+      throw new SessionReviewValidationError([
+        { field: 'values', message: 'Add at least one categorical value.' },
+      ]);
+    }
+    return { ...base, type: 'CATEGORICAL', optimization_direction: draft.optimizationDirection, values };
+  }
+
+  if (draft.type === 'CONTINUOUS') {
+    for (const bound of [draft.lowerBound, draft.upperBound]) {
+      if (bound != null && !Number.isFinite(bound)) {
+        throw new SessionReviewValidationError([
+          { field: 'bounds', message: 'Bounds must be numbers.' },
+        ]);
+      }
+    }
+    if (draft.lowerBound != null && draft.upperBound != null && draft.lowerBound >= draft.upperBound) {
+      throw new SessionReviewValidationError([
+        { field: 'bounds', message: 'The minimum bound must be less than the maximum bound.' },
+      ]);
+    }
+    return {
+      ...base,
+      type: 'CONTINUOUS',
+      optimization_direction: draft.optimizationDirection,
+      ...(draft.lowerBound != null ? { lower_bound: draft.lowerBound } : {}),
+      ...(draft.upperBound != null ? { upper_bound: draft.upperBound } : {}),
+    };
+  }
+
+  return { ...base, type: 'FREEFORM' };
 }
 
 export async function fetchSessionAnnotations(

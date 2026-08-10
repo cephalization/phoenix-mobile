@@ -41,6 +41,12 @@ export default function SessionQueueSettingsScreen() {
       ? current.filter((candidate) => candidate !== name)
       : [...current, name]);
   };
+  const openNewConfig = () => {
+    router.push({
+      pathname: '/instances/[id]/projects/[projectId]/sessions/new-annotation-config',
+      params: { id, projectId },
+    });
+  };
   const save = () => {
     setRequiredConfigNames(id, projectId, selectedNames.filter((name) => availableNames.has(name)));
     haptics.success();
@@ -73,9 +79,11 @@ export default function SessionQueueSettingsScreen() {
         />
       ) : configs.data.length === 0 ? (
         <StateCard
-          action="Refresh"
-          message="This project has no annotation configurations yet."
-          onPress={() => configs.refetch()}
+          message="This project has no annotation configurations yet. Create one to start reviewing sessions."
+          onPress={openNewConfig}
+          action="Create configuration"
+          secondaryAction="Refresh"
+          onSecondaryPress={() => configs.refetch()}
           title="No project annotation configurations"
         />
       ) : (
@@ -105,6 +113,18 @@ export default function SessionQueueSettingsScreen() {
               </MotionPressable>
             );
           })}
+          <MotionPressable
+            accessibilityRole="button"
+            onPress={openNewConfig}
+            style={[styles.configRow, styles.newConfigRow, { borderTopColor: colors.border }]}>
+            <Text style={[styles.newConfigGlyph, { color: colors.textSecondary }]}>＋</Text>
+            <View style={styles.configCopy}>
+              <Text style={[styles.configName, { color: colors.text }]}>New configuration</Text>
+              <Text style={[styles.configType, { color: colors.textSecondary }]}>
+                Create and assign another way to rate sessions
+              </Text>
+            </View>
+          </MotionPressable>
         </View>
       )}
 
@@ -137,10 +157,12 @@ export default function SessionQueueSettingsScreen() {
   );
 }
 
-function StateCard({ action, message, onPress, title }: {
+function StateCard({ action, message, onPress, onSecondaryPress, secondaryAction, title }: {
   action: string;
   message: string;
   onPress: () => void;
+  onSecondaryPress?: () => void;
+  secondaryAction?: string;
   title: string;
 }) {
   const colors = useAppColors();
@@ -148,9 +170,16 @@ function StateCard({ action, message, onPress, title }: {
     <View style={[styles.stateCard, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}>
       <Text style={[styles.stateTitle, { color: colors.text }]}>{title}</Text>
       <Text style={[styles.copy, { color: colors.textSecondary }]}>{message}</Text>
-      <MotionPressable accessibilityRole="button" onPress={onPress} style={[styles.secondaryButton, { borderColor: colors.border }]}>
-        <Text style={[styles.secondaryLabel, { color: colors.text }]}>{action}</Text>
-      </MotionPressable>
+      <View style={styles.stateActions}>
+        <MotionPressable accessibilityRole="button" onPress={onPress} style={[styles.secondaryButton, { borderColor: colors.border }]}>
+          <Text style={[styles.secondaryLabel, { color: colors.text }]}>{action}</Text>
+        </MotionPressable>
+        {secondaryAction && onSecondaryPress ? (
+          <MotionPressable accessibilityRole="button" onPress={onSecondaryPress} style={[styles.secondaryButton, { borderColor: colors.border }]}>
+            <Text style={[styles.secondaryLabel, { color: colors.text }]}>{secondaryAction}</Text>
+          </MotionPressable>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -173,6 +202,9 @@ const styles = StyleSheet.create({
   configCopy: { flex: 1, gap: 3 },
   configName: { fontFamily: AppFonts.semibold, fontSize: 15 },
   configType: { fontFamily: AppFonts.regular, fontSize: 12, lineHeight: 17 },
+  newConfigRow: { borderTopWidth: StyleSheet.hairlineWidth, minHeight: 60 },
+  newConfigGlyph: { fontFamily: AppFonts.semibold, fontSize: 18, textAlign: 'center', width: 28 },
+  stateActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   warning: { borderLeftWidth: 3, borderRadius: 12, gap: 5, padding: 14 },
   warningTitle: { fontFamily: AppFonts.semibold, fontSize: 14 },
   stateCard: { alignItems: 'flex-start', borderRadius: 18, borderWidth: 1, gap: 8, padding: 18 },

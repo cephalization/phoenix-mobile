@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  annotationConfigMatchesData,
+  buildAnnotationConfigData,
   buildSessionAnnotationData,
   buildSessionDatasetUpload,
   compareVersions,
@@ -169,6 +171,98 @@ describe('session dataset uploads', () => {
       sessionId: 'session-1',
       turns: [turn('')],
     })).toThrow(SessionReviewValidationError);
+  });
+});
+
+describe('annotation config creation', () => {
+  it('builds a categorical config with trimmed unique labels and optional scores', () => {
+    expect(buildAnnotationConfigData({
+      name: ' quality ',
+      description: ' overall quality ',
+      draft: {
+        type: 'CATEGORICAL',
+        optimizationDirection: 'MAXIMIZE',
+        values: [{ label: ' good ', score: 1 }, { label: 'bad' }],
+      },
+    })).toEqual({
+      name: 'quality',
+      description: 'overall quality',
+      type: 'CATEGORICAL',
+      optimization_direction: 'MAXIMIZE',
+      values: [{ label: 'good', score: 1 }, { label: 'bad' }],
+    });
+  });
+
+  it('rejects empty, duplicate, and non-numeric categorical values', () => {
+    const build = (values: { label: string; score?: number }[]) => () =>
+      buildAnnotationConfigData({
+        name: 'quality',
+        draft: { type: 'CATEGORICAL', optimizationDirection: 'NONE', values },
+      });
+    expect(build([])).toThrow(SessionReviewValidationError);
+    expect(build([{ label: '  ' }])).toThrow(SessionReviewValidationError);
+    expect(build([{ label: 'good' }, { label: ' good ' }])).toThrow(SessionReviewValidationError);
+    expect(build([{ label: 'good', score: Number.NaN }])).toThrow(SessionReviewValidationError);
+  });
+
+  it('builds continuous configs with optional ordered bounds and bare freeform configs', () => {
+    expect(buildAnnotationConfigData({
+      name: 'score',
+      draft: { type: 'CONTINUOUS', optimizationDirection: 'MINIMIZE', lowerBound: 1, upperBound: 5 },
+    })).toEqual({
+      name: 'score',
+      type: 'CONTINUOUS',
+      optimization_direction: 'MINIMIZE',
+      lower_bound: 1,
+      upper_bound: 5,
+    });
+    expect(buildAnnotationConfigData({
+      name: 'comment',
+      draft: { type: 'FREEFORM' },
+    })).toEqual({ name: 'comment', type: 'FREEFORM' });
+    expect(() => buildAnnotationConfigData({
+      name: 'score',
+      draft: { type: 'CONTINUOUS', optimizationDirection: 'NONE', lowerBound: 5, upperBound: 1 },
+    })).toThrow(SessionReviewValidationError);
+    expect(() => buildAnnotationConfigData({
+      name: 'score',
+      draft: { type: 'CONTINUOUS', optimizationDirection: 'NONE', lowerBound: Number.NaN },
+    })).toThrow(SessionReviewValidationError);
+  });
+
+  it('rejects blank names and the reserved note name', () => {
+    expect(() => buildAnnotationConfigData({ name: '  ', draft: { type: 'FREEFORM' } }))
+      .toThrow(SessionReviewValidationError);
+    expect(() => buildAnnotationConfigData({ name: ' note ', draft: { type: 'FREEFORM' } }))
+      .toThrow(SessionReviewValidationError);
+  });
+
+  it('matches an existing config only when the shape is identical', () => {
+    const data = buildAnnotationConfigData({
+      name: 'quality',
+      draft: {
+        type: 'CATEGORICAL',
+        optimizationDirection: 'MAXIMIZE',
+        values: [{ label: 'good', score: 1 }, { label: 'bad', score: 0 }],
+      },
+    });
+    const existing = {
+      id: 'config-1',
+      name: 'quality',
+      type: 'CATEGORICAL',
+      optimization_direction: 'MAXIMIZE',
+      values: [{ label: 'good', score: 1 }, { label: 'bad', score: 0 }],
+    } as SessionAnnotationConfig;
+    expect(annotationConfigMatchesData(existing, data)).toBe(true);
+    expect(annotationConfigMatchesData({ ...existing, description: 'other' } as SessionAnnotationConfig, data)).toBe(false);
+    expect(annotationConfigMatchesData(
+      { ...existing, values: [{ label: 'good', score: 1 }] } as SessionAnnotationConfig,
+      data
+    )).toBe(false);
+    expect(annotationConfigMatchesData(
+      { id: 'config-2', name: 'quality', type: 'FREEFORM' } as SessionAnnotationConfig,
+      data
+    )).toBe(false);
   });
 });
 

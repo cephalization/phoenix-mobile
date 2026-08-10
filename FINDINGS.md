@@ -13,6 +13,17 @@ This is the project's living technical memory. Record discoveries that would oth
 
 ## Active Constraints
 
+### 2026-08-09 - Annotation Configs Are Created Over REST Then Assigned To The Project
+
+**Status:** Decision
+**Area:** sessions, annotations, networking
+
+Annotation configuration creation does not need GraphQL: `POST /v1/annotation_configs` accepts the discriminated `CreateAnnotationConfigData` union (unified route since Phoenix 9.0.0), and `PUT /v1/projects/{project_identifier}/annotation_configs/{config_identifier}` assigns a config to a project (REST route since 17.16.0, accepting either the GlobalID or the name, idempotent on re-assignment). Because the app only lists project-assigned configs, both calls are required and the write gates on the existing `projectAnnotationConfigs: [17, 16, 0]` floor. Server-side validation observed live: duplicate names and the reserved name `note` return 409 with distinct messages, and empty categorical `values` return 400, so the client validates those cases before sending.
+
+The two-call sequence can fail between create and assign. On a create 409 the client fetches the existing config by name and silently recovers only when its shape exactly matches the submitted draft (same type, description, direction, values, bounds); any other 409 surfaces as a duplicate-name validation error rather than adopting an unrelated config.
+
+**Implication:** Route new annotation-config writes through `createProjectAnnotationConfig` so project assignment and matching-shape 409 recovery stay intact. Do not treat a bare create as sufficient — an unassigned config is invisible to every project-scoped consumer in the app.
+
 ### 2026-08-08 - Session Dataset Flagging Uses JSON Upload With Caught Conflicts
 
 **Status:** Decision

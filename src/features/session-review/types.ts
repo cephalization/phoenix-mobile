@@ -15,6 +15,34 @@ export type SessionAnnotationConfig =
   | ContinuousAnnotationConfig
   | FreeformAnnotationConfig;
 
+export type AnnotationConfigOptimizationDirection = Schemas['OptimizationDirection'];
+export type AnnotationConfigCreateData = Schemas['CreateAnnotationConfigData'];
+
+export type AnnotationConfigValueDraft = {
+  label: string;
+  score?: number;
+};
+
+export type AnnotationConfigDraft =
+  | {
+      type: 'CATEGORICAL';
+      optimizationDirection: AnnotationConfigOptimizationDirection;
+      values: AnnotationConfigValueDraft[];
+    }
+  | {
+      type: 'CONTINUOUS';
+      optimizationDirection: AnnotationConfigOptimizationDirection;
+      lowerBound?: number;
+      upperBound?: number;
+    }
+  | { type: 'FREEFORM' };
+
+export type AnnotationConfigWrite = {
+  description?: string;
+  draft: AnnotationConfigDraft;
+  name: string;
+};
+
 export type SessionTurnIO = {
   mimeType?: string;
   value: string;

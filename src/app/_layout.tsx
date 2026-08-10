@@ -97,6 +97,16 @@ export default function RootLayout() {
               }}
             />
             <Stack.Screen
+              name="instances/[id]/projects/[projectId]/sessions/new-annotation-config"
+              options={{
+                presentation: 'formSheet',
+                sheetAllowedDetents: [0.72, 0.95],
+                sheetCornerRadius: 28,
+                sheetGrabberVisible: true,
+                title: 'New annotation config',
+              }}
+            />
+            <Stack.Screen
               name="instances/[id]/projects/[projectId]/sessions/settings"
               options={{
                 presentation: 'formSheet',
