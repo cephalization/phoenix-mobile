@@ -22,6 +22,9 @@ export const Colors = {
     accentSoft: '#E0F2FF',
     brand: '#00ADEE',
     brandSecondary: '#18BAB6',
+    // Darkened brand variants that meet contrast requirements for text on light canvases.
+    brandText: '#007CAD',
+    brandSecondaryText: '#0E7C79',
     success: '#008F5D',
     danger: '#EA3829',
     ripple: 'rgba(0, 0, 0, 0.07)',
@@ -38,6 +41,8 @@ export const Colors = {
     accentSoft: '#123C3A',
     brand: '#00ADEE',
     brandSecondary: '#18BAB6',
+    brandText: '#00ADEE',
+    brandSecondaryText: '#18BAB6',
     success: '#0FB5AE',
     danger: '#F9634C',
     ripple: 'rgba(255, 255, 255, 0.10)',

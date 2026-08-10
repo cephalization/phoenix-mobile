@@ -7,6 +7,7 @@ import type { PhoenixInstance } from '@/types/instance';
 import { revokeAndDeleteCredentials } from '@/features/auth/session';
 import type { ModelSelection } from '@/features/pxi/types';
 import { clearPxiSessions, deletePxiSessionsForInstance } from '@/lib/pxi-session-db';
+import { useSessionReviewSettingsStore } from '@/store/session-review-settings';
 
 type InstanceState = {
   instances: PhoenixInstance[];
@@ -72,17 +73,22 @@ export const useInstanceStore = create<InstanceState>()(
             Object.entries(state.pendingOAuthRegistrations).filter(([baseUrl]) => baseUrl !== instance.baseUrl)
           ),
         }));
+        useSessionReviewSettingsStore.getState().clearInstanceSettings(
+          replacedInstances.filter((item) => item.id !== instance.id).map((item) => item.id)
+        );
       },
       clearInstances: async () => {
         const instances = useInstanceStore.getState().instances;
         await Promise.all(instances.map((instance) => revokeAndDeleteCredentials(instance, true)));
         await clearPxiSessions();
+        useSessionReviewSettingsStore.getState().clearAllSettings();
         set({ activeInstanceId: null, instances: [], pendingOAuthRegistrations: {}, pxiModels: {} });
       },
       removeInstance: async (id) => {
         const instance = useInstanceStore.getState().instances.find((item) => item.id === id);
         if (instance) await revokeAndDeleteCredentials(instance, true);
         await deletePxiSessionsForInstance(id);
+        useSessionReviewSettingsStore.getState().clearInstanceSettings([id]);
         set((state) => {
           const { [id]: _removedModel, ...pxiModels } = state.pxiModels;
           return {

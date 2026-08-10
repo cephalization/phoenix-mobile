@@ -183,6 +183,29 @@ export default function ProjectTracesScreen() {
               )}
             </View>
 
+            <MotionPressable
+              accessibilityHint="Opens remote sessions and the human review queue"
+              accessibilityRole="button"
+              onPress={() => router.push({
+                pathname: '/instances/[id]/projects/[projectId]/sessions',
+                params: { id: instance.id, projectId },
+              })}
+              style={[styles.sessionsEntry, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}>
+              <View style={[styles.sessionsGlyph, { backgroundColor: colors.accentSoft }]}>
+                <SymbolView
+                  name={{ android: 'forum', ios: 'bubble.left.and.bubble.right.fill', web: 'forum' }}
+                  size={22}
+                  tintColor={colors.brand}
+                  weight="semibold"
+                />
+              </View>
+              <View style={styles.sessionsEntryCopy}>
+                <Text style={[styles.sessionsEntryTitle, { color: colors.text }]}>Sessions</Text>
+                <Text style={[styles.sessionsEntryDescription, { color: colors.textSecondary }]}>Browse conversations and work the human review queue.</Text>
+              </View>
+              <Text style={[styles.sessionsEntryAction, { color: colors.text }]}>Open</Text>
+            </MotionPressable>
+
             <TraceRangeSelector
               onChange={(preset) => {
                 if (preset === range.preset) return;
@@ -616,6 +639,12 @@ const styles = StyleSheet.create({
   projectIntro: { gap: 7, paddingBottom: 28 },
   title: { fontFamily: AppFonts.semibold, fontSize: 32, letterSpacing: -1, lineHeight: 38 },
   description: { fontFamily: AppFonts.regular, fontSize: 16, lineHeight: 23, maxWidth: 620 },
+  sessionsEntry: { alignItems: 'center', borderRadius: 18, borderWidth: 1, flexDirection: 'row', gap: 13, marginBottom: 16, minHeight: 88, padding: 14 },
+  sessionsGlyph: { alignItems: 'center', borderRadius: 15, height: 48, justifyContent: 'center', width: 48 },
+  sessionsEntryCopy: { flex: 1, gap: 3 },
+  sessionsEntryTitle: { fontFamily: AppFonts.semibold, fontSize: 17 },
+  sessionsEntryDescription: { fontFamily: AppFonts.regular, fontSize: 13, lineHeight: 18 },
+  sessionsEntryAction: { fontFamily: AppFonts.semibold, fontSize: 13 },
   eyebrow: { fontFamily: AppFonts.semibold, fontSize: 13 },
   rangeDisclosure: { borderRadius: 16, borderWidth: 1, marginBottom: 16, overflow: 'hidden' },
   rangeSummaryRow: { alignItems: 'center', flexDirection: 'row', gap: 12, minHeight: 64, paddingHorizontal: 16, paddingVertical: 10 },

@@ -13,6 +13,28 @@ This is the project's living technical memory. Record discoveries that would oth
 
 ## Active Constraints
 
+### 2026-07-24 - Mobile Session Queues Scan Explicitly And Write Idempotently
+
+**Status:** Decision
+**Area:** sessions, review queue, annotations
+
+Session review settings persist required annotation configuration names per instance and project, while Phoenix remains the source of sessions, configurations, and annotations. The Needs review view classifies only loaded remote sessions and offers an explicit Continue scanning action whenever an older session cursor remains, so a page containing only complete sessions is neither presented as an empty queue nor allowed to trigger an unbounded background crawl.
+
+Review submission sends all required structured annotations in one synchronous request with the deterministic current-viewer identifier, then writes the optional note separately with its own deterministic identifier. Authenticated prefill requires both the deterministic `px-app:<viewer.id>` identifier and matching `user_id`. Anonymous prefill requires the persisted per-instance mobile reviewer identifier and a null `user_id`, because unauthenticated server annotations cannot otherwise be safely attributed to the current device workflow.
+
+**Implication:** Keep queue completion derived only through `classifySessionReview`, preserve the explicit pagination boundary, and keep note failures retryable without duplicating or changing already-saved structured values. Never use local PXI history as a source for these routes.
+
+### 2026-07-24 - Session Review Uses Raw Session IDs And Explicit Root Spans
+
+**Status:** Decision
+**Area:** sessions, annotations, networking
+
+Phoenix 19.6.0 session list and detail responses retain trace membership and aggregate prompt, completion, and total token counts. Session annotation reads are project-scoped, accept raw user-provided `session_id` values rather than session GlobalIDs, support an annotation-name allowlist, and paginate by annotation GlobalID. Session turns have no dedicated REST route: they are reconstructed from explicit `parent_id=null` spans fetched by trace ID in batches of at most 50, then ordered by trace start time and read from OpenInference `input.*` and `output.*` attributes.
+
+The session, annotation, and project annotation-config list implementations use inclusive cursor predicates with overfetch. Session review therefore guards repeated cursors and deduplicates returned entities. Structured completion counts only valid `HUMAN` session annotations for explicitly required config names; the reserved `note` annotation and automated trace or span annotations never complete review.
+
+**Implication:** Pass `SessionData.session_id`, not `SessionData.id`, to annotation reads and writes. Preserve the Phoenix 13.5 session, 13.9 root-span trace-filter, and 17.16 project annotation-config compatibility boundaries, and keep notes on `POST /v1/session_notes` rather than encoding them as review annotations.
+
 ### 2026-07-22 - Trace Details Are Reconstructed From Full Spans
 
 **Status:** Decision
@@ -171,6 +193,17 @@ CSS can color the document but cannot remove normal iOS Safari toolbars. The app
 **Implication:** Test the installed Home Screen experience separately from an ordinary Safari tab. Do not treat browser-controlled bars as React Native layout defects.
 
 ## Resolved Bugs And Reusable Patterns
+
+### 2026-08-08 - Expo UI Sliders Need Explicit Colors On App Surfaces
+
+**Status:** Resolved
+**Area:** Android, Expo UI, session review, theming
+
+The universal `@expo/ui` `Slider` derives its Android track colors from the Host's Material 3 seed theme. The light-scheme inactive track resolves to a near-white surface tone, so an unset slider on the app's white review cards rendered invisibly; the dark scheme happened to be visible. The `@expo/ui/community/slider` wrapper (jetpack-compose Host with `matchContents`) did not render at all inside the session detail's FlatList footer on a physical Pixel.
+
+`ScoreSlider` is now a platform-split component: iOS and web keep the universal Host and Slider (their platform sliders draw visible tracks in both schemes), while `score-slider.android.tsx` hosts the `@expo/ui/jetpack-compose` `Slider` directly and passes explicit `colors` from the app tokens. The light palette also gained `brandText`/`brandSecondaryText` tokens (darkened cyan and seafoam) because raw brand accents fail text contrast on light canvases; dark mode maps them to the original brand values.
+
+**Implication:** When an `@expo/ui`-hosted control must stay visible on app-token surfaces, pass explicit component colors rather than relying on seed-derived theming, and verify the control on a device in both color schemes, including its unset or empty state. Use `brandText`/`brandSecondaryText` for brand-colored text.
 
 ### 2026-07-18 - Android Menu Triggers Consume Nested Presses
 
