@@ -6,7 +6,7 @@ import { buildPxiRequest } from './client';
 vi.mock('ai', () => ({ DefaultChatTransport: class {} }));
 vi.mock('expo/fetch', () => ({ fetch: vi.fn() }));
 vi.mock('expo-crypto', () => ({}));
-vi.mock('@/features/auth/session', () => ({ getAuthorizationHeaders: vi.fn() }));
+vi.mock('@/features/auth/session', () => ({ authenticatedFetch: vi.fn(), getAuthorizationHeaders: vi.fn() }));
 
 describe('contextual PXI actions', () => {
   const params = {
@@ -21,7 +21,7 @@ describe('contextual PXI actions', () => {
     const action = resolvePxiAction(params);
     expect(action).not.toBeNull();
     expect(action!.key).toBe('investigate-session');
-    expect(action!.minimumVersion).toEqual([17, 25, 0]);
+    expect(action!.minimumVersion).toEqual([20, 0, 0]);
     expect(action!.contexts).toEqual([
       { type: 'session', projectNodeId: 'UHJvamVjdDox', sessionNodeId: 'U2Vzc2lvbjox' },
     ]);
@@ -41,10 +41,10 @@ describe('contextual PXI actions', () => {
   it('appends action contexts to the standard chat request contexts', () => {
     const action = resolvePxiAction(params)!;
     const request = buildPxiRequest({
+      chatId: 'action-run-1',
       contexts: action.contexts,
-      messages: [],
+      messages: [{ id: 'message-1', parts: [{ type: 'text', text: action.prompt }], role: 'user' }],
       model: { modelName: 'gpt-5.2', provider: 'OPENAI', providerType: 'builtin' },
-      sessionId: 'action-run-1',
     });
     expect(request.contexts.at(-1)).toEqual({
       type: 'session',

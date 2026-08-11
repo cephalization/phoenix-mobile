@@ -38,7 +38,6 @@ Current product boundaries:
 - Strict TypeScript with React Compiler enabled
 - TanStack Query for Phoenix server state
 - Zustand and AsyncStorage for persisted non-secret client state
-- Expo SQLite on native and IndexedDB on web for local PXI session and message history
 - `@ronradtke/react-native-markdown-display` for streaming-safe native Markdown output
 - Expo SecureStore for future credentials and tokens
 - React Hook Form and Zod for forms and validation
@@ -71,7 +70,7 @@ assets/                   Bundled application assets
 - Keep remote Phoenix data out of Zustand. TanStack Query owns server state.
 - Use Zustand for local preferences and persisted instance metadata.
 - Store secrets only in SecureStore. Never place access tokens or refresh tokens in AsyncStorage or route parameters.
-- Keep PXI transcripts behind the SQLite/IndexedDB repository. Do not duplicate messages or tool payloads into Zustand or AsyncStorage.
+- PXI chats are persisted server-side agent sessions. Treat their transcripts and history as TanStack Query server state; do not persist messages or tool payloads locally.
 - Preserve the `InstanceAuth` discriminated union when adding authentication modes.
 - Construct Phoenix clients with explicit options. Do not rely on Node environment discovery in the mobile runtime.
 - Prefer existing components and tokens before introducing another abstraction or dependency.

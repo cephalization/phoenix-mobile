@@ -1,15 +1,11 @@
 import { SymbolView } from 'expo-symbols';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
-import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
-import Animated, { Extrapolation, interpolate, type SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
 import { ChatBottomSheet } from '@/components/chat/chat-bottom-sheet';
 import { MotionPressable } from '@/components/motion-pressable';
 import { PxiGlyph } from '@/components/pxi-glyph';
 import { AppFonts, useAppColors } from '@/constants/theme';
-import { haptics } from '@/lib/haptics';
-import { confirmAction } from '@/lib/confirm';
-import type { PxiSessionSummary } from '@/lib/pxi-session-db';
+import type { PxiServerSessionSummary } from '@/features/pxi/sessions';
 
 function formatSessionDate(value: string): string {
   const date = new Date(value);
@@ -20,34 +16,27 @@ function formatSessionDate(value: string): string {
     : date.toLocaleDateString([], { day: 'numeric', month: 'short', year: date.getFullYear() === today.getFullYear() ? undefined : 'numeric' });
 }
 
+function sessionTitle(session: PxiServerSessionSummary): string {
+  return session.title.trim() || 'Untitled chat';
+}
+
 export function SessionHistory({
   activeSessionId,
   onClose,
-  onDelete,
   onSelect,
   sessions,
   visible,
 }: {
   activeSessionId: string | null;
   onClose: () => void;
-  onDelete: (sessionId: string) => void;
-  onSelect: (session: PxiSessionSummary) => void;
-  sessions: PxiSessionSummary[];
+  onSelect: (session: PxiServerSessionSummary) => void;
+  sessions: PxiServerSessionSummary[];
   visible: boolean;
 }) {
   const colors = useAppColors();
 
-  const confirmDelete = (session: PxiSessionSummary) => {
-    confirmAction({
-      title: 'Delete chat?',
-      message: 'This PXI conversation will be removed from this device.',
-      confirmLabel: 'Delete',
-      onConfirm: () => onDelete(session.id),
-    });
-  };
-
   return (
-    <ChatBottomSheet onClose={onClose} subtitle="Stored locally on this device" title="Chat history" visible={visible}>
+    <ChatBottomSheet onClose={onClose} subtitle="Stored on this Phoenix instance" title="Chat history" visible={visible}>
       <FlatList
         contentContainerStyle={[styles.listContent, sessions.length === 0 && styles.emptyList]}
         data={sessions}
@@ -63,7 +52,6 @@ export function SessionHistory({
         renderItem={({ item }) => (
           <SessionRow
             active={item.id === activeSessionId}
-            onDelete={() => confirmDelete(item)}
             onSelect={() => onSelect(item)}
             session={item}
           />
@@ -76,77 +64,38 @@ export function SessionHistory({
 
 function SessionRow({
   active,
-  onDelete,
   onSelect,
   session,
 }: {
   active: boolean;
-  onDelete: () => void;
   onSelect: () => void;
-  session: PxiSessionSummary;
+  session: PxiServerSessionSummary;
 }) {
   const colors = useAppColors();
   return (
-    <Swipeable
-      childrenContainerStyle={{ backgroundColor: active ? colors.backgroundSelected : colors.backgroundElement }}
-      friction={1.6}
-      onSwipeableWillOpen={haptics.selection}
-      overshootRight={false}
-      renderRightActions={(progress, _translation, methods) => (
-        <DeleteAction close={methods.close} onDelete={onDelete} progress={progress} />
-      )}
-      rightThreshold={42}>
-      <MotionPressable
-        accessibilityActions={[{ name: 'delete', label: 'Delete chat' }]}
-        accessibilityLabel={`${session.title}, ${formatSessionDate(session.updatedAt)}`}
-        accessibilityRole="button"
-        accessibilityState={{ selected: active }}
-        haptic="selection"
-        onAccessibilityAction={(event) => {
-          if (event.nativeEvent.actionName === 'delete') onDelete();
-        }}
-        onPress={onSelect}
-        scaleTo={0.99}
-        style={styles.sessionButton}>
-        <View style={styles.sessionCopy}>
-          <Text numberOfLines={2} style={[styles.sessionTitle, { color: colors.text }]}>{session.title}</Text>
-          <Text style={[styles.sessionMeta, { color: colors.textSecondary }]}>{formatSessionDate(session.updatedAt)} · {session.messageCount} messages</Text>
-        </View>
-        <View style={styles.accessorySlot}>
-          <SymbolView
-            name={active
-              ? { ios: 'checkmark', android: 'check', web: 'check' }
-              : { ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
-            size={active ? 17 : 15}
-            tintColor={active ? colors.brand : colors.textSecondary}
-            weight="semibold"
-          />
-        </View>
-      </MotionPressable>
-    </Swipeable>
-  );
-}
-
-function DeleteAction({ close, onDelete, progress }: { close: () => void; onDelete: () => void; progress: SharedValue<number> }) {
-  const colors = useAppColors();
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(progress.value, [0, 0.5, 1], [0, 0.6, 1], Extrapolation.CLAMP),
-    transform: [{ translateX: interpolate(progress.value, [0, 1], [28, 0], Extrapolation.CLAMP) }],
-  }));
-  return (
-    <Animated.View style={[styles.deleteAction, { backgroundColor: colors.danger }, animatedStyle]}>
-      <MotionPressable
-        accessibilityLabel="Delete chat"
-        accessibilityRole="button"
-        haptic="warning"
-        onPress={() => {
-          close();
-          onDelete();
-        }}
-        style={styles.deleteActionButton}>
-        <Text style={styles.deleteActionText}>Delete</Text>
-      </MotionPressable>
-    </Animated.View>
+    <MotionPressable
+      accessibilityLabel={`${sessionTitle(session)}, ${formatSessionDate(session.updatedAt)}`}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      haptic="selection"
+      onPress={onSelect}
+      scaleTo={0.99}
+      style={[styles.sessionButton, { backgroundColor: active ? colors.backgroundSelected : colors.backgroundElement }]}>
+      <View style={styles.sessionCopy}>
+        <Text numberOfLines={2} style={[styles.sessionTitle, { color: colors.text }]}>{sessionTitle(session)}</Text>
+        <Text style={[styles.sessionMeta, { color: colors.textSecondary }]}>{formatSessionDate(session.updatedAt)}</Text>
+      </View>
+      <View style={styles.accessorySlot}>
+        <SymbolView
+          name={active
+            ? { ios: 'checkmark', android: 'check', web: 'check' }
+            : { ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
+          size={active ? 17 : 15}
+          tintColor={active ? colors.brand : colors.textSecondary}
+          weight="semibold"
+        />
+      </View>
+    </MotionPressable>
   );
 }
 
@@ -164,7 +113,4 @@ const styles = StyleSheet.create({
   sessionTitle: { fontFamily: AppFonts.medium, fontSize: 15, lineHeight: 20 },
   sessionMeta: { fontFamily: AppFonts.regular, fontSize: 12 },
   accessorySlot: { alignItems: 'center', height: 28, justifyContent: 'center', marginLeft: 10, width: 28 },
-  deleteAction: { width: 86 },
-  deleteActionButton: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingHorizontal: 10 },
-  deleteActionText: { color: '#FFFFFF', fontFamily: AppFonts.semibold, fontSize: 13 },
 });

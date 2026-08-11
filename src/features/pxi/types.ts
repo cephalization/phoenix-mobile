@@ -54,14 +54,20 @@ export type PxiContext =
 
 export type PxiChatRequest = {
   id: string;
-  messages: PxiMessage[];
   trigger: 'submit-message';
-  ingestTraces: true;
+  /** Phoenix Mobile drives the headless server agent, not the browser assistant. */
+  headless: true;
+  recordLocalTraces: true;
   exportRemoteTraces: false;
-  attachUserId: false;
+  instrumentUserId: false;
   editPermission: 'manual';
   contexts: PxiContext[];
+  /** Asserted against the session's persisted model; a mismatch is HTTP 409 `agent_session_model_stale`. */
   model: ModelSelection;
+  /** The turn's new trailing user message. */
+  message: PxiMessage;
+  /** Optimistic-concurrency token: the persisted transcript's tail message id, or null when empty. */
+  lastMessageId: string | null;
 };
 
 export type PxiModelOption = {

@@ -23,8 +23,9 @@ export type ResolvedPxiAction = {
   capability: string;
 };
 
-// PXI's write_span_note tool ships with Phoenix 17.25.0.
-const INVESTIGATE_SESSION_MINIMUM = [17, 25, 0] as const;
+// PXI's write_span_note tool ships with Phoenix 17.25.0, but contextual runs
+// now go through the persisted agent-session chat contract from Phoenix 20.0.0.
+const INVESTIGATE_SESSION_MINIMUM = [20, 0, 0] as const;
 
 function buildInvestigateSessionPrompt(sessionId: string): string {
   return [

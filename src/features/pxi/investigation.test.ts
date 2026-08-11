@@ -16,6 +16,7 @@ vi.mock('@ai-sdk/react', () => ({
 }));
 vi.mock('./client', () => ({
   createPxiId: (prefix: string) => `${prefix}-fixed`,
+  createPxiMessageId: () => 'a2c8e29d-0000-4000-8000-000000000001',
   createPxiTransport: vi.fn(() => ({})),
 }));
 vi.mock('@/lib/haptics', () => ({ haptics: { error: vi.fn(), success: vi.fn() } }));
@@ -64,12 +65,15 @@ describe('pxi investigation runs', () => {
     expect(usePxiInvestigationStore.getState().runs[key].status).toBe('stopped');
     expect(onSettled).not.toHaveBeenCalled();
 
-    usePxiInvestigationStore.getState().markRunning(key);
+    // A retry replaces the stopped run with a fresh one.
+    const onRetrySettled = vi.fn();
+    usePxiInvestigationStore.getState().startRun({ action, instance, key, model, onSettled: onRetrySettled });
+    const retriedChat = usePxiInvestigationStore.getState().runs[key].chat as unknown as MockedChat;
     expect(usePxiInvestigationStore.getState().runs[key].status).toBe('running');
 
-    chat.init.onFinish({ isAbort: false, isDisconnect: false, isError: false });
+    retriedChat.init.onFinish({ isAbort: false, isDisconnect: false, isError: false });
     expect(usePxiInvestigationStore.getState().runs[key].status).toBe('done');
-    expect(onSettled).toHaveBeenCalledTimes(1);
+    expect(onRetrySettled).toHaveBeenCalledTimes(1);
 
     usePxiInvestigationStore.getState().clearRun(key);
     expect(usePxiInvestigationStore.getState().runs[key]).toBeUndefined();

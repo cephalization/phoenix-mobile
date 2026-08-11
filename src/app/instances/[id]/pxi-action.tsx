@@ -211,10 +211,10 @@ function ActionRun({ action, instance, modelLabel, run, runKey }: {
 }) {
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
-  const markRunning = usePxiInvestigationStore((state) => state.markRunning);
+  const clearRun = usePxiInvestigationStore((state) => state.clearRun);
   const listRef = useRef<FlatList<PxiMessage>>(null);
   const followLiveEdge = useRef(true);
-  const { clearError, error, messages, regenerate, status, stop } = useChat<PxiMessage>({
+  const { error, messages, status, stop } = useChat<PxiMessage>({
     chat: run.chat,
     experimental_throttle: 50,
   });
@@ -225,11 +225,11 @@ function ActionRun({ action, instance, modelLabel, run, runKey }: {
   const finished = run.status === 'done';
   const failed = run.status === 'error' || run.status === 'stopped';
 
+  // A failed turn cannot be regenerated once the server has persisted its
+  // prompt, so retrying clears this run and lets the launch effect start a
+  // fresh one on a fresh ephemeral session.
   const retry = () => {
-    clearError();
-    markRunning(runKey);
-    followLiveEdge.current = true;
-    void regenerate();
+    clearRun(runKey);
   };
 
   return (

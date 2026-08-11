@@ -13,6 +13,19 @@ This is the project's living technical memory. Record discoveries that would oth
 
 ## Active Constraints
 
+### 2026-08-11 - PXI Chats Are Persisted Server-Side Agent Sessions
+
+**Status:** Decision
+**Area:** PXI, networking, storage
+
+Phoenix 20.0.0 (`feat!: agent session persistence`, arize-phoenix #14143) replaced the transient `/agents/server/sessions/{id}/chat` route with persisted agent sessions under `/v1/agent_sessions`: create (`POST`, with `title`, `is_ephemeral`, `model`), list and get (viewer-owned, cursor-paged), transcript pages (`/{id}/messages`, oldest first), model changes (`PATCH`), and chat (`POST /{id}/chat`). The chat body no longer carries the message array: it sends `headless: true`, the single trailing user `message`, and `lastMessageId` — the persisted tail this client has rendered — as an optimistic-concurrency token, and field names changed (`recordLocalTraces`/`instrumentUserId`, formerly `ingestTraces`/`attachUserId`). The model field is a precondition against the session's persisted selection. Every conflict is an HTTP 409 whose JSON body carries a `code` (`agent_session_busy`, `agent_session_messages_stale`, `agent_session_model_stale`, …); the mobile client surfaces them by substring match on the error message, mirroring `phoenix-cli`. There is no delete route — sessions expire server-side only when ephemeral.
+
+One contract detail is invisible in the OpenAPI schema and was found live against 20.0.0: transcript message ids must be UUIDs. A turn submitted with any other id format streams normally and then fails server-side persistence — `[DONE]` is followed by an error chunk ("the conversation could not be saved") and the transcript stays empty. Both first-party clients generate UUIDs (`crypto.randomUUID()`), so mobile user messages use `createPxiMessageId()` (expo-crypto `randomUUID`) while non-message identifiers (chat/run ids) keep the readable `createPxiId` format, which the route accepts.
+
+Consequences baked into the app: the local Expo SQLite/IndexedDB transcript store is gone (files, `expo-sqlite` dependency, and its `app.json` plugin entry); chat history and transcripts are TanStack Query server state, with transcript restores using `gcTime: 0` so reopened chats always read the server copy. The chat screen creates the server session lazily on the first send (`createPxiTransport` caches the id and retries a failed creation), pins the active chat while running, PATCHes the session model when a saved model is missing from the catalog, and offers "Reload chat" on 409 conflicts. Contextual investigation runs create `is_ephemeral` sessions (the durable output is span notes) and retry by starting a fresh run, because a turn whose prompt was persisted cannot be regenerated into the same session. `@arizeai/phoenix-client` stays at 6.x: 7.x (which ships the typed agent-session routes) requires AI SDK v7 while the app is on `ai@6`, so the routes are called directly in `src/features/pxi/sessions.ts`; pre-20.0.0 servers answer these paths with the SPA HTML fallback, which the module detects and reports as an upgrade requirement alongside the version gate.
+
+**Implication:** All PXI chat features require Phoenix 20.0.0 (`PXI_AGENT_SESSIONS_MINIMUM_VERSION`); the dev instance at 192.168.1.65:6006 upgraded to 20.0.0 on 2026-08-11 and the create/chat/list/messages routes were verified against it. Always send UUID message ids — a non-UUID id produces a turn that looks successful in the stream but is silently absent after reload. When the app moves to AI SDK v7, upgrade `@arizeai/phoenix-client` and replace the hand-rolled wire types with the generated ones. Do not reintroduce client-side transcript persistence — the server owns chat history now.
+
 ### 2026-08-09 - Contextual PXI Actions Attach Typed Contexts And Write Span Notes
 
 **Status:** Decision

@@ -1,18 +1,28 @@
 import { DefaultChatTransport } from 'ai';
+import * as Crypto from 'expo-crypto';
 import { fetch as expoFetch } from 'expo/fetch';
 
 import { assertBearerRequestTarget } from '@/features/auth/oauth';
 import { getAuthorizationHeaders } from '@/features/auth/session';
 import type { PhoenixInstance } from '@/types/instance';
 
+import { createAgentSession, isAgentSessionConflict, isAgentSessionStaleError } from './sessions';
 import type { ModelSelection, PxiChatRequest, PxiContext, PxiMessage } from './types';
 
 export function createPxiId(prefix = 'pxi'): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function buildServerAgentChatUrl(baseUrl: string, sessionId: string): string {
-  return `${baseUrl.replace(/\/+$/, '')}/agents/server/sessions/${encodeURIComponent(sessionId)}/chat`;
+/**
+ * Transcript message ids must be UUIDs: Phoenix streams a turn with any id but
+ * fails to persist it otherwise (observed live against 20.0.0).
+ */
+export function createPxiMessageId(): string {
+  return Crypto.randomUUID();
+}
+
+export function buildAgentSessionChatUrl(baseUrl: string, agentSessionId: string): string {
+  return `${baseUrl.replace(/\/+$/, '')}/v1/agent_sessions/${encodeURIComponent(agentSessionId)}/chat`;
 }
 
 export function toLocalISOWithOffset(date = new Date()): string {
@@ -40,26 +50,35 @@ export function buildPxiContexts(extraContexts: PxiContext[] = []): PxiContext[]
 }
 
 export function buildPxiRequest({
+  chatId,
   contexts = [],
   messages,
   model,
-  sessionId,
 }: {
+  chatId: string;
   contexts?: PxiContext[];
   messages: PxiMessage[];
   model: ModelSelection;
-  sessionId: string;
 }): PxiChatRequest {
+  const message = messages.at(-1);
+  if (!message || message.role !== 'user') {
+    throw new Error('A PXI chat send requires a trailing user message.');
+  }
   return {
-    id: sessionId,
-    messages,
+    id: chatId,
     trigger: 'submit-message',
-    ingestTraces: true,
+    headless: true,
+    recordLocalTraces: true,
     exportRemoteTraces: false,
-    attachUserId: false,
+    instrumentUserId: false,
     editPermission: 'manual',
     contexts: buildPxiContexts(contexts),
     model,
+    message,
+    // The message before the trailing user message is the persisted tail this
+    // client has rendered; the server rejects the send with
+    // `agent_session_messages_stale` when another client appended since.
+    lastMessageId: messages.at(-2)?.id ?? null,
   };
 }
 
@@ -68,15 +87,23 @@ export function buildInstanceHeaders(instance: PhoenixInstance): Promise<Record<
 }
 
 export function createPxiTransport({
+  agentSessionId,
+  chatId,
   contexts,
+  ephemeral = false,
   instance,
   model,
-  sessionId,
+  onAgentSessionCreated,
 }: {
+  /** Existing server session to continue; omitted for a new chat, which is created on the first send. */
+  agentSessionId?: string;
+  chatId: string;
   contexts?: PxiContext[];
+  /** Whether a lazily created session should expire after inactivity (contextual action runs). */
+  ephemeral?: boolean;
   instance: PhoenixInstance;
   model: ModelSelection;
-  sessionId: string;
+  onAgentSessionCreated?: (agentSessionId: string) => void;
 }) {
   let sentAccessToken: string | undefined;
   const streamFetch: typeof globalThis.fetch = async (input, init) => {
@@ -97,16 +124,37 @@ export function createPxiTransport({
     }
     return response;
   };
+  // The server session is created lazily on the first send and reused for the
+  // rest of the chat. A failed creation clears the cached promise so a retry
+  // can create it instead of being stuck on the rejection.
+  let agentSessionIdPromise: Promise<string> | null = agentSessionId
+    ? Promise.resolve(agentSessionId)
+    : null;
+  const resolveAgentSessionId = (): Promise<string> => {
+    agentSessionIdPromise ??= createAgentSession(instance, { ephemeral, model })
+      .then((createdId) => {
+        onAgentSessionCreated?.(createdId);
+        return createdId;
+      })
+      .catch((error: unknown) => {
+        agentSessionIdPromise = null;
+        throw error;
+      });
+    return agentSessionIdPromise;
+  };
   return new DefaultChatTransport<PxiMessage>({
-    api: buildServerAgentChatUrl(instance.baseUrl, sessionId),
+    // Placeholder only: prepareSendMessagesRequest overrides the URL with the
+    // resolved server session id on every send.
+    api: buildAgentSessionChatUrl(instance.baseUrl, agentSessionId ?? 'pending'),
     headers: async () => {
       const headers = await buildInstanceHeaders(instance);
       sentAccessToken = headers.Authorization?.replace(/^Bearer\s+/i, '');
       return headers;
     },
     fetch: streamFetch,
-    prepareSendMessagesRequest: ({ messages }) => ({
-      body: buildPxiRequest({ contexts, messages, model, sessionId }),
+    prepareSendMessagesRequest: async ({ messages }) => ({
+      api: buildAgentSessionChatUrl(instance.baseUrl, await resolveAgentSessionId()),
+      body: buildPxiRequest({ chatId, contexts, messages, model }),
     }),
   });
 }
@@ -115,6 +163,12 @@ export function formatPxiError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   const normalized = message.toLowerCase();
 
+  if (isAgentSessionConflict(error, 'agent_session_busy')) {
+    return 'Another PXI client is answering in this chat. Wait for it to finish, then reload.';
+  }
+  if (isAgentSessionStaleError(error)) {
+    return 'This chat changed on the server. Reload it to continue.';
+  }
   if (normalized.includes('abort')) return 'Response stopped.';
   if (normalized.includes('401') || normalized.includes('403')) {
     return 'Phoenix rejected this connection. Check the instance authentication.';

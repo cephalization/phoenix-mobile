@@ -2,7 +2,7 @@ import { useChat } from '@ai-sdk/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
@@ -25,24 +25,31 @@ import { SessionHistory } from '@/components/chat/session-history';
 import { MotionPressable } from '@/components/motion-pressable';
 import { PxiGlyph } from '@/components/pxi-glyph';
 import { AppFonts, MaxContentWidth, useAppColors } from '@/constants/theme';
-import { createPxiId, createPxiTransport, formatPxiError } from '@/features/pxi/client';
+import { parseServerVersion } from '@/features/pxi/actions';
+import { createPxiId, createPxiMessageId, createPxiTransport, formatPxiError } from '@/features/pxi/client';
 import { finalizeInterruptedMessages } from '@/features/pxi/message-state';
 import { isSameModel, usePxiModelCatalog } from '@/features/pxi/model-catalog';
-import type { ModelSelection, PxiMessage } from '@/features/pxi/types';
-import { haptics } from '@/lib/haptics';
 import {
-  deletePxiSession,
-  getPxiHistoryGeneration,
-  getPxiSession,
-  listPxiSessions,
-  PxiSessionConflictError,
-  PxiSessionDeletedError,
-  savePxiSession,
-  type PxiSessionSummary,
-  type StoredPxiSession,
-} from '@/lib/pxi-session-db';
+  getAgentSession,
+  isAgentSessionConflict,
+  isAgentSessionStaleError,
+  listAgentSessions,
+  patchAgentSessionModel,
+  PXI_AGENT_SESSIONS_MINIMUM_VERSION,
+  type PxiServerSessionSummary,
+} from '@/features/pxi/sessions';
+import type { ModelSelection, PxiMessage } from '@/features/pxi/types';
+import { compareVersions } from '@/features/session-review/api';
+import { phoenixQueryKeys, usePhoenixVersion } from '@/hooks/use-phoenix-data';
+import { haptics } from '@/lib/haptics';
 import { useInstanceStore } from '@/store/instances';
 import type { PhoenixInstance } from '@/types/instance';
+
+const agentSessionKeys = {
+  list: (instanceId: string) => [...phoenixQueryKeys.instance(instanceId), 'agent-sessions'] as const,
+  detail: (instanceId: string, sessionId: string) =>
+    [...phoenixQueryKeys.instance(instanceId), 'agent-session', sessionId] as const,
+};
 
 export default function PxiChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -53,21 +60,23 @@ export default function PxiChatScreen() {
   const setPxiModel = useInstanceStore((state) => state.setPxiModel);
   const catalog = usePxiModelCatalog(instance);
   const queryClient = useQueryClient();
+  const version = usePhoenixVersion(instance);
+  const serverVersion = parseServerVersion(version.data);
+  const versionSupported = version.data === undefined
+    ? null
+    : serverVersion !== null && compareVersions(serverVersion, PXI_AGENT_SESSIONS_MINIMUM_VERSION) >= 0;
   const sessions = useQuery({
-    queryKey: ['pxi', 'sessions', instance?.id ?? 'missing'],
-    queryFn: () => listPxiSessions(instance?.id ?? ''),
-    enabled: Boolean(instance),
+    queryKey: agentSessionKeys.list(instance?.id ?? 'missing'),
+    queryFn: async () => {
+      if (!instance) throw new Error('Phoenix instance not found.');
+      // Ephemeral sessions are contextual action runs; the chat history is the
+      // durable conversations only.
+      return (await listAgentSessions(instance)).filter((session) => !session.isEphemeral);
+    },
+    enabled: Boolean(instance) && versionSupported === true,
   });
-  const historyGeneration = useQuery({
-    queryKey: ['pxi', 'history-generation'],
-    queryFn: getPxiHistoryGeneration,
-  });
-  const [newSessionId] = useState(() => createPxiId('session'));
-  const [sessionChoice, setSessionChoice] = useState<{
-    generation: number;
-    id: string;
-    restore: boolean;
-  } | null>(null);
+  const [newSessionId] = useState(() => createPxiId('chat'));
+  const [sessionChoice, setSessionChoice] = useState<{ id: string; restore: boolean } | null>(null);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [historyVisible, setHistoryVisible] = useState(false);
   const [replacementApprovedSessionId, setReplacementApprovedSessionId] = useState<string | null>(null);
@@ -75,23 +84,28 @@ export default function PxiChatScreen() {
   const latestSession = sessions.data?.[0];
   const sessionId = sessionChoice?.id ?? (sessions.isSuccess ? (latestSession?.id ?? newSessionId) : null);
   const shouldRestoreSession = sessionChoice?.restore ?? Boolean(latestSession);
-  const activeSummary = sessions.data?.find((session) => session.id === sessionId);
-  const sessionGeneration = sessionChoice?.generation ?? activeSummary?.generation ?? historyGeneration.data ?? 0;
   const savedSession = useQuery({
-    queryKey: ['pxi', 'session', sessionId ?? 'new'],
-    queryFn: () => getPxiSession(sessionId ?? ''),
-    enabled: Boolean(sessionId && shouldRestoreSession),
+    queryKey: agentSessionKeys.detail(instance?.id ?? 'missing', sessionId ?? 'new'),
+    queryFn: async () => {
+      if (!instance) throw new Error('Phoenix instance not found.');
+      return getAgentSession(instance, sessionId ?? '');
+    },
+    enabled: Boolean(instance && sessionId && shouldRestoreSession),
+    // The server owns the transcript; every restore reads it fresh instead of
+    // rendering a cached copy another client may have advanced.
+    gcTime: 0,
   });
 
+  const savedModel = shouldRestoreSession ? savedSession.data?.model : undefined;
   const savedModelOption = catalog.data?.options.find(
-    (option) => activeSummary && isSameModel(option.selection, activeSummary.model)
+    (option) => savedModel && isSameModel(option.selection, savedModel)
   );
   const preferredOption = catalog.data?.options.find(
     (option) => preferredModel && isSameModel(option.selection, preferredModel)
   );
   const selectedModel = savedModelOption?.selection ?? preferredOption?.selection ?? catalog.data?.defaultSelection ?? null;
   const requiresModelReplacement = Boolean(
-    activeSummary && !savedModelOption && replacementApprovedSessionId !== sessionId
+    savedModel && !savedModelOption && replacementApprovedSessionId !== sessionId
   );
 
   useEffect(() => {
@@ -115,48 +129,41 @@ export default function PxiChatScreen() {
   const selectModel = (model: ModelSelection) => {
     setPxiModel(instance.id, model);
     setPickerVisible(false);
-    setSessionChoice({ generation: historyGeneration.data ?? 0, id: createPxiId('session'), restore: false });
+    setSessionChoice({ id: createPxiId('chat'), restore: false });
     setReplacementApprovedSessionId(null);
   };
 
   const startNewChat = () => {
-    setSessionChoice({ generation: historyGeneration.data ?? 0, id: createPxiId('session'), restore: false });
+    setSessionChoice({ id: createPxiId('chat'), restore: false });
     setReplacementApprovedSessionId(null);
     setHistoryVisible(false);
   };
 
-  const selectSession = (session: PxiSessionSummary) => {
-    setSessionChoice({ generation: session.generation, id: session.id, restore: true });
+  const selectSession = (session: PxiServerSessionSummary) => {
+    setSessionChoice({ id: session.id, restore: true });
     setReplacementApprovedSessionId(null);
     setHistoryVisible(false);
   };
 
-  const removeSession = async (removedSessionId: string) => {
+  const reopenSession = async (serverSessionId: string) => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: agentSessionKeys.detail(instance.id, serverSessionId) }),
+      queryClient.invalidateQueries({ queryKey: agentSessionKeys.list(instance.id) }),
+    ]);
+    setSessionChoice({ id: serverSessionId, restore: true });
+    setSessionRuntimeVersion((runtimeVersion) => runtimeVersion + 1);
+  };
+
+  const approveModelReplacement = async () => {
+    if (!sessionId || !selectedModel) return;
     try {
-      await deletePxiSession(removedSessionId);
-      queryClient.removeQueries({ queryKey: ['pxi', 'session', removedSessionId] });
-      await queryClient.invalidateQueries({ queryKey: ['pxi', 'sessions', instance.id] });
-      if (removedSessionId === sessionId) startNewChat();
+      await patchAgentSessionModel(instance, sessionId, selectedModel);
+      setReplacementApprovedSessionId(sessionId);
+      await queryClient.invalidateQueries({ queryKey: agentSessionKeys.detail(instance.id, sessionId) });
       haptics.success();
     } catch {
       haptics.error();
     }
-  };
-
-  const reopenSession = async () => {
-    if (!sessionId) return;
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['pxi', 'session', sessionId] }),
-      queryClient.invalidateQueries({ queryKey: ['pxi', 'sessions', instance.id] }),
-    ]);
-    const summaries = queryClient.getQueryData<PxiSessionSummary[]>(['pxi', 'sessions', instance.id]);
-    const summary = summaries?.find((candidate) => candidate.id === sessionId);
-    if (!summary) {
-      startNewChat();
-      return;
-    }
-    setSessionChoice({ generation: summary.generation, id: summary.id, restore: true });
-    setSessionRuntimeVersion((version) => version + 1);
   };
 
   const closeChat = () => {
@@ -185,50 +192,53 @@ export default function PxiChatScreen() {
         </MotionPressable>
       </View>
 
-      {sessions.isPending || historyGeneration.isPending || sessionId === null ? (
-        <View style={styles.center}><ActivityIndicator color={colors.brand} /><Text style={[styles.stateCopy, { color: colors.textSecondary }]}>Opening chat history…</Text></View>
+      {version.isPending ? (
+        <View style={styles.center}><ActivityIndicator color={colors.brand} /><Text style={[styles.stateCopy, { color: colors.textSecondary }]}>Checking this server…</Text></View>
+      ) : version.isError ? (
+        <StateMessage title="Couldn’t check this server" copy={version.error.message} action="Try again" onAction={() => version.refetch()} />
+      ) : versionSupported === false ? (
+        <StateMessage
+          title="Phoenix upgrade required"
+          copy={`PXI chat requires Phoenix ${PXI_AGENT_SESSIONS_MINIMUM_VERSION.join('.')} or newer; this server is ${version.data}.`}
+          action="Check again"
+          onAction={() => version.refetch()}
+        />
+      ) : sessions.isPending || sessionId === null ? (
+        <View style={styles.center}><ActivityIndicator color={colors.brand} /><Text style={[styles.stateCopy, { color: colors.textSecondary }]}>Opening chats…</Text></View>
       ) : sessions.isError ? (
-        <StateMessage title="Couldn’t load chat history" copy="Phoenix Mobile could not open its local chat database." action="Try again" onAction={() => sessions.refetch()} />
-      ) : historyGeneration.isError ? (
-        <StateMessage title="Couldn’t open local storage" copy="Phoenix Mobile could not prepare its chat database." action="Try again" onAction={() => historyGeneration.refetch()} />
+        <StateMessage title="Couldn’t load chats" copy={formatPxiError(sessions.error)} action="Try again" onAction={() => sessions.refetch()} />
       ) : catalog.isPending ? (
         <View style={styles.center}><ActivityIndicator color={colors.brand} /><Text style={[styles.stateCopy, { color: colors.textSecondary }]}>Checking available models…</Text></View>
       ) : catalog.isError ? (
         <StateMessage title="PXI isn’t ready" copy={formatPxiError(catalog.error)} action="Try again" onAction={() => catalog.refetch()} />
+      ) : shouldRestoreSession && savedSession.isPending ? (
+        <View style={styles.center}><ActivityIndicator color={colors.brand} /><Text style={[styles.stateCopy, { color: colors.textSecondary }]}>Restoring chat…</Text></View>
+      ) : savedSession.isError ? (
+        <StateMessage title="Couldn’t restore this chat" copy={formatPxiError(savedSession.error)} action="Start new chat" onAction={startNewChat} />
       ) : !selectedModel || catalog.data.options.length === 0 ? (
         <StateMessage title="No recommended model is configured" copy="Configure a Phoenix-recommended agent model, then try again." action="Check again" onAction={() => catalog.refetch()} />
       ) : requiresModelReplacement ? (
         <StateMessage
           title="Saved model is unavailable"
-          copy={`This chat used ${activeSummary?.model.modelName}. Continuing will switch it to ${selectedModel.modelName}.`}
+          copy={`This chat used ${savedModel?.modelName}. Continuing will switch it to ${selectedModel.modelName}.`}
           action="Use available model"
-          onAction={() => setReplacementApprovedSessionId(sessionId)}
+          onAction={() => void approveModelReplacement()}
         />
-      ) : shouldRestoreSession && savedSession.isPending ? (
-        <View style={styles.center}><ActivityIndicator color={colors.brand} /><Text style={[styles.stateCopy, { color: colors.textSecondary }]}>Restoring chat…</Text></View>
-      ) : savedSession.isError ? (
-        <StateMessage title="Couldn’t restore this chat" copy="The saved conversation could not be read from local storage." action="Start new chat" onAction={startNewChat} />
       ) : (
         <ChatSession
-          generation={sessionGeneration}
-          initialMessages={finalizeInterruptedMessages(savedSession.data?.messages ?? [])}
-          initialRevision={savedSession.data?.revision ?? activeSummary?.revision ?? 0}
+          agentSessionId={shouldRestoreSession ? sessionId : undefined}
+          initialMessages={finalizeInterruptedMessages(shouldRestoreSession ? (savedSession.data?.messages ?? []) : [])}
           instance={instance}
-          key={`${sessionId}:${sessionGeneration}:${modelIdentity(selectedModel)}:${sessionRuntimeVersion}`}
+          key={`${sessionId}:${modelIdentity(selectedModel)}:${sessionRuntimeVersion}`}
           model={selectedModel}
           modelLabel={catalog.data.options.find((option) => isSameModel(option.selection, selectedModel))?.label ?? selectedModel.modelName}
           onActivateSession={() => {
             if (!sessionChoice) {
-              setSessionChoice({
-                generation: sessionGeneration,
-                id: sessionId,
-                restore: Boolean(activeSummary),
-              });
+              setSessionChoice({ id: sessionId, restore: shouldRestoreSession });
             }
           }}
           onChooseModel={() => setPickerVisible(true)}
-          onNewChat={startNewChat}
-          onReopenSession={() => void reopenSession()}
+          onReload={(serverSessionId) => void reopenSession(serverSessionId)}
           sessionId={sessionId}
         />
       )}
@@ -245,7 +255,6 @@ export default function PxiChatScreen() {
       <SessionHistory
         activeSessionId={sessionId}
         onClose={() => setHistoryVisible(false)}
-        onDelete={(removedSessionId) => void removeSession(removedSessionId)}
         onSelect={selectSession}
         sessions={sessions.data ?? []}
         visible={historyVisible}
@@ -255,28 +264,25 @@ export default function PxiChatScreen() {
 }
 
 function ChatSession({
-  generation,
+  agentSessionId,
   initialMessages,
-  initialRevision,
   instance,
   model,
   modelLabel,
   onActivateSession,
   onChooseModel,
-  onNewChat,
-  onReopenSession,
+  onReload,
   sessionId,
 }: {
-  generation: number;
+  /** Persisted server session this chat continues; undefined until the first send creates one. */
+  agentSessionId: string | undefined;
   initialMessages: PxiMessage[];
-  initialRevision: number;
   instance: PhoenixInstance;
   model: ModelSelection;
   modelLabel: string;
   onActivateSession: () => void;
   onChooseModel: () => void;
-  onNewChat: () => void;
-  onReopenSession: () => void;
+  onReload: (serverSessionId: string) => void;
   sessionId: string;
 }) {
   const colors = useAppColors();
@@ -290,102 +296,45 @@ function ChatSession({
   const [showJump, setShowJump] = useState(false);
   const [input, setInput] = useState('');
   const [wasStopped, setWasStopped] = useState(false);
-  const [isPersistingSubmission, setIsPersistingSubmission] = useState(false);
-  const [persistenceIssue, setPersistenceIssue] = useState<'conflict' | 'deleted' | 'error' | null>(null);
-  const persistedMessages = useRef(JSON.stringify(initialMessages));
-  const revision = useRef(initialRevision);
-  const persistenceQueue = useRef<Promise<void>>(Promise.resolve());
-  const persistenceSucceeded = useRef(true);
-  const lastStreamSnapshotAt = useRef(0);
-  const mounted = useRef(true);
   const submitting = useRef(false);
-  const persistMessages = useCallback(async (nextMessages: PxiMessage[]): Promise<boolean> => {
-    if (nextMessages.length === 0) return true;
-    const finalizedMessages = finalizeInterruptedMessages(nextMessages);
-    const serialized = JSON.stringify(finalizedMessages);
-    if (serialized === persistedMessages.current) {
-      await persistenceQueue.current;
-      return persistenceSucceeded.current;
-    }
-    persistedMessages.current = serialized;
-    const save = persistenceQueue.current.then(async () => {
-      const saved = await savePxiSession({
-        generation,
-        id: sessionId,
-        instanceId: instance.id,
-        messages: finalizedMessages,
-        model,
-        revision: revision.current,
-      });
-      if (!saved) return;
-      revision.current = saved.revision;
-      persistenceSucceeded.current = true;
-      if (mounted.current) setPersistenceIssue(null);
-      queryClient.setQueryData<StoredPxiSession>(['pxi', 'session', sessionId], saved);
-      queryClient.setQueryData<PxiSessionSummary[]>(['pxi', 'sessions', instance.id], (current = []) => {
-        const summary: PxiSessionSummary = {
-          id: saved.id,
-          instanceId: saved.instanceId,
-          model: saved.model,
-          title: saved.title,
-          messageCount: saved.messageCount,
-          generation: saved.generation,
-          revision: saved.revision,
-          createdAt: saved.createdAt,
-          updatedAt: saved.updatedAt,
-        };
-        return [summary, ...current.filter((candidate) => candidate.id !== saved.id)];
-      });
-    });
-    persistenceQueue.current = save.catch(() => undefined);
-    try {
-      await save;
-    } catch (error) {
-      persistenceSucceeded.current = false;
-      persistedMessages.current = '';
-      if (mounted.current) {
-        setPersistenceIssue(
-          error instanceof PxiSessionConflictError
-            ? 'conflict'
-            : error instanceof PxiSessionDeletedError
-              ? 'deleted'
-              : 'error'
-        );
-      }
-      return false;
-    }
-    return true;
-  }, [generation, instance.id, model, queryClient, sessionId]);
-  const [transport] = useState(() => createPxiTransport({ instance, model, sessionId }));
+  const [serverSessionId, setServerSessionId] = useState(agentSessionId ?? null);
+  const [transport] = useState(() => createPxiTransport({
+    agentSessionId,
+    chatId: sessionId,
+    instance,
+    model,
+    onAgentSessionCreated: setServerSessionId,
+  }));
   const { clearError, error, messages, regenerate, sendMessage, status, stop } = useChat<PxiMessage>({
     id: sessionId,
     messages: initialMessages,
     transport,
     experimental_throttle: 50,
     onError: () => haptics.error(),
-    onFinish: ({ isAbort, isDisconnect, isError, messages: finalMessages }) => {
-      void persistMessages(finalMessages);
+    onFinish: ({ isAbort, isDisconnect, isError }) => {
+      // The server persisted the turn and generates the session title; refresh
+      // the history so both appear.
+      void queryClient.invalidateQueries({ queryKey: agentSessionKeys.list(instance.id) });
       if (!isAbort && !isDisconnect && !isError) haptics.success();
     },
   });
   const isStreaming = status === 'submitted' || status === 'streaming';
   const isAwaitingAssistant = status === 'submitted'
     || (status === 'streaming' && messages.at(-1)?.role === 'user');
-  const persistenceBlocked = persistenceIssue === 'conflict' || persistenceIssue === 'deleted';
-  const sendDisabled = persistenceBlocked || isPersistingSubmission;
+  const conflictError = Boolean(
+    error && (isAgentSessionConflict(error, 'agent_session_busy') || isAgentSessionStaleError(error))
+  );
   const stopOnUnmount = useEffectEvent(() => {
-    void persistMessages(messages);
     void stop();
   });
   const handleAppStateChange = useEffectEvent((nextState: string) => {
     if (nextState === 'background' && isStreaming) {
       setWasStopped(true);
-      void persistMessages(messages).finally(() => void stop());
+      void stop();
     }
   });
 
   useEffect(() => () => {
-    mounted.current = false;
     stopOnUnmount();
   }, []);
 
@@ -393,20 +342,6 @@ function ChatSession({
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription.remove();
   }, []);
-
-  useEffect(() => {
-    if (status !== 'streaming' || messages.length === 0) return;
-    const delay = Math.max(0, 1_000 - (Date.now() - lastStreamSnapshotAt.current));
-    const timeout = setTimeout(() => {
-      lastStreamSnapshotAt.current = Date.now();
-      void persistMessages(messages);
-    }, delay);
-    return () => clearTimeout(timeout);
-  }, [messages, persistMessages, status]);
-
-  useEffect(() => {
-    if (persistenceIssue === 'conflict' || persistenceIssue === 'deleted') void stop();
-  }, [persistenceIssue, stop]);
 
   const scrollToLatest = () => {
     readerIsInteracting.current = false;
@@ -436,39 +371,25 @@ function ChatSession({
 
   const submit = async () => {
     const text = input.trim();
-    if (!text || isStreaming || persistenceBlocked || submitting.current) return;
+    if (!text || isStreaming || submitting.current) return;
     submitting.current = true;
-    setIsPersistingSubmission(true);
     onActivateSession();
-    const userMessage: PxiMessage = {
-      id: createPxiId('message'),
-      role: 'user',
-      parts: [{ type: 'text', text }],
-    };
-    const saved = await persistMessages([...messages, userMessage]);
-    if (!saved) {
-      submitting.current = false;
-      if (mounted.current) setIsPersistingSubmission(false);
-      return;
-    }
-    if (!mounted.current) {
-      submitting.current = false;
-      return;
-    }
     setInput('');
     setWasStopped(false);
     readerIsInteracting.current = false;
     followLiveEdge.current = true;
     setShowJump(false);
     haptics.light();
-    setIsPersistingSubmission(false);
     try {
-      await sendMessage(userMessage);
+      await sendMessage({
+        id: createPxiMessageId(),
+        role: 'user',
+        parts: [{ type: 'text', text }],
+      });
     } catch {
       // useChat exposes the actionable error state.
     } finally {
       submitting.current = false;
-      if (mounted.current) setIsPersistingSubmission(false);
     }
   };
 
@@ -479,16 +400,10 @@ function ChatSession({
     void regenerate();
   };
 
-  const retryPersistence = () => {
-    setPersistenceIssue(null);
-    void persistMessages(messages);
+  const reload = () => {
+    if (serverSessionId) onReload(serverSessionId);
+    else retry();
   };
-
-  const persistenceAction = persistenceIssue === 'conflict'
-    ? { label: 'Reopen', run: onReopenSession }
-    : persistenceIssue === 'deleted'
-      ? { label: 'New chat', run: onNewChat }
-      : { label: 'Retry save', run: retryPersistence };
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.chat}>
@@ -566,21 +481,13 @@ function ChatSession({
         </MotionPressable>
       )}
 
-      {(error || wasStopped || persistenceIssue) && (
+      {(error || wasStopped) && (
         <View style={[styles.errorBar, { backgroundColor: colors.backgroundSelected, borderColor: colors.border }]}>
           <Text style={[styles.errorText, { color: colors.text }]}>
-            {error
-              ? formatPxiError(error)
-              : wasStopped
-                ? 'Response stopped before it finished.'
-                : persistenceIssue === 'conflict'
-                  ? 'This chat changed in another window. Reopen it before continuing.'
-                  : persistenceIssue === 'deleted'
-                    ? 'This chat was deleted and cannot be saved again.'
-                    : 'This chat could not be saved locally.'}
+            {error ? formatPxiError(error) : 'Response stopped before it finished.'}
           </Text>
-          {persistenceIssue
-            ? <MotionPressable accessibilityRole="button" haptic="selection" onPress={persistenceAction.run}><Text style={[styles.retryText, { color: colors.brand }]}>{persistenceAction.label}</Text></MotionPressable>
+          {conflictError
+            ? <MotionPressable accessibilityRole="button" haptic="selection" onPress={reload}><Text style={[styles.retryText, { color: colors.brand }]}>Reload chat</Text></MotionPressable>
             : <MotionPressable accessibilityRole="button" haptic="selection" onPress={retry}><Text style={[styles.retryText, { color: colors.brand }]}>Retry</Text></MotionPressable>}
         </View>
       )}
@@ -589,7 +496,7 @@ function ChatSession({
         <View style={[styles.composer, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}>
           <TextInput
             accessibilityLabel="Message PXI"
-            editable={!isStreaming && !sendDisabled}
+            editable={!isStreaming}
             maxLength={12_000}
             multiline
             onChangeText={setInput}
@@ -599,16 +506,16 @@ function ChatSession({
             value={input}
           />
           <MotionPressable
-            accessibilityLabel={isStreaming ? 'Stop response' : isPersistingSubmission ? 'Saving message' : 'Send message'}
+            accessibilityLabel={isStreaming ? 'Stop response' : 'Send message'}
             accessibilityRole="button"
-            disabled={sendDisabled || (!isStreaming && input.trim().length === 0)}
+            disabled={!isStreaming && input.trim().length === 0}
             haptic={isStreaming ? 'selection' : 'none'}
             onPress={() => isStreaming ? void stop().then(() => setWasStopped(true)) : void submit()}
             scaleTo={0.9}
             style={[
               styles.sendButton,
               { backgroundColor: colors.accent },
-              (sendDisabled || (!isStreaming && input.trim().length === 0)) && styles.disabled,
+              !isStreaming && input.trim().length === 0 && styles.disabled,
             ]}>
             {isStreaming ? <View style={[styles.stopIcon, { backgroundColor: colors.accentForeground }]} /> : <Text style={[styles.sendIcon, { color: colors.accentForeground }]}>↑</Text>}
           </MotionPressable>
