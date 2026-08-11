@@ -7,9 +7,10 @@ import type { ModelSelection, PxiMessage } from './types';
  * PXI conversations are persisted server-side as agent sessions since Phoenix
  * 20.0.0 (`/v1/agent_sessions`). The server owns the transcript, titles, and
  * model selection; this module is the mobile client for those routes. The
- * installed `@arizeai/phoenix-client` (6.x) predates the contract and its 7.x
- * release requires AI SDK v7, so the routes are called directly with the wire
- * types declared here.
+ * installed `@arizeai/phoenix-client` (7.4.0) was published hours before the
+ * agent-session contract merged and lacks its generated types, so the routes
+ * are called directly with the wire types declared here; swap to the generated
+ * schemas once a newer client release ships them.
  */
 export const PXI_AGENT_SESSIONS_MINIMUM_VERSION = [20, 0, 0] as const;
 

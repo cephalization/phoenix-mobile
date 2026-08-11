@@ -1,3 +1,4 @@
+import type { Types } from '@arizeai/phoenix-client';
 import type { UIMessage } from 'ai';
 
 export type AssistantMessageMetadata = {
@@ -17,21 +18,7 @@ export type AssistantMessageMetadata = {
 
 export type PxiMessage = UIMessage<AssistantMessageMetadata>;
 
-export type BuiltInProvider =
-  | 'ANTHROPIC'
-  | 'AWS'
-  | 'AZURE_OPENAI'
-  | 'CEREBRAS'
-  | 'DEEPSEEK'
-  | 'FIREWORKS'
-  | 'GOOGLE'
-  | 'GROQ'
-  | 'MOONSHOT'
-  | 'OLLAMA'
-  | 'OPENAI'
-  | 'PERPLEXITY'
-  | 'TOGETHER'
-  | 'XAI';
+export type BuiltInProvider = Types['V1']['components']['schemas']['ModelProvider'];
 
 export type ModelSelection =
   | {
