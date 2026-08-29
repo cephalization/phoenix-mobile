@@ -251,6 +251,17 @@ The universal `@expo/ui` `Slider` derives its Android track colors from the Host
 
 **Implication:** When an `@expo/ui`-hosted control must stay visible on app-token surfaces, pass explicit component colors rather than relying on seed-derived theming, and verify the control on a device in both color schemes, including its unset or empty state. Use `brandText`/`brandSecondaryText` for brand-colored text.
 
+### 2026-07-18 - Android Streaming Follow Needs Exact Content Offsets
+
+**Status:** Resolved
+**Area:** Android, PXI, scrolling, Fabric
+
+`FlatList.scrollToEnd()` calculates its target from JavaScript-side cell measurements. During rapid Android Fabric updates, a streaming Markdown row's cached measurement can lag behind the content height, so repeated follow commands target an old end. `maintainVisibleContentPosition` further preserves the previous viewport and is intended for prepended content, not bottom-follow behavior.
+
+PXI now uses the exact height from `onContentSizeChange` with `scrollToOffset`; the native scroll view clamps that oversized coordinate to its true maximum. The transcript no longer enables `maintainVisibleContentPosition` because it appends messages and does not prepend history.
+
+**Implication:** Follow variable-height streaming content with authoritative content-size offsets rather than `scrollToEnd()` cell metrics. Reintroduce visible-position maintenance only if history pagination prepends rows, and isolate it from active streaming.
+
 ### 2026-07-18 - Android Menu Triggers Consume Nested Presses
 
 **Status:** Resolved
@@ -327,7 +338,7 @@ The iOS device setup script now runs `pod install` after `npm ci`, which evaluat
 **Status:** Decision
 **Area:** PXI, scrolling, Markdown
 
-PXI keeps following streamed output only while the reader remains at the live edge. Sending a new turn explicitly re-engages live-edge following; touching or dragging the transcript releases it, subsequent chunks arrive without stealing position, and the Latest control explicitly returns to and re-engages the live edge. Saved threads reopen at the latest user turn, and `maintainVisibleContentPosition` limits displacement when rich content changes size.
+PXI keeps following streamed output only while the reader remains at the live edge. Sending a new turn explicitly re-engages live-edge following; touching or dragging the transcript releases it, subsequent chunks arrive without stealing position, and the Latest control explicitly returns to and re-engages the live edge. Saved threads reopen at the latest user turn. Live-edge scrolling uses exact content-height offsets so variable-height streaming rows do not depend on delayed list-cell measurements.
 
 Assistant text renders through `@ronradtke/react-native-markdown-display`'s `MarkdownStream`. It provides a pure-JavaScript native-view renderer, seals incomplete streaming fences, supports styled headings, lists, links, quotes, tables, and syntax-highlighted code, and does not require another native client rebuild. Model-generated links are restricted to HTTP and HTTPS. The AI SDK UI update throttle remains 50 ms so token chunks do not force unbounded parsing and layout work.
 

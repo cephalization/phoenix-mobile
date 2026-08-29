@@ -343,11 +343,17 @@ function ChatSession({
     return () => subscription.remove();
   }, []);
 
+  const scrollToLiveEdge = (animated: boolean) => {
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToOffset({ animated, offset: contentHeight.current });
+    });
+  };
+
   const scrollToLatest = () => {
     readerIsInteracting.current = false;
     followLiveEdge.current = true;
     setShowJump(false);
-    listRef.current?.scrollToEnd({ animated: true });
+    scrollToLiveEdge(true);
   };
 
   const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -396,7 +402,10 @@ function ChatSession({
   const retry = () => {
     clearError();
     setWasStopped(false);
+    readerIsInteracting.current = false;
     followLiveEdge.current = true;
+    setShowJump(false);
+    scrollToLiveEdge(false);
     void regenerate();
   };
 
@@ -431,19 +440,18 @@ function ChatSession({
         keyExtractor={(message) => message.id}
         ListEmptyComponent={<EmptyChat instanceName={instance.name} />}
         ListFooterComponent={isAwaitingAssistant ? <PendingAssistant /> : null}
-        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         onContentSizeChange={(_width, height) => {
           const grew = height > contentHeight.current + 1;
           contentHeight.current = height;
           if (followLiveEdge.current) {
             setShowJump(false);
-            requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
+            scrollToLiveEdge(false);
           } else if (grew && isStreaming) {
             setShowJump(true);
           }
         }}
         onLayout={() => {
-          if (followLiveEdge.current) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
+          if (followLiveEdge.current) scrollToLiveEdge(false);
         }}
         onScroll={onScroll}
         onScrollBeginDrag={() => {
