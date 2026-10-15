@@ -13,6 +13,44 @@ This is the project's living technical memory. Record discoveries that would oth
 
 ## Active Constraints
 
+### 2026-10-14 - Phoenix 20.11 Removed write_span_note; PXI Notes Go Through createSpanNote
+
+**Status:** Decision
+**Area:** PXI, annotations, networking
+
+Phoenix 20.11.0 (`feat(skills): add phoenix-error-analysis skill`, arize-phoenix #15727) deleted PXI's built-in `write_span_note` tool and the `span-coding` skill. Headless agent turns on 20.4.0+ receive the in-process Phoenix MCP toolset in read-only code mode (discovery tools plus a sandboxed `execute` whose `call_tool(name, params)` reaches every `GET /v1/*` operation and, by explicit allow-list, `POST /v1/{span,trace,session}_notes`). `createSpanNote` takes `{ data: { span_id, note, identifier } }`, always stamps `annotator_kind=HUMAN` and `source=API`, and upserts on `(span, 'note', identifier)` when the identifier is non-empty. The mobile investigate prompt now names that tool and the exact `pxi` identifier (shared through `PXI_NOTE_IDENTIFIER`), and the action gates on 20.11.0. Verified live on 2026-10-14 against the dev instance (20.21.3) with headless `claude-sonnet-4-6` turns from curl and from a Pixel 9 Pro XL: the agent loaded `phoenix-error-analysis`, read the session with `getSession` and `getSpans`, called `execute` with `call_tool("createSpanNote", { data: { span_id, note, identifier: "pxi" } })`, and `GET /v1/projects/{id}/span_annotations` returned the note with identifier `pxi` and `annotator_kind` `HUMAN` on the turn's root span. A looser first draft of the prompt ("retrieve the session conversation") failed three times in a row on the device: the model reached for `executeSql` inside `execute`, then called `json.loads` on the already-decoded dict (which Phoenix's own tool docstring warns against), and pydantic-ai aborted the turn after its single tool retry with `Tool 'execute' exceeded max retries count of 1`. The prompt therefore names the exact REST operations, passes the project node id, and states that `call_tool` returns decoded objects; with that wording the same model succeeded on every attempt.
+
+Two other headless-turn changes landed in 20.4.0 (`perf(agents): make the system prompt static`): typed page contexts (`session`, `project`, `trace`) are validated but no longer rendered to the model on `headless: true` turns, and the `graphql` context is deprecated with a server warning. Because `editPermission: 'manual'` on a headless turn can never approve mutations, GraphQL mutation tools are unreachable for mobile regardless of that context. The client stops sending it; the prompt carries the raw session id itself. `requestedSkills` is likewise honoured only for browser turns, so the agent loads `phoenix-error-analysis` on its own when useful.
+
+**Implication:** Any new contextual action must put every identifier the agent needs into the prompt text and name the REST operations to use; do not rely on `contexts` to scope a headless run, and do not leave data access to the model's discretion because the SQL path fails under the one-retry budget. When verifying prompt edits on a device, confirm the served text: on 2026-10-14 the recorded `pxi.turn` input attribute in the `pxi_dev` project exposed that the phone was still receiving the previous `actions.ts` text because Metro had been started with `CI=1`, which disables file watching and Fast Refresh. Write notes only through `createSpanNote` with the `pxi` identifier so `fetchSessionPxiNotes` keeps finding them. Expect new tool names in transcripts from headless turns (`execute`, `search`, `get_schemas`, `get_tags`, `list_tools`, `load_skill_reference`, GitHub issue tools) and keep `TOOL_LABELS` current.
+
+### 2026-10-14 - Trace Feeds And Range Statistics Use Server Filters Where Phoenix Supports Them
+
+**Status:** Decision
+**Area:** traces, observability, networking
+
+Phoenix 20.12.0 added `filter` expressions to the trace list (`error_count > 0`, `latency_ms >= 1000`, …; invalid expressions return 400) and to the project session list. The mobile "errors" trace feed now pages the trace list with `filter: 'error_count > 0'` on servers at or above 20.12.0, matching the Phoenix UI's definition (any span in the trace errored) and restoring token counts and start-time ordering for that feed; older servers keep the root-span `status_code=ERROR` fallback. Range statistics now request `include_spans: true` with the route's maximum `limit` of 1000: each trace carries slim span rows (id, kind, status, timing) so error counts need no second spans request. Phoenix still has no single-trace read or aggregate statistics REST endpoint; the GraphQL `Project.traceCount`/`latencyMsQuantile` fields remain the only true aggregates. Server versions are resolved through the cached `getCachedServerVersion` so the gate costs no extra request per page.
+
+**Implication:** Gate every new filter expression on `[20, 12, 0]` and keep the fallback path alive until that floor is the project minimum. The session list `filter` (annotation name and identifier comprehensions) can replace the review queue's client-side scan in a later change; `classifySessionReview` must stay the final authority because `annotator_kind` is not filterable.
+
+### 2026-10-14 - Lint Policy Is oxlint Plus Vendored anti-slop; ESLint Is Gone
+
+**Status:** Decision
+**Area:** tooling, code quality
+
+The repository replaced `eslint-config-expo` with oxlint 1.88.0 and `@oxlint/plugins` pinned together, oxfmt 0.73.0 (single quotes, 100 columns, sorted `package.json`), and the vendored anti-slop ruleset at `tools/oxlint/anti-slop` (upstream commit recorded in its UPSTREAM.md, installable skill under `.claude/skills/install-anti-slop`). The config is `.oxlintrc.json` (the TypeScript config format is still marked experimental by the CLI) with every generic anti-slop rule at error and the eslint-config-expo rules mapped onto their oxlint equivalents. Intentional policy deviations: `no-module-mocking` gained an `allowedModules` option so tests may mock native Expo modules with no Node implementation; `no-runtime-typeof` runs with `allowInTypeGuards`; `eslint/no-await-in-loop` is off because cursor pagination is inherently sequential; `react/immutability` is off because Reanimated shared values are assigned by design. The migration removed every `unknown` parameter and unjustified assertion from app code by narrowing untyped JSON through `src/lib/json.ts`, and the remaining tests exercise the real AI SDK transport and `Chat` against a mocked `expo/fetch`. `tools/` is excluded from the app `tsconfig.json` because the vendored rules import `.ts` extensions.
+
+**Implication:** `npm run check` is the validation command. Fix findings in code rather than disabling rules; record any further policy change in `tools/oxlint/anti-slop/UPSTREAM.md`. The spacing rule and oxfmt must agree, so run `lint:fix`, then `fmt`, then lint again.
+
+### 2026-10-14 - Expo SDK 57 Patch Alignment Fixes A Hermes V1 Memory Regression
+
+**Status:** Resolved
+**Area:** Expo, React Native, dependencies
+
+`npx expo-doctor` flagged `expo@57.0.6` with Hermes V1 250829098.0.14, which carries a known memory regression fixed in 250829098.0.16; expo 57.0.9+ and React Native 0.86.2+ include the fix. `npx expo install --fix` moved the project to expo 57.0.29, React Native 0.86.3, react-native-screens 4.26, and current patches of every Expo module; `@arizeai/phoenix-client` moved to 7.16.1 (first release with generated agent-session schemas, which now back `src/features/pxi/sessions.ts`) and the AI SDK to `ai@7.0.140` / `@ai-sdk/react@4.0.143` (abort and `stop()` cleanup fixes). Typecheck, tests, lint, `expo-doctor` (21/21), and `expo export --platform all` pass after the upgrade without code changes beyond the type adoption.
+
+**Implication:** Re-run `expo-doctor` before each release; it catches runtime regressions that `npm outdated` does not explain. Native device builds must be regenerated (`npm run ios:device:clean`, `npm run android:device:clean`) because React Native and `react-native-screens` changed.
+
 ### 2026-08-11 - PXI Chats Are Persisted Server-Side Agent Sessions
 
 **Status:** Decision
@@ -22,13 +60,13 @@ Phoenix 20.0.0 (`feat!: agent session persistence`, arize-phoenix #14143) replac
 
 One contract detail is invisible in the OpenAPI schema and was found live against 20.0.0: transcript message ids must be UUIDs. A turn submitted with any other id format streams normally and then fails server-side persistence — `[DONE]` is followed by an error chunk ("the conversation could not be saved") and the transcript stays empty. Both first-party clients generate UUIDs (`crypto.randomUUID()`), so mobile user messages use `createPxiMessageId()` (expo-crypto `randomUUID`) while non-message identifiers (chat/run ids) keep the readable `createPxiId` format, which the route accepts.
 
-Consequences baked into the app: the local Expo SQLite/IndexedDB transcript store is gone (files, `expo-sqlite` dependency, and its `app.json` plugin entry); chat history and transcripts are TanStack Query server state, with transcript restores using `gcTime: 0` so reopened chats always read the server copy. The chat screen creates the server session lazily on the first send (`createPxiTransport` caches the id and retries a failed creation), pins the active chat while running, PATCHes the session model when a saved model is missing from the catalog, and offers "Reload chat" on 409 conflicts. Contextual investigation runs create `is_ephemeral` sessions (the durable output is span notes) and retry by starting a fresh run, because a turn whose prompt was persisted cannot be regenerated into the same session. The app is on AI SDK v7 (`ai@7` / `@ai-sdk/react@4`) and `@arizeai/phoenix-client@7.4.0`; the v6-to-v7 upgrade required no code changes on the surfaces the app uses (`useChat`, `Chat`, `DefaultChatTransport`, `UIMessage`, part states). The published 7.4.0 client was cut hours before the agent-session contract merged, so its generated schemas do not include those routes yet and they are called directly in `src/features/pxi/sessions.ts` (only `ModelProvider` comes from the generated types so far); pre-20.0.0 servers answer these paths with the SPA HTML fallback, which the module detects and reports as an upgrade requirement alongside the version gate.
+Consequences baked into the app: the local Expo SQLite/IndexedDB transcript store is gone (files, `expo-sqlite` dependency, and its `app.json` plugin entry); chat history and transcripts are TanStack Query server state, with transcript restores using `gcTime: 0` so reopened chats always read the server copy. The chat screen creates the server session lazily on the first send (`createPxiTransport` caches the id and retries a failed creation), pins the active chat while running, PATCHes the session model when a saved model is missing from the catalog, and offers "Reload chat" on 409 conflicts. Contextual investigation runs create `is_ephemeral` sessions (the durable output is span notes) and retry by starting a fresh run, because a turn whose prompt was persisted cannot be regenerated into the same session. The app is on AI SDK v7 (`ai@7` / `@ai-sdk/react@4`) and `@arizeai/phoenix-client@7.4.0`; the v6-to-v7 upgrade required no code changes on the surfaces the app uses (`useChat`, `Chat`, `DefaultChatTransport`, `UIMessage`, part states). Since the 2026-10-14 upgrade to `@arizeai/phoenix-client` 7.16.1 the wire types in `src/features/pxi/sessions.ts` come from the generated schemas (`AgentSessionSummary`, `AgentSessionData`, `AgentSessionConflictError`), while the routes are still called directly because pre-20.0.0 servers answer these paths with the SPA HTML fallback, which the module detects and reports as an upgrade requirement alongside the version gate.
 
-**Implication:** All PXI chat features require Phoenix 20.0.0 (`PXI_AGENT_SESSIONS_MINIMUM_VERSION`); the dev instance at 192.168.1.65:6006 upgraded to 20.0.0 on 2026-08-11 and the create/chat/list/messages routes were verified against it. Always send UUID message ids — a non-UUID id produces a turn that looks successful in the stream but is silently absent after reload. When a phoenix-client release newer than 7.4.0 ships the agent-session schemas, replace the hand-rolled wire types in `src/features/pxi/sessions.ts` with the generated ones. Do not reintroduce client-side transcript persistence — the server owns chat history now.
+**Implication:** All PXI chat features require Phoenix 20.0.0 (`PXI_AGENT_SESSIONS_MINIMUM_VERSION`); the dev instance at 192.168.1.65:6006 upgraded to 20.0.0 on 2026-08-11 and the create/chat/list/messages routes were verified against it. Always send UUID message ids — a non-UUID id produces a turn that looks successful in the stream but is silently absent after reload. Do not reintroduce client-side transcript persistence — the server owns chat history now.
 
 ### 2026-08-09 - Contextual PXI Actions Attach Typed Contexts And Write Span Notes
 
-**Status:** Decision
+**Status:** Decision (note tool and context behavior superseded on 2026-10-14; see the Phoenix 20.11 entry above)
 **Area:** PXI, sessions, annotations, navigation
 
 The server-agent chat request's `contexts` array accepts the same typed page-context payloads the Phoenix web assistant sends. `{ "type": "session", "projectNodeId", "sessionNodeId" }` (camelCase aliases, relay GlobalIDs, Phoenix ≥ 17.7) scopes PXI to one session. PXI writes open-coding findings through its built-in `write_span_note` tool (Phoenix ≥ 17.25): a span annotation named `note` with the reserved identifier `pxi`, `HUMAN` annotator kind, upserted per span, denied to Viewer roles, and available even though the app keeps GraphQL mutations disabled. The mobile app reads these notes over `GET /v1/projects/{id}/span_annotations` filtered by the session's root-span IDs plus `include_annotation_names=["note"]` (route since 9.0), then filters to the `pxi` identifier client-side.
@@ -240,6 +278,17 @@ CSS can color the document but cannot remove normal iOS Safari toolbars. The app
 
 ## Resolved Bugs And Reusable Patterns
 
+### 2026-10-14 - Android Context Menus Must Not Host Markdown Content
+
+**Status:** Resolved
+**Area:** Android, Expo UI, PXI, Markdown, layout
+
+Every PXI transcript on Android rendered unwrapped: paragraphs, headings, list items, tables, and code blocks ran off the right edge. The `@expo/ui/community/menu` `MenuView` on Android wraps its trigger in a Compose `Host` plus `RNHostView` with `matchContents`, and that host lays the React Native subtree out from an unbounded root. Pinning an inner wrapper to the measured row width only rescued blocks with percent widths (paragraphs); rows with `flex: 1` children (list items, table cells) still measured their text at max-content width, which `dumpsys activity top` showed as `ReactTextView` nodes up to 2200 px wide inside a 1212 px parent. Rendering the same Markdown outside the host produced zero oversized views.
+
+`native-context-menu.android.tsx` now keeps the content in ordinary React Native layout inside a `Pressable`, and opens the Material dropdown imperatively through `MenuView`'s `ref.show()` with a 1 pt anchor positioned at the long-press point, so the menu also appears next to the finger on long messages. iOS keeps the original hosted structure in `native-context-menu.native.tsx` because the SwiftUI context menu previews the hosted content. Markdown tables additionally render inside a horizontal `ScrollView` with a 112 pt minimum cell width, so many-column tables scroll instead of crushing cells, and heading text groups get `flexShrink: 1` so long headings and inline code wrap.
+
+**Implication:** On Android, never place text or any auto-width layout inside an Expo UI host that uses `matchContents`; host only fixed-size anchors and keep real content in React Native views. When verifying layout on a device, `adb shell dumpsys activity top` exposes the sizes of React views inside Compose hosts that `uiautomator` cannot see. Metro only watches files when started without `CI=1`, and a newly added platform-specific file (`*.android.tsx`) still needs a Metro restart with `--clear` before it resolves.
+
 ### 2026-08-08 - Expo UI Sliders Need Explicit Colors On App Surfaces
 
 **Status:** Resolved
@@ -390,6 +439,15 @@ The targeted Metro resolver shim fixed iOS and Android bundling without polyfill
 
 ## Design Decisions
 
+### 2026-10-14 - Code Blocks Use Phoenix's Pierre Syntax Colors And Geist Mono
+
+**Status:** Decision
+**Area:** Design system, PXI, Markdown
+
+The Markdown library's fenced-code renderer hard-codes Prism's One Dark and One Light themes, whose muted blue-gray plain text and purple keywords clash with the Phoenix canvases and brand palette. The Phoenix web app colors every code block and diff through the Pierre theme (`@pierre/theme`, translated to CodeMirror in `js/app/src/components/code/pierreCodeMirrorTheme.ts`). `src/constants/code-theme.ts` now carries the base `pierre-dark.json` and `pierre-light.json` token colors keyed by scope (comment, punctuation, keyword, string, number, constant, variable, function, type, tag, attribute, parameter) and maps Prism token types onto them; `src/components/chat/code-block.tsx` renders fences through `prism-react-renderer` with that theme, and `JsonBlock` uses the same property-name, string, and number colors Phoenix's JSON editor shows. Plain code text uses the app text color on the element background rather than Pierre's near-black editor background, so blocks sit on the same surface as the rest of a message; because that surface is lighter than Pierre's, four tokens that fell under 3:1 there (dark punctuation, light constant, regexp, and escape) are nudged within their hue to clear 3.2:1. Geist Mono (`@expo-google-fonts/geist-mono`) is loaded next to Geist and is now `Fonts.mono` on every platform, replacing the system monospace fallbacks.
+
+**Implication:** Color code through `codeColors(dark)` and `createPrismTheme`, never through a Prism preset, and keep the scope table in sync with Phoenix's Pierre mapping when it changes. Any new monospace surface should use `Fonts.mono` / `Fonts.monoMedium`.
+
 ### 2026-07-21 - Trace Lists Combine Summaries With Root Spans
 
 **Status:** Decision
@@ -453,9 +511,9 @@ Reanimated provides press response, loading motion, staggered row entrance, and 
 **Status:** Watch  
 **Area:** Dependencies
 
-The current npm install reports moderate transitive advisories, including advisories inherited from the Expo and Phoenix dependency trees. No forced upgrade has been applied.
+On 2026-10-14 `npm audit --omit=dev` reports 49 advisories (1 critical in `shell-quote`, 29 high) after the SDK 57 patch alignment. Every critical and high finding sits in build-time tooling (Expo CLI, Metro, `@expo/config-plugins`, `node-forge`, `micromatch`) rather than in code shipped inside the app binary, and npm's proposed fixes downgrade to Expo 44 or React Native 0.72. No forced upgrade has been applied.
 
-**Implication:** Review advisories before production release. Do not run a breaking `npm audit fix --force` without evaluating Expo SDK compatibility.
+**Implication:** Review advisories before each release and track them against the Expo SDK changelog. Do not run `npm audit fix --force`; it would break the SDK.
 
 ## Superseded
 

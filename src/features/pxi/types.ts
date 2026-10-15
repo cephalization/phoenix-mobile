@@ -34,7 +34,6 @@ export type ModelSelection =
 
 export type PxiContext =
   | { type: 'app'; currentDateTime: string; timeZone: string }
-  | { type: 'graphql'; mutationsEnabled: false }
   | { type: 'web_access'; enabled: boolean }
   | { type: 'subagents'; enabled: boolean }
   | { type: 'session'; projectNodeId: string; sessionNodeId: string };

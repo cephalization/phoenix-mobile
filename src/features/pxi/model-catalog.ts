@@ -3,12 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { authenticatedFetch, getAuthorizationHeaders } from '@/features/auth/session';
 import type { PhoenixInstance } from '@/types/instance';
 
-import type {
-  BuiltInProvider,
-  ModelSelection,
-  PxiModelCatalog,
-  PxiModelOption,
-} from './types';
+import type { BuiltInProvider, ModelSelection, PxiModelCatalog, PxiModelOption } from './types';
 
 const MODEL_PREFLIGHT_QUERY = `
   query PxiModelPreflightQuery {
@@ -25,9 +20,12 @@ const MODEL_PREFLIGHT_QUERY = `
 
 const MODEL_PREFLIGHT_TIMEOUT_MS = 10_000;
 
-// Keep this order aligned with Phoenix AgentModelMenu's agentCuratedModels.ts.
+// Keep this order aligned with Phoenix AgentModelMenu's agentCuratedModels.ts
+// (js/app/src/components/agent/agentCuratedModels.ts; synced with Phoenix 20.21.4).
 const CURATED_MODELS = [
+  ['ANTHROPIC', 'claude-fable-5-1'],
   ['ANTHROPIC', 'claude-fable-5'],
+  ['ANTHROPIC', 'claude-opus-5'],
   ['ANTHROPIC', 'claude-opus-4-8'],
   ['ANTHROPIC', 'claude-opus-4-6'],
   ['ANTHROPIC', 'claude-sonnet-4-6'],
@@ -35,8 +33,8 @@ const CURATED_MODELS = [
   ['OPENAI', 'gpt-5.4'],
   ['OPENAI', 'gpt-5.4-mini'],
   ['OPENAI', 'gpt-5.5'],
+  ['GOOGLE', 'gemini-3.7-flash'],
   ['GOOGLE', 'gemini-3.1-pro-preview'],
-  ['GOOGLE', 'gemini-3.5-flash'],
 ] as const;
 
 type ModelPreflightResponse = {
@@ -64,27 +62,41 @@ export function isSameModel(left: ModelSelection, right: ModelSelection): boolea
 
 export async function fetchPxiModelCatalog(
   instance: PhoenixInstance,
-  querySignal?: AbortSignal
+  querySignal?: AbortSignal,
 ): Promise<PxiModelCatalog> {
   const controller = new AbortController();
   let timedOut = false;
   const abortForQuery = () => controller.abort();
   querySignal?.addEventListener('abort', abortForQuery);
+
   const timeout = setTimeout(() => {
     timedOut = true;
     controller.abort();
   }, MODEL_PREFLIGHT_TIMEOUT_MS);
 
   let response: Response;
+
   try {
-    response = await authenticatedFetch(instance, `${instance.baseUrl.replace(/\/+$/, '')}/graphql`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', ...(await getAuthorizationHeaders(instance)) },
-      body: JSON.stringify({ query: MODEL_PREFLIGHT_QUERY }),
-      signal: controller.signal,
-    }, true);
+    response = await authenticatedFetch(
+      instance,
+      `${instance.baseUrl.replace(/\/+$/, '')}/graphql`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(await getAuthorizationHeaders(instance)),
+        },
+        body: JSON.stringify({ query: MODEL_PREFLIGHT_QUERY }),
+        signal: controller.signal,
+      },
+      true,
+    );
   } catch (error) {
-    if (timedOut) throw new Error('Phoenix model discovery timed out. Check the instance address and network.');
+    if (timedOut)
+      throw new Error(
+        'Phoenix model discovery timed out. Check the instance address and network.',
+        { cause: error },
+      );
     throw error;
   } finally {
     clearTimeout(timeout);
@@ -92,24 +104,37 @@ export async function fetchPxiModelCatalog(
   }
 
   if (!response.ok) throw new Error(`Phoenix model discovery failed with HTTP ${response.status}.`);
+  // SAFETY: the body is Phoenix's GraphQL reply to MODEL_PREFLIGHT_QUERY above;
+  // its selection set is exactly the shape of ModelPreflightResponse, and
+  // `data` is checked for presence before any field is read.
   const payload = (await response.json()) as ModelPreflightResponse;
+
   if (!payload.data) {
-    const detail = payload.errors?.map((error) => error.message).filter(Boolean).join(' ');
+    const detail = payload.errors
+      ?.map((error) => error.message)
+      .filter(Boolean)
+      .join(' ');
+
     throw new Error(detail || 'Phoenix returned no model catalog.');
   }
 
-  const providerNames = new Map(payload.data.modelProviders.map((provider) => [provider.key, provider.name]));
+  const providerNames = new Map(
+    payload.data.modelProviders.map((provider) => [provider.key, provider.name]),
+  );
+
   const usableProviders = new Set(
     payload.data.modelProviders
       .filter((provider) => provider.dependenciesInstalled && provider.credentialsSet)
-      .map((provider) => provider.key)
+      .map((provider) => provider.key),
   );
+
   const curatedIds = new Set(CURATED_MODELS.map(([provider, name]) => `${provider}/${name}`));
+
   const options: PxiModelOption[] = payload.data.playgroundModels
     .filter(
       (model) =>
         usableProviders.has(model.providerKey) &&
-        curatedIds.has(`${model.providerKey}/${model.name}`)
+        curatedIds.has(`${model.providerKey}/${model.name}`),
     )
     .map((model) => {
       const selection: ModelSelection = {
@@ -117,6 +142,7 @@ export async function fetchPxiModelCatalog(
         provider: model.providerKey,
         modelName: model.name,
       };
+
       return {
         id: modelId(selection),
         label: model.name,
@@ -126,12 +152,19 @@ export async function fetchPxiModelCatalog(
       };
     });
 
-  const curatedOrder = new Map(CURATED_MODELS.map(([provider, name], index) => [`${provider}/${name}`, index]));
+  const curatedOrder = new Map(
+    CURATED_MODELS.map(([provider, name], index) => [`${provider}/${name}`, index]),
+  );
+
   options.sort((left, right) => {
     const leftRank = curatedOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER;
     const rightRank = curatedOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+
     if (leftRank !== rightRank) return leftRank - rightRank;
-    return `${left.providerLabel}/${left.label}`.localeCompare(`${right.providerLabel}/${right.label}`);
+
+    return `${left.providerLabel}/${left.label}`.localeCompare(
+      `${right.providerLabel}/${right.label}`,
+    );
   });
 
   return { options, defaultSelection: options[0]?.selection ?? null };
@@ -142,6 +175,7 @@ export function usePxiModelCatalog(instance: PhoenixInstance | undefined) {
     queryKey: ['pxi', 'models', instance?.id ?? 'missing'],
     queryFn: ({ signal }) => {
       if (!instance) throw new Error('Phoenix instance not found.');
+
       return fetchPxiModelCatalog(instance, signal);
     },
     enabled: Boolean(instance),
