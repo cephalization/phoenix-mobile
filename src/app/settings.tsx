@@ -30,7 +30,8 @@ export default function SettingsScreen() {
   const clearConnections = () => {
     confirmAction({
       title: 'Remove all connections?',
-      message: 'Every saved Phoenix connection will be removed from this device. PXI chats stay on their Phoenix servers.',
+      message:
+        'Every saved Phoenix connection will be removed from this device. PXI chats stay on their Phoenix servers.',
       confirmLabel: 'Remove all',
       onConfirm: async () => {
         try {
@@ -48,67 +49,80 @@ export default function SettingsScreen() {
     <ScrollView
       contentContainerStyle={styles.scrollContent}
       contentInsetAdjustmentBehavior="automatic"
-      style={[styles.screen, { backgroundColor: colors.background }]}>
+      style={[styles.screen, { backgroundColor: colors.background }]}
+    >
       <View style={[styles.content, { paddingBottom: 20 + insets.bottom }]}>
-          <View style={styles.section}>
-            <View style={styles.sectionHeading}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Appearance</Text>
-              <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>Choose how Phoenix Mobile looks.</Text>
-            </View>
-            <View style={[styles.segmentedControl, { backgroundColor: colors.backgroundSelected }]}>
-              {appearanceOptions.map((option) => {
-                const isSelected = appearance === option.value;
-                return (
-                  <MotionPressable
-                    accessibilityRole="button"
-                    haptic="selection"
-                    key={option.value}
-                    onPress={() => setAppearance(option.value)}
-                    scaleTo={0.97}
+        <View style={styles.section}>
+          <View style={styles.sectionHeading}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Appearance</Text>
+            <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
+              Choose how Phoenix Mobile looks.
+            </Text>
+          </View>
+          <View style={[styles.segmentedControl, { backgroundColor: colors.backgroundSelected }]}>
+            {appearanceOptions.map((option) => {
+              const isSelected = appearance === option.value;
+
+              return (
+                <MotionPressable
+                  accessibilityRole="button"
+                  haptic="selection"
+                  key={option.value}
+                  onPress={() => setAppearance(option.value)}
+                  scaleTo={0.97}
+                  style={[
+                    styles.appearanceOption,
+                    isSelected && { backgroundColor: colors.accent },
+                  ]}
+                >
+                  <Text
                     style={[
-                      styles.appearanceOption,
-                      isSelected && { backgroundColor: colors.accent },
-                    ]}>
-                    <Text
-                      style={[
-                        styles.appearanceLabel,
-                        { color: isSelected ? colors.accentForeground : colors.textSecondary },
-                      ]}>
-                      {option.label}
-                    </Text>
-                  </MotionPressable>
-                );
-              })}
-            </View>
+                      styles.appearanceLabel,
+                      { color: isSelected ? colors.accentForeground : colors.textSecondary },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </MotionPressable>
+              );
+            })}
           </View>
+        </View>
 
-          <View style={styles.section}>
-            <View style={styles.sectionHeading}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Connections</Text>
-              <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
-                {instances.length === 1 ? '1 instance saved on this device.' : `${instances.length} instances saved on this device.`}
-              </Text>
-            </View>
-            <MotionPressable
-              accessibilityRole="button"
-              disabled={instances.length === 0}
-              haptic="warning"
-              onPress={clearConnections}
-              style={[
-                styles.clearButton,
-                { borderColor: colors.border, opacity: instances.length === 0 ? 0.45 : 1 },
-              ]}>
-              <Text style={[styles.clearButtonText, { color: colors.danger }]}>Remove all connections</Text>
-            </MotionPressable>
+        <View style={styles.section}>
+          <View style={styles.sectionHeading}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Connections</Text>
+            <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
+              {instances.length === 1
+                ? '1 instance saved on this device.'
+                : `${instances.length} instances saved on this device.`}
+            </Text>
           </View>
+          <MotionPressable
+            accessibilityRole="button"
+            disabled={instances.length === 0}
+            haptic="warning"
+            onPress={clearConnections}
+            style={[
+              styles.clearButton,
+              { borderColor: colors.border, opacity: instances.length === 0 ? 0.45 : 1 },
+            ]}
+          >
+            <Text style={[styles.clearButtonText, { color: colors.danger }]}>
+              Remove all connections
+            </Text>
+          </MotionPressable>
+        </View>
 
-          <View style={[styles.about, { borderColor: colors.border }]}>
-            <PhoenixLogo size={40} />
-            <View style={styles.aboutCopy}>
-              <Text style={[styles.aboutTitle, { color: colors.text }]}>Phoenix Mobile</Text>
-              <Text style={[styles.aboutVersion, { color: colors.textSecondary }]}>Version {Constants.expoConfig?.version ?? '1.0.0'}</Text>
-            </View>
+        <View style={[styles.about, { borderColor: colors.border }]}>
+          <PhoenixLogo size={40} />
+          <View style={styles.aboutCopy}>
+            <Text style={[styles.aboutTitle, { color: colors.text }]}>Phoenix Mobile</Text>
+            <Text style={[styles.aboutVersion, { color: colors.textSecondary }]}>
+              Version {Constants.expoConfig?.version ?? '1.0.0'}
+            </Text>
           </View>
+        </View>
       </View>
     </ScrollView>
   );
@@ -123,9 +137,21 @@ const styles = StyleSheet.create({
   sectionTitle: { fontFamily: AppFonts.semibold, fontSize: 18 },
   sectionDescription: { fontFamily: AppFonts.regular, fontSize: 14, lineHeight: 20 },
   segmentedControl: { borderRadius: 16, flexDirection: 'row', gap: 4, padding: 4 },
-  appearanceOption: { alignItems: 'center', borderRadius: 12, flex: 1, justifyContent: 'center', minHeight: 44 },
+  appearanceOption: {
+    alignItems: 'center',
+    borderRadius: 12,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+  },
   appearanceLabel: { fontFamily: AppFonts.medium, fontSize: 14 },
-  clearButton: { alignItems: 'center', borderRadius: 14, borderWidth: 1, justifyContent: 'center', minHeight: 48 },
+  clearButton: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 48,
+  },
   clearButtonText: { fontFamily: AppFonts.medium, fontSize: 14 },
   about: { alignItems: 'center', borderTopWidth: 1, flexDirection: 'row', gap: 12, paddingTop: 20 },
   aboutCopy: { gap: 2 },

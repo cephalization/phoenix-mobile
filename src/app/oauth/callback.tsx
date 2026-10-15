@@ -23,30 +23,45 @@ export default function OAuthCallbackScreen() {
 
   useEffect(() => {
     if (!callbackUrl?.startsWith('phoenixmobile://oauth/callback')) return;
-    // Android can route the deep link here without resolving the original
-    // openAuthSessionAsync promise. Completion is globally deduplicated, so this
-    // route is also the reliable warm-callback owner on that platform.
-    void completeOAuthCallback(callbackUrl).then(async (instance) => {
+
+    const completeSignIn = async () => {
       try {
-        const viewer = await (await createPhoenixClient(instance)).GET('/v1/user');
-        if (!viewer.data || viewer.data.data.auth_method === 'ANONYMOUS') {
-          throw new Error('Phoenix did not return an authenticated user after sign-in.');
+        // Android can route the deep link here without resolving the original
+        // openAuthSessionAsync promise. Completion is globally deduplicated, so this
+        // route is also the reliable warm-callback owner on that platform.
+        const instance = await completeOAuthCallback(callbackUrl);
+
+        try {
+          const viewer = await (await createPhoenixClient(instance)).GET('/v1/user');
+
+          if (!viewer.data || viewer.data.data.auth_method === 'ANONYMOUS') {
+            throw new Error('Phoenix did not return an authenticated user after sign-in.');
+          }
+        } catch (verificationError) {
+          await revokeAndDeleteCredentials(instance).catch(() => undefined);
+          throw verificationError;
         }
-      } catch (error) {
-        await revokeAndDeleteCredentials(instance).catch(() => undefined);
-        throw error;
+
+        const replacedIds = useInstanceStore
+          .getState()
+          .instances.filter((item) => item.baseUrl === instance.baseUrl && item.id !== instance.id)
+          .map((item) => item.id);
+
+        await addInstance(instance);
+
+        for (const id of replacedIds)
+          queryClient.removeQueries({ queryKey: phoenixQueryKeys.instance(id) });
+        haptics.success();
+        router.replace({ pathname: '/instances/[id]', params: { id: instance.id } });
+      } catch (reason) {
+        haptics.error();
+        setError(
+          reason instanceof Error ? reason.message : 'Phoenix sign-in could not be completed.',
+        );
       }
-      const replacedIds = useInstanceStore.getState().instances
-        .filter((item) => item.baseUrl === instance.baseUrl && item.id !== instance.id)
-        .map((item) => item.id);
-      await addInstance(instance);
-      for (const id of replacedIds) queryClient.removeQueries({ queryKey: phoenixQueryKeys.instance(id) });
-      haptics.success();
-      router.replace({ pathname: '/instances/[id]', params: { id: instance.id } });
-    }).catch((reason: unknown) => {
-      haptics.error();
-      setError(reason instanceof Error ? reason.message : 'Phoenix sign-in could not be completed.');
-    });
+    };
+
+    void completeSignIn();
   }, [addInstance, callbackUrl, queryClient]);
 
   return (
@@ -56,14 +71,21 @@ export default function OAuthCallbackScreen() {
           <>
             <Text style={[styles.title, { color: colors.text }]}>Sign-in failed</Text>
             <Text style={[styles.copy, { color: colors.textSecondary }]}>{error}</Text>
-            <MotionPressable onPress={() => router.replace('/')} style={[styles.button, { backgroundColor: colors.accent }]}>
-              <Text style={[styles.buttonText, { color: colors.accentForeground }]}>Return to instances</Text>
+            <MotionPressable
+              onPress={() => router.replace('/')}
+              style={[styles.button, { backgroundColor: colors.accent }]}
+            >
+              <Text style={[styles.buttonText, { color: colors.accentForeground }]}>
+                Return to instances
+              </Text>
             </MotionPressable>
           </>
         ) : (
           <>
             <ActivityIndicator color={colors.brand} />
-            <Text style={[styles.copy, { color: colors.textSecondary }]}>Completing Phoenix sign-in…</Text>
+            <Text style={[styles.copy, { color: colors.textSecondary }]}>
+              Completing Phoenix sign-in…
+            </Text>
           </>
         )}
       </View>

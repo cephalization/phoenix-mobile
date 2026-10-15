@@ -39,6 +39,8 @@ export default function InstancesScreen() {
     });
   };
 
+  const separator = <View style={[styles.separator, { backgroundColor: colors.border }]} />;
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={styles.page}>
@@ -49,8 +51,11 @@ export default function InstancesScreen() {
               <Animated.View
                 entering={ZoomIn.duration(180).reduceMotion(ReduceMotion.System)}
                 exiting={ZoomOut.duration(140).reduceMotion(ReduceMotion.System)}
-                style={[styles.countBadge, { backgroundColor: colors.backgroundSelected }]}>
-                <Text style={[styles.countText, { color: colors.textSecondary }]}>{instances.length}</Text>
+                style={[styles.countBadge, { backgroundColor: colors.backgroundSelected }]}
+              >
+                <Text style={[styles.countText, { color: colors.textSecondary }]}>
+                  {instances.length}
+                </Text>
               </Animated.View>
             )}
           </View>
@@ -62,13 +67,16 @@ export default function InstancesScreen() {
             data={hasHydrated ? instances : []}
             keyExtractor={(instance) => instance.id}
             contentContainerStyle={[styles.list, instances.length > 0 && styles.populatedList]}
-            ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: colors.border }]} />}
+            ItemSeparatorComponent={separator}
             renderItem={({ index, item }) => (
               <InstanceCard index={index} instance={item} onRemove={requestRemove} />
             )}
             style={
               instances.length > 0
-                ? [styles.connectionList, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]
+                ? [
+                    styles.connectionList,
+                    { backgroundColor: colors.backgroundElement, borderColor: colors.border },
+                  ]
                 : styles.emptyList
             }
             ListEmptyComponent={
@@ -78,7 +86,11 @@ export default function InstancesScreen() {
                 <Animated.View
                   entering={FadeIn.duration(220).reduceMotion(ReduceMotion.System)}
                   exiting={FadeOut.duration(140).reduceMotion(ReduceMotion.System)}
-                  style={[styles.emptyState, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}>
+                  style={[
+                    styles.emptyState,
+                    { backgroundColor: colors.backgroundElement, borderColor: colors.border },
+                  ]}
+                >
                   <View style={[styles.emptyLogo, { backgroundColor: colors.accentSoft }]}>
                     <PhoenixLogo size={54} />
                   </View>
@@ -99,7 +111,11 @@ export default function InstancesScreen() {
             accessibilityLabel="Settings"
             accessibilityRole="button"
             onPress={() => router.push('/settings')}
-            style={[styles.actionButton, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}>
+            style={[
+              styles.actionButton,
+              { backgroundColor: colors.backgroundElement, borderColor: colors.border },
+            ]}
+          >
             <SymbolView
               name={{ ios: 'gearshape.fill', android: 'settings', web: 'settings' }}
               size={25}
@@ -110,7 +126,11 @@ export default function InstancesScreen() {
             accessibilityLabel="Add instance"
             accessibilityRole="button"
             onPress={() => router.push('/instances/new')}
-            style={[styles.actionButton, { backgroundColor: colors.accent, borderColor: colors.accent }]}>
+            style={[
+              styles.actionButton,
+              { backgroundColor: colors.accent, borderColor: colors.accent },
+            ]}
+          >
             <SymbolView
               name={{ ios: 'plus', android: 'add', web: 'add' }}
               size={28}
@@ -126,11 +146,29 @@ export default function InstancesScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  page: { alignSelf: 'center', flex: 1, maxWidth: MaxContentWidth, paddingHorizontal: 20, paddingTop: 28, width: '100%' },
-  header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 24 },
+  page: {
+    alignSelf: 'center',
+    flex: 1,
+    maxWidth: MaxContentWidth,
+    paddingHorizontal: 20,
+    paddingTop: 28,
+    width: '100%',
+  },
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingBottom: 24,
+  },
   titleRow: { alignItems: 'center', flexDirection: 'row', gap: 10 },
   title: { fontFamily: AppFonts.semibold, fontSize: 40, letterSpacing: -1.5, lineHeight: 46 },
-  countBadge: { alignItems: 'center', borderRadius: 14, justifyContent: 'center', minHeight: 28, minWidth: 28 },
+  countBadge: {
+    alignItems: 'center',
+    borderRadius: 14,
+    justifyContent: 'center',
+    minHeight: 28,
+    minWidth: 28,
+  },
   countText: { fontFamily: AppFonts.medium, fontSize: 12 },
   listArea: { flex: 1 },
   list: { flexGrow: 1, gap: 10, paddingBottom: 16 },
@@ -139,11 +177,41 @@ const styles = StyleSheet.create({
   emptyList: { flex: 1 },
   separator: { height: 1, marginLeft: 70 },
   loader: { paddingVertical: Spacing.six },
-  emptyState: { alignItems: 'center', borderRadius: 22, borderWidth: 1, gap: 18, overflow: 'hidden', padding: 28 },
-  emptyLogo: { alignItems: 'center', borderRadius: 22, height: 78, justifyContent: 'center', width: 78 },
+  emptyState: {
+    alignItems: 'center',
+    borderRadius: 22,
+    borderWidth: 1,
+    gap: 18,
+    overflow: 'hidden',
+    padding: 28,
+  },
+  emptyLogo: {
+    alignItems: 'center',
+    borderRadius: 22,
+    height: 78,
+    justifyContent: 'center',
+    width: 78,
+  },
   emptyCopyGroup: { gap: 7 },
-  emptyTitle: { fontFamily: AppFonts.semibold, fontSize: 18, letterSpacing: -0.2, textAlign: 'center' },
+  emptyTitle: {
+    fontFamily: AppFonts.semibold,
+    fontSize: 18,
+    letterSpacing: -0.2,
+    textAlign: 'center',
+  },
   emptyCopy: { fontFamily: AppFonts.regular, fontSize: 15, lineHeight: 22, textAlign: 'center' },
-  bottomActions: { flexDirection: 'row', justifyContent: 'space-between', paddingBottom: 10, paddingTop: 14 },
-  actionButton: { alignItems: 'center', borderRadius: 30, borderWidth: 1, height: 58, justifyContent: 'center', width: 58 },
+  bottomActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingBottom: 10,
+    paddingTop: 14,
+  },
+  actionButton: {
+    alignItems: 'center',
+    borderRadius: 30,
+    borderWidth: 1,
+    height: 58,
+    justifyContent: 'center',
+    width: 58,
+  },
 });

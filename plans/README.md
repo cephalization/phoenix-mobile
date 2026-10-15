@@ -4,9 +4,9 @@ Plans are listed in recommended execution order. Read a plan completely before s
 
 ## Execution Order And Status
 
-| Plan | Title | Priority | Effort | Depends on | Status |
-|------|-------|----------|--------|------------|--------|
-| 001 | Ship instance-scoped PXI streaming chat | P1 | L | - | BLOCKED (native device QA unavailable) |
+| Plan | Title                                   | Priority | Effort | Depends on | Status                                 |
+| ---- | --------------------------------------- | -------- | ------ | ---------- | -------------------------------------- |
+| 001  | Ship instance-scoped PXI streaming chat | P1       | L      | -          | BLOCKED (native device QA unavailable) |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED`, or `REJECTED`.
 

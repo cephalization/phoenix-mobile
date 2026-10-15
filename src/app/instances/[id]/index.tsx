@@ -1,8 +1,15 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { type Href, router, Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
@@ -56,6 +63,7 @@ export default function InstanceScreen() {
     if (!instance || isRefreshing) return;
     haptics.selection();
     const results = await Promise.all([version.refetch(), viewer.refetch(), projects.refetch()]);
+
     if (results.some((result) => result.isError)) haptics.error();
     else haptics.light();
   };
@@ -83,6 +91,7 @@ export default function InstanceScreen() {
     if (!instance || instance.auth.type !== 'oauth2' || isSigningIn) return;
     setIsSigningIn(true);
     setSignInError(null);
+
     try {
       await runOAuthLogin(instance);
       await queryClient.invalidateQueries({ queryKey: phoenixQueryKeys.instance(instance.id) });
@@ -106,7 +115,9 @@ export default function InstanceScreen() {
     );
   }
 
-  const loginRequired = viewer.error instanceof PhoenixAuthError && viewer.error.code === 'login_required';
+  const loginRequired =
+    viewer.error instanceof PhoenixAuthError && viewer.error.code === 'login_required';
+
   const authStatus = viewer.isPending
     ? { label: 'Checking authentication', color: colors.textSecondary }
     : loginRequired
@@ -116,6 +127,8 @@ export default function InstanceScreen() {
         : viewer.data.auth_method === 'ANONYMOUS'
           ? { label: 'Connected anonymously', color: colors.success }
           : { label: 'Authenticated', color: colors.success };
+
+  const pxiHeaderButton = <PxiHeaderButton instance={instance} />;
 
   return (
     <ScrollView
@@ -130,115 +143,149 @@ export default function InstanceScreen() {
           tintColor={colors.brand}
         />
       }
-      style={[styles.screen, { backgroundColor: colors.background }]}>
+      style={[styles.screen, { backgroundColor: colors.background }]}
+    >
       <Stack.Screen
         options={{
           headerBackTitle: 'Instances',
-          headerRight: () => <PxiHeaderButton instance={instance} />,
+          headerRight: () => pxiHeaderButton,
           scrollEdgeEffects: { bottom: 'soft' },
           title: instance.name,
-          unstable_headerRightItems: () => [
-            {
-              element: <PxiHeaderButton instance={instance} />,
-              type: 'custom',
-            },
-          ],
+          unstable_headerRightItems: () => [{ element: pxiHeaderButton, type: 'custom' }],
         }}
       />
       <View style={[styles.content, { paddingBottom: 20 + insets.bottom }]}>
-          <View style={styles.hero}>
-            <View style={styles.authStatusLine}>
-              <View style={[styles.statusRow, { backgroundColor: colors.backgroundSelected }]}>
-                <View style={[styles.statusDot, { backgroundColor: authStatus.color }]} />
-                <Text style={[styles.status, { color: colors.textSecondary }]}>{authStatus.label}</Text>
-              </View>
-              {loginRequired && instance.auth.type === 'oauth2' && (
-                <MotionPressable
-                  accessibilityRole="button"
-                  disabled={isSigningIn}
-                  onPress={signIn}
-                  style={[styles.signInButton, { backgroundColor: colors.accent }]}>
-                  <Text style={[styles.signInText, { color: colors.accentForeground }]}>
-                    {isSigningIn ? 'Signing in…' : 'Sign in again'}
-                  </Text>
-                </MotionPressable>
-              )}
+        <View style={styles.hero}>
+          <View style={styles.authStatusLine}>
+            <View style={[styles.statusRow, { backgroundColor: colors.backgroundSelected }]}>
+              <View style={[styles.statusDot, { backgroundColor: authStatus.color }]} />
+              <Text style={[styles.status, { color: colors.textSecondary }]}>
+                {authStatus.label}
+              </Text>
             </View>
-            {signInError && <Text style={[styles.authError, { color: colors.danger }]}>{signInError}</Text>}
-            <View style={styles.instanceTitleRow}>
-              <PhoenixLogo loading={version.isPending || projects.isPending} size={36} />
-              <Text style={[styles.title, { color: colors.text }]}>{instance.name}</Text>
-            </View>
-             <Text selectable style={[styles.host, { color: colors.textSecondary }]}>
-               {instance.baseUrl}
-             </Text>
-             {viewer.data && viewer.data.auth_method !== 'ANONYMOUS' && (
-               <Text style={[styles.identity, { color: colors.textSecondary }]}>
-                 Signed in as {viewer.data.username || viewer.data.email} · {viewer.data.role}
-               </Text>
-             )}
-          </View>
-
-          <View style={[styles.metrics, { backgroundColor: colors.backgroundElement, borderColor: colors.border }]}>
-            <View style={styles.metric}>
-              <Text numberOfLines={1} style={[styles.metricLabel, { color: colors.textSecondary }]}>Server version</Text>
-              <Text style={[styles.metricValue, { color: colors.text }]}>{version.data ?? '—'}</Text>
-            </View>
-            <View style={[styles.metricDivider, { backgroundColor: colors.border }]} />
-            <View style={styles.metric}>
-              <Text numberOfLines={1} style={[styles.metricLabel, { color: colors.textSecondary }]}>Projects</Text>
-              <Text style={[styles.metricValue, { color: colors.text }]}>{projects.data?.length ?? '—'}</Text>
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <View style={styles.sectionHeading}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Projects</Text>
+            {loginRequired && instance.auth.type === 'oauth2' && (
               <MotionPressable
                 accessibilityRole="button"
-                disabled={isRefreshing}
-                onPress={refresh}
-                style={[styles.refreshButton, { backgroundColor: colors.backgroundSelected }]}>
-                <Text style={[styles.link, { color: colors.accent }]}>{isRefreshing ? 'Refreshing' : 'Refresh'}</Text>
+                disabled={isSigningIn}
+                onPress={signIn}
+                style={[styles.signInButton, { backgroundColor: colors.accent }]}
+              >
+                <Text style={[styles.signInText, { color: colors.accentForeground }]}>
+                  {isSigningIn ? 'Signing in…' : 'Sign in again'}
+                </Text>
               </MotionPressable>
-            </View>
-
-            {projects.isPending ? (
-              <ActivityIndicator color={colors.accent} style={styles.loader} />
-            ) : projects.isError ? (
-              <Animated.View
-                entering={FadeIn.duration(180).reduceMotion(ReduceMotion.System)}
-                exiting={FadeOut.duration(120).reduceMotion(ReduceMotion.System)}
-                style={[styles.message, { backgroundColor: colors.backgroundSelected, borderColor: colors.border }]}>
-                <Text style={[styles.messageTitle, { color: colors.text }]}>Couldn’t load projects</Text>
-                <Text style={[styles.messageCopy, { color: colors.textSecondary }]}>{projects.error.message}</Text>
-              </Animated.View>
-            ) : projects.data.length === 0 ? (
-              <Animated.View
-                entering={FadeIn.duration(180).reduceMotion(ReduceMotion.System)}
-                exiting={FadeOut.duration(120).reduceMotion(ReduceMotion.System)}
-                style={[styles.message, { backgroundColor: colors.backgroundSelected, borderColor: colors.border }]}>
-                <Text style={[styles.messageTitle, { color: colors.text }]}>No projects yet</Text>
-                <Text style={[styles.messageCopy, { color: colors.textSecondary }]}>Traced projects will appear here.</Text>
-              </Animated.View>
-            ) : (
-              <View style={[styles.projectList, { borderColor: colors.border }]}>
-                {projects.data.map((project, index) => (
-                  <ProjectRow
-                    index={index}
-                    instanceId={instance.id}
-                    key={project.id}
-                    project={project}
-                    showDivider={index < projects.data.length - 1}
-                  />
-                ))}
-              </View>
             )}
           </View>
+          {signInError && (
+            <Text style={[styles.authError, { color: colors.danger }]}>{signInError}</Text>
+          )}
+          <View style={styles.instanceTitleRow}>
+            <PhoenixLogo loading={version.isPending || projects.isPending} size={36} />
+            <Text style={[styles.title, { color: colors.text }]}>{instance.name}</Text>
+          </View>
+          <Text selectable style={[styles.host, { color: colors.textSecondary }]}>
+            {instance.baseUrl}
+          </Text>
+          {viewer.data && viewer.data.auth_method !== 'ANONYMOUS' && (
+            <Text style={[styles.identity, { color: colors.textSecondary }]}>
+              Signed in as {viewer.data.username || viewer.data.email} · {viewer.data.role}
+            </Text>
+          )}
+        </View>
 
-          <MotionPressable accessibilityRole="button" haptic="warning" onPress={remove} style={styles.removeButton}>
-            <Text style={[styles.removeText, { color: colors.danger }]}>Remove connection</Text>
-          </MotionPressable>
+        <View
+          style={[
+            styles.metrics,
+            { backgroundColor: colors.backgroundElement, borderColor: colors.border },
+          ]}
+        >
+          <View style={styles.metric}>
+            <Text numberOfLines={1} style={[styles.metricLabel, { color: colors.textSecondary }]}>
+              Server version
+            </Text>
+            <Text style={[styles.metricValue, { color: colors.text }]}>{version.data ?? '—'}</Text>
+          </View>
+          <View style={[styles.metricDivider, { backgroundColor: colors.border }]} />
+          <View style={styles.metric}>
+            <Text numberOfLines={1} style={[styles.metricLabel, { color: colors.textSecondary }]}>
+              Projects
+            </Text>
+            <Text style={[styles.metricValue, { color: colors.text }]}>
+              {projects.data?.length ?? '—'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeading}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Projects</Text>
+            <MotionPressable
+              accessibilityRole="button"
+              disabled={isRefreshing}
+              onPress={refresh}
+              style={[styles.refreshButton, { backgroundColor: colors.backgroundSelected }]}
+            >
+              <Text style={[styles.link, { color: colors.accent }]}>
+                {isRefreshing ? 'Refreshing' : 'Refresh'}
+              </Text>
+            </MotionPressable>
+          </View>
+
+          {projects.isPending ? (
+            <ActivityIndicator color={colors.accent} style={styles.loader} />
+          ) : projects.isError ? (
+            <Animated.View
+              entering={FadeIn.duration(180).reduceMotion(ReduceMotion.System)}
+              exiting={FadeOut.duration(120).reduceMotion(ReduceMotion.System)}
+              style={[
+                styles.message,
+                { backgroundColor: colors.backgroundSelected, borderColor: colors.border },
+              ]}
+            >
+              <Text style={[styles.messageTitle, { color: colors.text }]}>
+                Couldn’t load projects
+              </Text>
+              <Text style={[styles.messageCopy, { color: colors.textSecondary }]}>
+                {projects.error.message}
+              </Text>
+            </Animated.View>
+          ) : projects.data.length === 0 ? (
+            <Animated.View
+              entering={FadeIn.duration(180).reduceMotion(ReduceMotion.System)}
+              exiting={FadeOut.duration(120).reduceMotion(ReduceMotion.System)}
+              style={[
+                styles.message,
+                { backgroundColor: colors.backgroundSelected, borderColor: colors.border },
+              ]}
+            >
+              <Text style={[styles.messageTitle, { color: colors.text }]}>No projects yet</Text>
+              <Text style={[styles.messageCopy, { color: colors.textSecondary }]}>
+                Traced projects will appear here.
+              </Text>
+            </Animated.View>
+          ) : (
+            <View style={[styles.projectList, { borderColor: colors.border }]}>
+              {projects.data.map((project, index) => (
+                <ProjectRow
+                  index={index}
+                  instanceId={instance.id}
+                  key={project.id}
+                  project={project}
+                  showDivider={index < projects.data.length - 1}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+
+        <MotionPressable
+          accessibilityRole="button"
+          haptic="warning"
+          onPress={remove}
+          style={styles.removeButton}
+        >
+          <Text style={[styles.removeText, { color: colors.danger }]}>Remove connection</Text>
+        </MotionPressable>
       </View>
     </ScrollView>
   );
@@ -263,8 +310,8 @@ function ProjectRow({
     entrance.set(
       withDelay(
         Math.min(index, 6) * 45,
-        withTiming(1, { duration: 260, easing: Easing.out(Easing.cubic) })
-      )
+        withTiming(1, { duration: 260, easing: Easing.out(Easing.cubic) }),
+      ),
     );
   }, [entrance, index]);
 
@@ -279,24 +326,34 @@ function ProjectRow({
         styles.projectRow,
         showDivider && { borderBottomColor: colors.border, borderBottomWidth: 1 },
         entranceStyle,
-      ]}>
+      ]}
+    >
       <MotionPressable
         accessibilityHint="Opens recent traces for this project"
         accessibilityRole="button"
         onPress={() =>
-          router.push(
-            `/instances/${encodeURIComponent(instanceId)}/projects/${encodeURIComponent(project.id)}` as Href
-          )
+          router.push({
+            pathname: '/instances/[id]/projects/[projectId]',
+            params: { id: instanceId, projectId: project.id },
+          })
         }
         scaleTo={0.99}
-        style={styles.project}>
+        style={styles.project}
+      >
         <View style={[styles.projectMark, { backgroundColor: colors.accentSoft }]}>
-          <Text style={[styles.projectInitial, { color: colors.accent }]}>{project.name.charAt(0).toUpperCase()}</Text>
+          <Text style={[styles.projectInitial, { color: colors.accent }]}>
+            {project.name.charAt(0).toUpperCase()}
+          </Text>
         </View>
         <View style={styles.projectContent}>
-          <Text numberOfLines={1} style={[styles.projectName, { color: colors.text }]}>{project.name}</Text>
+          <Text numberOfLines={1} style={[styles.projectName, { color: colors.text }]}>
+            {project.name}
+          </Text>
           {project.description && (
-            <Text numberOfLines={2} style={[styles.projectDescription, { color: colors.textSecondary }]}>
+            <Text
+              numberOfLines={2}
+              style={[styles.projectDescription, { color: colors.textSecondary }]}
+            >
               {project.description}
             </Text>
           )}
@@ -321,14 +378,33 @@ const styles = StyleSheet.create({
   content: { alignSelf: 'center', gap: 30, maxWidth: MaxContentWidth, padding: 20, width: '100%' },
   hero: { gap: 10 },
   authStatusLine: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  statusRow: { alignItems: 'center', alignSelf: 'flex-start', borderRadius: 14, flexDirection: 'row', gap: 7, paddingHorizontal: 10, paddingVertical: 6 },
+  statusRow: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: 14,
+    flexDirection: 'row',
+    gap: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
   statusDot: { borderRadius: 4, height: 8, width: 8 },
   status: { fontFamily: AppFonts.medium, fontSize: 12 },
-  signInButton: { borderRadius: 12, justifyContent: 'center', minHeight: 48, paddingHorizontal: 14 },
+  signInButton: {
+    borderRadius: 12,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: 14,
+  },
   signInText: { fontFamily: AppFonts.semibold, fontSize: 13 },
   authError: { fontFamily: AppFonts.regular, fontSize: 13, lineHeight: 19 },
   instanceTitleRow: { alignItems: 'center', flexDirection: 'row', gap: 11, paddingTop: 7 },
-  title: { flex: 1, fontFamily: AppFonts.semibold, fontSize: 32, letterSpacing: -1.1, lineHeight: 38 },
+  title: {
+    flex: 1,
+    fontFamily: AppFonts.semibold,
+    fontSize: 32,
+    letterSpacing: -1.1,
+    lineHeight: 38,
+  },
   host: { fontFamily: AppFonts.regular, fontSize: 14 },
   identity: { fontFamily: AppFonts.medium, fontSize: 13, lineHeight: 19 },
   metrics: { borderRadius: 18, borderWidth: 1, flexDirection: 'row', paddingVertical: 18 },
@@ -347,8 +423,20 @@ const styles = StyleSheet.create({
   messageCopy: { fontFamily: AppFonts.regular, fontSize: 14, lineHeight: 21 },
   projectList: { borderRadius: 18, borderWidth: 1, overflow: 'hidden' },
   projectRow: { overflow: 'hidden' },
-  project: { alignItems: 'center', flexDirection: 'row', gap: Spacing.three, minHeight: 74, padding: 14 },
-  projectMark: { alignItems: 'center', borderRadius: 11, height: 42, justifyContent: 'center', width: 42 },
+  project: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: Spacing.three,
+    minHeight: 74,
+    padding: 14,
+  },
+  projectMark: {
+    alignItems: 'center',
+    borderRadius: 11,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
   projectInitial: { fontFamily: AppFonts.semibold, fontSize: 15 },
   projectContent: { flex: 1, gap: Spacing.one },
   projectName: { fontFamily: AppFonts.medium, fontSize: 15 },

@@ -15,15 +15,12 @@ const cells = [
 
 export function PxiGlyph({ color = 'currentColor', size = 22 }: { color?: string; size?: number }) {
   return (
-    <Svg
-      height={size}
-      viewBox={`0 0 ${VIEW_BOX_SIZE} ${VIEW_BOX_SIZE}`}
-      width={size}>
-      {cells.map((cell, index) => (
+    <Svg height={size} viewBox={`0 0 ${VIEW_BOX_SIZE} ${VIEW_BOX_SIZE}`} width={size}>
+      {cells.map((cell) => (
         <Rect
           fill={color}
           height={CELL_SIZE}
-          key={index}
+          key={`${cell.x}:${cell.y}`}
           rx={CELL_RADIUS}
           ry={CELL_RADIUS}
           width={CELL_SIZE}

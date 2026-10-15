@@ -36,7 +36,10 @@ export function InstanceCard({ index, instance, onRemove }: InstanceCardProps) {
   const entrance = useSharedValue(reduceMotion ? 1 : 0);
   const setActiveInstanceId = useInstanceStore((state) => state.setActiveInstanceId);
   const viewer = usePhoenixViewer(instance);
-  const loginRequired = viewer.error instanceof PhoenixAuthError && viewer.error.code === 'login_required';
+
+  const loginRequired =
+    viewer.error instanceof PhoenixAuthError && viewer.error.code === 'login_required';
+
   const status = viewer.isPending
     ? { color: colors.textSecondary, label: 'Checking connection', problem: null }
     : loginRequired
@@ -49,8 +52,8 @@ export function InstanceCard({ index, instance, onRemove }: InstanceCardProps) {
     entrance.set(
       withDelay(
         Math.min(index, 6) * 45,
-        withTiming(1, { duration: 260, easing: Easing.out(Easing.cubic) })
-      )
+        withTiming(1, { duration: 260, easing: Easing.out(Easing.cubic) }),
+      ),
     );
   }, [entrance, index]);
 
@@ -73,7 +76,8 @@ export function InstanceCard({ index, instance, onRemove }: InstanceCardProps) {
             onRemove={() => onRemove(instance)}
             progress={progress}
           />
-        )}>
+        )}
+      >
         <MotionPressable
           accessibilityActions={[{ name: 'delete', label: 'Remove connection' }]}
           accessibilityHint="Opens this Phoenix instance"
@@ -87,9 +91,12 @@ export function InstanceCard({ index, instance, onRemove }: InstanceCardProps) {
             router.push({ pathname: '/instances/[id]', params: { id: instance.id } });
           }}
           scaleTo={0.99}
-          style={[styles.card, { backgroundColor: colors.backgroundElement }]}>
+          style={[styles.card, { backgroundColor: colors.backgroundElement }]}
+        >
           <View style={[styles.monogram, { backgroundColor: colors.accentSoft }]}>
-            <Text style={[styles.monogramText, { color: colors.brand }]}>{instance.name.charAt(0).toUpperCase()}</Text>
+            <Text style={[styles.monogramText, { color: colors.brand }]}>
+              {instance.name.charAt(0).toUpperCase()}
+            </Text>
           </View>
           <View style={styles.content}>
             <Text numberOfLines={1} style={[styles.name, { color: colors.text }]}>
@@ -102,7 +109,9 @@ export function InstanceCard({ index, instance, onRemove }: InstanceCardProps) {
               </Text>
             </View>
             {status.problem ? (
-              <Text numberOfLines={1} style={[styles.problem, { color: colors.danger }]}>{status.problem}</Text>
+              <Text numberOfLines={1} style={[styles.problem, { color: colors.danger }]}>
+                {status.problem}
+              </Text>
             ) : null}
           </View>
           <View style={styles.arrow}>
@@ -129,6 +138,7 @@ function RemoveAction({
   progress: SharedValue<number>;
 }) {
   const colors = useAppColors();
+
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: interpolate(progress.value, [0, 0.5, 1], [0, 0.6, 1], Extrapolation.CLAMP),
     transform: [{ translateX: interpolate(progress.value, [0, 1], [32, 0], Extrapolation.CLAMP) }],
@@ -145,7 +155,8 @@ function RemoveAction({
           onRemove();
         }}
         scaleTo={0.94}
-        style={styles.removeActionButton}>
+        style={styles.removeActionButton}
+      >
         <Text style={styles.removeActionText}>Remove</Text>
       </MotionPressable>
     </Animated.View>
@@ -161,7 +172,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 11,
   },
-  monogram: { alignItems: 'center', borderRadius: 12, height: 46, justifyContent: 'center', width: 46 },
+  monogram: {
+    alignItems: 'center',
+    borderRadius: 12,
+    height: 46,
+    justifyContent: 'center',
+    width: 46,
+  },
   monogramText: { fontFamily: AppFonts.semibold, fontSize: 17 },
   statusDot: { borderRadius: 5, height: 10, width: 10 },
   content: { flex: 1, gap: Spacing.one },
@@ -171,6 +188,11 @@ const styles = StyleSheet.create({
   problem: { fontFamily: AppFonts.medium, fontSize: 12 },
   arrow: { alignItems: 'center', height: 32, justifyContent: 'center', width: 24 },
   removeAction: { width: 92 },
-  removeActionButton: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingHorizontal: 12 },
+  removeActionButton: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
   removeActionText: { color: '#FFFFFF', fontFamily: AppFonts.semibold, fontSize: 13 },
 });

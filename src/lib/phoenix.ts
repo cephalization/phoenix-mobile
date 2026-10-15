@@ -5,17 +5,19 @@ import type { PhoenixInstance } from '@/types/instance';
 
 export async function createPhoenixClient(instance: PhoenixInstance): Promise<PhoenixClient> {
   const headers = await getAuthorizationHeaders(instance);
+
   return createClient({
     getEnvironmentOptions: () => ({}),
     options: {
       baseUrl: instance.baseUrl,
       headers,
-      fetch: (request) => authenticatedFetch(
-        instance,
-        request,
-        undefined,
-        request.method === 'GET' || request.method === 'HEAD'
-      ),
+      fetch: (request) =>
+        authenticatedFetch(
+          instance,
+          request,
+          undefined,
+          request.method === 'GET' || request.method === 'HEAD',
+        ),
     },
   });
 }
@@ -33,11 +35,14 @@ export function normalizePhoenixUrl(value: string): string {
 
   // A userinfo credential would persist in plaintext with the instance metadata.
   if (url.username || url.password) {
-    throw new PhoenixUrlError('Remove the username and password from the address. Phoenix Mobile does not store credentials in connection URLs.');
+    throw new PhoenixUrlError(
+      'Remove the username and password from the address. Phoenix Mobile does not store credentials in connection URLs.',
+    );
   }
 
   url.hash = '';
   url.search = '';
+
   return url.toString().replace(/\/$/, '');
 }
 

@@ -3,12 +3,19 @@ import type { Types } from '@arizeai/phoenix-client';
 type Schemas = Types['V1']['components']['schemas'];
 
 export type SessionData = Schemas['SessionData'];
+
 export type DatasetSummary = Schemas['Dataset'];
+
 export type SessionAnnotation = Schemas['SessionAnnotation'];
+
 export type SpanNoteAnnotation = Schemas['SpanAnnotation'];
+
 export type PhoenixSpan = Schemas['Span'];
+
 export type CategoricalAnnotationConfig = Schemas['CategoricalAnnotationConfig'];
+
 export type ContinuousAnnotationConfig = Schemas['ContinuousAnnotationConfig'];
+
 export type FreeformAnnotationConfig = Schemas['FreeformAnnotationConfig'];
 
 export type SessionAnnotationConfig =
@@ -17,6 +24,7 @@ export type SessionAnnotationConfig =
   | FreeformAnnotationConfig;
 
 export type AnnotationConfigOptimizationDirection = Schemas['OptimizationDirection'];
+
 export type AnnotationConfigCreateData = Schemas['CreateAnnotationConfigData'];
 
 export type AnnotationConfigValueDraft = {

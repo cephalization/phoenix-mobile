@@ -16,6 +16,7 @@ export type ScoreSliderProps = {
 // visible tracks in both color schemes; only the tint needs theming.
 export function ScoreSlider({ disabled, max, min, onValueChange, step, value }: ScoreSliderProps) {
   const colors = useAppColors();
+
   return (
     <Host ignoreSafeArea="all" seedColor={colors.brandText} style={styles.host}>
       <Slider

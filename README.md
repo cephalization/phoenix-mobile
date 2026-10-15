@@ -9,7 +9,7 @@ A mobile companion for connecting to and monitoring self-hosted [Arize Phoenix](
 - Display the Phoenix server version and projects through `@arizeai/phoenix-client`
 - Refresh server data through TanStack Query
 - Stream PXI conversations against persisted server-side agent sessions, with chat history shared across every PXI client (Phoenix 20.0.0+)
-- Run contextual PXI actions, like open coding a session into PXI notes that reviewers read before annotating
+- Run contextual PXI actions, like open coding a session into PXI notes that reviewers read before annotating (Phoenix 20.11.0+)
 - Support light, dark, mobile, tablet, and web layouts
 - Connect to unauthenticated servers or Phoenix 19+ instances through native OAuth 2; web currently supports unauthenticated connections only
 
@@ -56,10 +56,10 @@ The clean script selects `/Applications/Xcode.app`, completes Xcode's first-laun
 For normal JavaScript and TypeScript development, leave the installed development client on the phone and run `npm start` for Fast Refresh. Use `npm run ios:device` only when an incremental native rebuild is needed.
 
 ```bash
-npm test
-npm run typecheck
-npm run lint
+npm run check
 ```
+
+That runs the TypeScript typecheck, oxlint (with the vendored anti-slop rules in `tools/oxlint/anti-slop`), the oxfmt format check, and the Vitest suite. `npm run lint:fix` and `npm run fmt` apply autofixes. The oxc VS Code extension is recommended in `.vscode/extensions.json`.
 
 Before contributing, read:
 

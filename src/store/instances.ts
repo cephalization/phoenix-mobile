@@ -40,7 +40,7 @@ const serverStorage: StateStorage = {
 };
 
 const storage = createJSONStorage(() =>
-  Platform.OS === 'web' && typeof window === 'undefined' ? serverStorage : AsyncStorage
+  Platform.OS === 'web' && typeof window === 'undefined' ? serverStorage : AsyncStorage,
 );
 
 export const useInstanceStore = create<InstanceState>()(
@@ -52,13 +52,18 @@ export const useInstanceStore = create<InstanceState>()(
       pendingOAuthRegistrations: {},
       hasHydrated: false,
       addInstance: async (instance) => {
-        const replacedInstances = useInstanceStore.getState().instances.filter(
-          (item) => item.baseUrl === instance.baseUrl
-        );
+        const replacedInstances = useInstanceStore
+          .getState()
+          .instances.filter((item) => item.baseUrl === instance.baseUrl);
+
         const replaced = replacedInstances[0];
-        if (replaced && replaced.auth.type === 'oauth2' && (
-          instance.auth.type !== 'oauth2' || replaced.auth.credentialKey !== instance.auth.credentialKey
-        )) {
+
+        if (
+          replaced &&
+          replaced.auth.type === 'oauth2' &&
+          (instance.auth.type !== 'oauth2' ||
+            replaced.auth.credentialKey !== instance.auth.credentialKey)
+        ) {
           try {
             await revokeAndDeleteCredentials(replaced, true);
           } catch (error) {
@@ -66,31 +71,46 @@ export const useInstanceStore = create<InstanceState>()(
             throw error;
           }
         }
+
         set((state) => ({
-          instances: [...state.instances.filter((item) => item.baseUrl !== instance.baseUrl), instance],
+          instances: [
+            ...state.instances.filter((item) => item.baseUrl !== instance.baseUrl),
+            instance,
+          ],
           pendingOAuthRegistrations: Object.fromEntries(
-            Object.entries(state.pendingOAuthRegistrations).filter(([baseUrl]) => baseUrl !== instance.baseUrl)
+            Object.entries(state.pendingOAuthRegistrations).filter(
+              ([baseUrl]) => baseUrl !== instance.baseUrl,
+            ),
           ),
         }));
-        useSessionReviewSettingsStore.getState().clearInstanceSettings(
-          replacedInstances.filter((item) => item.id !== instance.id).map((item) => item.id)
-        );
+        useSessionReviewSettingsStore
+          .getState()
+          .clearInstanceSettings(
+            replacedInstances.filter((item) => item.id !== instance.id).map((item) => item.id),
+          );
       },
       clearInstances: async () => {
         const instances = useInstanceStore.getState().instances;
         await Promise.all(instances.map((instance) => revokeAndDeleteCredentials(instance, true)));
         useSessionReviewSettingsStore.getState().clearAllSettings();
-        set({ activeInstanceId: null, instances: [], pendingOAuthRegistrations: {}, pxiModels: {} });
+        set({
+          activeInstanceId: null,
+          instances: [],
+          pendingOAuthRegistrations: {},
+          pxiModels: {},
+        });
       },
       removeInstance: async (id) => {
         const instance = useInstanceStore.getState().instances.find((item) => item.id === id);
+
         if (instance) await revokeAndDeleteCredentials(instance, true);
         useSessionReviewSettingsStore.getState().clearInstanceSettings([id]);
         set((state) => {
           const { [id]: _removedModel, ...pxiModels } = state.pxiModels;
+
           return {
             activeInstanceId: state.activeInstanceId === id ? null : state.activeInstanceId,
-            instances: state.instances.filter((instance) => instance.id !== id),
+            instances: state.instances.filter((item) => item.id !== id),
             pxiModels,
           };
         });
@@ -121,18 +141,22 @@ export const useInstanceStore = create<InstanceState>()(
           const now = Date.now();
           restoredState.pendingOAuthRegistrations = Object.fromEntries(
             Object.entries(restoredState.pendingOAuthRegistrations ?? {}).filter(
-              ([, registration]) => now - registration.createdAt <= PENDING_REGISTRATION_TTL_MS
-            )
+              ([, registration]) => now - registration.createdAt <= PENDING_REGISTRATION_TTL_MS,
+            ),
           );
+
           if (
             restoredState.activeInstanceId &&
-            !restoredState.instances.some((instance) => instance.id === restoredState.activeInstanceId)
+            !restoredState.instances.some(
+              (instance) => instance.id === restoredState.activeInstanceId,
+            )
           ) {
             restoredState.setActiveInstanceId(null);
           }
         }
+
         (restoredState ?? initialState).setHasHydrated(true);
       },
-    }
-  )
+    },
+  ),
 );

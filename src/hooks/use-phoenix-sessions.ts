@@ -1,4 +1,10 @@
-import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 
 import {
   addSessionToDataset,
@@ -15,6 +21,7 @@ import {
   writeSessionAnnotations,
   writeSessionNote,
 } from '@/features/session-review/api';
+import { uniqueTrimmed } from '@/features/session-review/classifier';
 import type {
   AnnotationConfigWrite,
   SessionAnnotationWrite,
@@ -28,6 +35,7 @@ import { phoenixQueryKeys } from '@/hooks/use-phoenix-data';
 import type { PhoenixInstance } from '@/types/instance';
 
 const missing = 'missing';
+const initialSessionCursor: string | null = null;
 
 export const phoenixSessionQueryKeys = {
   project: (instanceId: string, projectId: string) =>
@@ -46,31 +54,33 @@ export const phoenixSessionQueryKeys = {
     instanceId: string,
     projectId: string,
     sessionIds: readonly string[],
-    annotationNames: readonly string[]
-  ) => [
-    ...phoenixSessionQueryKeys.annotations(instanceId, projectId),
-    [...sessionIds].sort(),
-    [...annotationNames].sort(),
-  ] as const,
-  datasets: (instanceId: string) =>
-    [...phoenixQueryKeys.instance(instanceId), 'datasets'] as const,
+    annotationNames: readonly string[],
+  ) =>
+    [
+      ...phoenixSessionQueryKeys.annotations(instanceId, projectId),
+      [...sessionIds].sort(),
+      [...annotationNames].sort(),
+    ] as const,
+  datasets: (instanceId: string) => [...phoenixQueryKeys.instance(instanceId), 'datasets'] as const,
   pxiNotes: (instanceId: string, projectId: string, sessionId: string) =>
     [...phoenixSessionQueryKeys.project(instanceId, projectId), 'pxi-notes', sessionId] as const,
 };
 
 export function usePhoenixProjectSessions(
   instance: PhoenixInstance | undefined,
-  projectId: string | undefined
+  projectId: string | undefined,
 ) {
   return useInfiniteQuery({
     queryKey: phoenixSessionQueryKeys.list(instance?.id ?? missing, projectId ?? missing),
     queryFn: ({ pageParam }) => {
       if (!instance || !projectId) throw new Error('Phoenix project not found.');
+
       return fetchSessionPage(instance, projectId, pageParam);
     },
-    initialPageParam: null as string | null,
+    initialPageParam: initialSessionCursor,
     getNextPageParam: (lastPage, _pages, _lastPageParam, pageParams) => {
       const cursor = lastPage.nextCursor;
+
       return cursor && !pageParams.includes(cursor) ? cursor : undefined;
     },
     enabled: Boolean(instance && projectId),
@@ -80,16 +90,17 @@ export function usePhoenixProjectSessions(
 export function usePhoenixSession(
   instance: PhoenixInstance | undefined,
   projectId: string | undefined,
-  sessionIdentifier: string | undefined
+  sessionIdentifier: string | undefined,
 ) {
   return useQuery({
     queryKey: phoenixSessionQueryKeys.detail(
       instance?.id ?? missing,
       projectId ?? missing,
-      sessionIdentifier ?? missing
+      sessionIdentifier ?? missing,
     ),
     queryFn: () => {
       if (!instance || !sessionIdentifier) throw new Error('Phoenix session not found.');
+
       return fetchSession(instance, sessionIdentifier);
     },
     enabled: Boolean(instance && projectId && sessionIdentifier),
@@ -99,18 +110,22 @@ export function usePhoenixSession(
 export function usePhoenixSessionTurns(
   instance: PhoenixInstance | undefined,
   projectId: string | undefined,
-  session: SessionData | undefined
+  session: SessionData | undefined,
 ) {
   return useQuery({
     queryKey: phoenixSessionQueryKeys.turns(
       instance?.id ?? missing,
       projectId ?? missing,
       session
-        ? `${session.session_id}:${session.traces.map((trace) => trace.trace_id).sort().join(',')}`
-        : missing
+        ? `${session.session_id}:${session.traces
+            .map((trace) => trace.trace_id)
+            .sort()
+            .join(',')}`
+        : missing,
     ),
     queryFn: () => {
       if (!instance || !session) throw new Error('Phoenix session not found.');
+
       return fetchSessionTurns(instance, session);
     },
     enabled: Boolean(instance && projectId && session),
@@ -119,12 +134,16 @@ export function usePhoenixSessionTurns(
 
 export function usePhoenixProjectAnnotationConfigs(
   instance: PhoenixInstance | undefined,
-  projectId: string | undefined
+  projectId: string | undefined,
 ) {
   return useQuery({
-    queryKey: phoenixSessionQueryKeys.annotationConfigs(instance?.id ?? missing, projectId ?? missing),
+    queryKey: phoenixSessionQueryKeys.annotationConfigs(
+      instance?.id ?? missing,
+      projectId ?? missing,
+    ),
     queryFn: () => {
       if (!instance || !projectId) throw new Error('Phoenix project not found.');
+
       return fetchProjectAnnotationConfigs(instance, projectId);
     },
     enabled: Boolean(instance && projectId),
@@ -133,12 +152,14 @@ export function usePhoenixProjectAnnotationConfigs(
 
 export function useCreatePhoenixAnnotationConfig(
   instance: PhoenixInstance | undefined,
-  projectId: string | undefined
+  projectId: string | undefined,
 ) {
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (input: AnnotationConfigWrite) => {
       if (!instance || !projectId) throw new Error('Phoenix project not found.');
+
       return createProjectAnnotationConfig(instance, projectId, input);
     },
     onSuccess: async () => {
@@ -154,22 +175,24 @@ export function usePhoenixSessionPxiNotes(
   instance: PhoenixInstance | undefined,
   projectId: string | undefined,
   sessionId: string | undefined,
-  turns: SessionTurn[] | undefined
+  turns: SessionTurn[] | undefined,
 ) {
   const spanIds = (turns ?? [])
     .flatMap((turn) => (turn.rootSpan ? [turn.rootSpan.context.span_id] : []))
     .sort();
+
   return useQuery({
     queryKey: [
       ...phoenixSessionQueryKeys.pxiNotes(
         instance?.id ?? missing,
         projectId ?? missing,
-        sessionId ?? missing
+        sessionId ?? missing,
       ),
       spanIds,
     ],
     queryFn: () => {
       if (!instance || !projectId) throw new Error('Phoenix project not found.');
+
       return fetchSessionPxiNotes(instance, projectId, spanIds);
     },
     enabled: Boolean(instance && projectId && sessionId && spanIds.length > 0),
@@ -180,27 +203,31 @@ export function usePhoenixSessionAnnotations(
   instance: PhoenixInstance | undefined,
   projectId: string | undefined,
   sessionIdPages: readonly (readonly string[])[],
-  annotationNames: readonly string[]
+  annotationNames: readonly string[],
 ) {
   const batches = createSessionAnnotationBatches(sessionIdPages);
-  const names = [...new Set(annotationNames.map((name) => name.trim()).filter(Boolean))];
+  const names = uniqueTrimmed(annotationNames);
   const enabled = Boolean(instance && projectId && batches.length > 0 && names.length > 0);
+
   const queries = useQueries({
     queries: batches.map((sessionIds) => ({
       queryKey: phoenixSessionQueryKeys.annotationsForSessions(
         instance?.id ?? missing,
         projectId ?? missing,
         sessionIds,
-        names
+        names,
       ),
       queryFn: () => {
         if (!instance || !projectId) throw new Error('Phoenix project not found.');
+
         return fetchSessionAnnotations(instance, projectId, sessionIds, names);
       },
       enabled,
     })),
   });
+
   const error = queries.find((query) => query.error)?.error ?? null;
+
   return {
     data: queries.flatMap((query) => query.data ?? []),
     error,
@@ -211,6 +238,7 @@ export function usePhoenixSessionAnnotations(
     isSuccess: !enabled || queries.every((query) => query.isSuccess),
     refetch: async () => {
       const results = await Promise.all(queries.map((query) => query.refetch()));
+
       return { isError: results.some((result) => result.isError) };
     },
   };
@@ -218,12 +246,14 @@ export function usePhoenixSessionAnnotations(
 
 export function useWritePhoenixSessionAnnotation(
   instance: PhoenixInstance | undefined,
-  projectId: string | undefined
+  projectId: string | undefined,
 ) {
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (input: SessionAnnotationWrite) => {
       if (!instance || !projectId) throw new Error('Phoenix project not found.');
+
       return writeSessionAnnotation(instance, input);
     },
     onSuccess: async (_result, input) => {
@@ -242,12 +272,14 @@ export function useWritePhoenixSessionAnnotation(
 
 export function useWritePhoenixSessionAnnotations(
   instance: PhoenixInstance | undefined,
-  projectId: string | undefined
+  projectId: string | undefined,
 ) {
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (input: SessionAnnotationsWrite) => {
       if (!instance || !projectId) throw new Error('Phoenix project not found.');
+
       return writeSessionAnnotations(instance, input);
     },
     onSuccess: async () => {
@@ -264,6 +296,7 @@ export function usePhoenixDatasets(instance: PhoenixInstance | undefined) {
     queryKey: phoenixSessionQueryKeys.datasets(instance?.id ?? missing),
     queryFn: () => {
       if (!instance) throw new Error('Phoenix instance not found.');
+
       return fetchDatasets(instance);
     },
     enabled: Boolean(instance),
@@ -272,9 +305,11 @@ export function usePhoenixDatasets(instance: PhoenixInstance | undefined) {
 
 export function useAddPhoenixSessionToDataset(instance: PhoenixInstance | undefined) {
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (input: SessionDatasetWrite) => {
       if (!instance) throw new Error('Phoenix instance not found.');
+
       return addSessionToDataset(instance, input);
     },
     onSuccess: async () => {
@@ -288,12 +323,14 @@ export function useAddPhoenixSessionToDataset(instance: PhoenixInstance | undefi
 
 export function useWritePhoenixSessionNote(
   instance: PhoenixInstance | undefined,
-  projectId: string | undefined
+  projectId: string | undefined,
 ) {
   const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (input: SessionNoteWrite) => {
       if (!instance || !projectId) throw new Error('Phoenix project not found.');
+
       return writeSessionNote(instance, input);
     },
     onSuccess: async (_result, input) => {

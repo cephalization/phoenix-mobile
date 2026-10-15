@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 
 export type Appearance = 'system' | 'light' | 'dark';
+
 export type TraceRangePreset = 'hour' | 'day' | 'week' | 'month';
 
 type SettingsState = {
@@ -22,7 +23,7 @@ const serverStorage: StateStorage = {
 };
 
 const storage = createJSONStorage(() =>
-  Platform.OS === 'web' && typeof window === 'undefined' ? serverStorage : AsyncStorage
+  Platform.OS === 'web' && typeof window === 'undefined' ? serverStorage : AsyncStorage,
 );
 
 export const useSettingsStore = create<SettingsState>()(
@@ -35,6 +36,6 @@ export const useSettingsStore = create<SettingsState>()(
       setTraceRangePreset: (traceRangePreset) => set({ traceRangePreset }),
       setTraceStreaming: (traceStreaming) => set({ traceStreaming }),
     }),
-    { name: 'phoenix-settings', storage }
-  )
+    { name: 'phoenix-settings', storage },
+  ),
 );

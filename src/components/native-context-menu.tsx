@@ -7,7 +7,9 @@ export type NativeContextMenuAction = {
   title: string;
 };
 
-export function NativeContextMenu({ children }: {
+export function NativeContextMenu({
+  children,
+}: {
   actions: NativeContextMenuAction[];
   children: ReactElement;
   onAction: (id: string) => void;

@@ -94,11 +94,17 @@ function patchAppDelegate(contents) {
   const reactNativeDelegateMarker = '\nclass ReactNativeDelegate: ExpoReactNativeFactoryDelegate';
 
   if (!patched.includes(linkingMarker) || !patched.includes(reactNativeDelegateMarker)) {
-    throw new Error('The Expo AppDelegate template changed; update the UIScene patch before building.');
+    throw new Error(
+      'The Expo AppDelegate template changed; update the UIScene patch before building.',
+    );
   }
 
   patched = patched.replace(linkingMarker, `\n${sceneConfigurationMethod}\n  // Linking API`);
-  return patched.replace(reactNativeDelegateMarker, `\n${sceneDelegateClass}${reactNativeDelegateMarker}`);
+
+  return patched.replace(
+    reactNativeDelegateMarker,
+    `\n${sceneDelegateClass}${reactNativeDelegateMarker}`,
+  );
 }
 
 module.exports = function withIosSceneLifecycle(config) {
@@ -114,6 +120,7 @@ module.exports = function withIosSceneLifecycle(config) {
         ],
       },
     };
+
     return nextConfig;
   });
 
@@ -123,6 +130,7 @@ module.exports = function withIosSceneLifecycle(config) {
     }
 
     nextConfig.modResults.contents = patchAppDelegate(nextConfig.modResults.contents);
+
     return nextConfig;
   });
 };

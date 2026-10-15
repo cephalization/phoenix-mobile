@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "singleQuote": true,
+  "ignorePatterns": [
+    ".claude/**",
+    ".expo/**",
+    "android/**",
+    "assets/**",
+    "dist/**",
+    "ios/**",
+    "node_modules/**",
+    "package-lock.json",
+    "tools/oxlint/anti-slop/**",
+    "web-build/**"
+  ]
+}

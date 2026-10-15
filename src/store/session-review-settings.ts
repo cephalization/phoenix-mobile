@@ -4,6 +4,8 @@ import { Platform } from 'react-native';
 import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 
+import { isJsonArray, isJsonString } from '@/lib/json';
+
 export type SessionReviewQueueSettings = {
   completionPolicy: 'any-human';
   requiredConfigNames: string[];
@@ -24,7 +26,7 @@ type SessionReviewSettingsState = {
   setRequiredConfigNames: (
     instanceId: string,
     projectId: string,
-    requiredConfigNames: readonly string[]
+    requiredConfigNames: readonly string[],
   ) => void;
   ensureAnonymousReviewerId: (instanceId: string) => void;
   setHasHydrated: (hasHydrated: boolean) => void;
@@ -37,7 +39,7 @@ const serverStorage: StateStorage = {
 };
 
 const storage = createJSONStorage(() =>
-  Platform.OS === 'web' && typeof window === 'undefined' ? serverStorage : AsyncStorage
+  Platform.OS === 'web' && typeof window === 'undefined' ? serverStorage : AsyncStorage,
 );
 
 export function sessionReviewQueueKey(instanceId: string, projectId: string): string {
@@ -47,7 +49,7 @@ export function sessionReviewQueueKey(instanceId: string, projectId: string): st
 export function getSessionReviewQueueSettings(
   queues: Record<string, SessionReviewQueueSettings>,
   instanceId: string,
-  projectId: string
+  projectId: string,
 ): SessionReviewQueueSettings {
   return queues[sessionReviewQueueKey(instanceId, projectId)] ?? defaultSessionReviewQueueSettings;
 }
@@ -70,26 +72,33 @@ export const useSessionReviewSettingsStore = create<SessionReviewSettingsState>(
         set((state) => {
           const key = sessionReviewQueueKey(instanceId, projectId);
           const { [key]: _removed, ...queues } = state.queues;
+
           return { queues };
         }),
       clearAllSettings: () => set({ anonymousReviewerIds: {}, queues: {} }),
       clearInstanceSettings: (instanceIds) =>
         set((state) => {
           const removedIds = new Set(instanceIds);
+
           if (removedIds.size === 0) return state;
+
           return {
             anonymousReviewerIds: Object.fromEntries(
-              Object.entries(state.anonymousReviewerIds).filter(([instanceId]) => !removedIds.has(instanceId))
+              Object.entries(state.anonymousReviewerIds).filter(
+                ([instanceId]) => !removedIds.has(instanceId),
+              ),
             ),
             queues: Object.fromEntries(
               Object.entries(state.queues).filter(([key]) => {
                 try {
                   const value: unknown = JSON.parse(key);
-                  return !Array.isArray(value) || typeof value[0] !== 'string' || !removedIds.has(value[0]);
+                  const keyInstanceId = isJsonArray(value) ? value[0] : undefined;
+
+                  return !isJsonString(keyInstanceId) || !removedIds.has(keyInstanceId);
                 } catch {
                   return true;
                 }
-              })
+              }),
             ),
           };
         }),
@@ -117,6 +126,6 @@ export const useSessionReviewSettingsStore = create<SessionReviewSettingsState>(
       onRehydrateStorage: (initialState) => (restoredState) => {
         (restoredState ?? initialState).setHasHydrated(true);
       },
-    }
-  )
+    },
+  ),
 );

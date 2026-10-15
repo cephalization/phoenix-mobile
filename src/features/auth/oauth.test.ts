@@ -1,22 +1,25 @@
+import type * as ExpoCrypto from 'expo-crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { JsonObject, JsonValue } from '@/lib/json';
+
 import {
   discoverOAuth,
   OAUTH_CALLBACK_URL,
   parseOAuthCallback,
-  PhoenixAuthError,
   registerOAuthClient,
   tokenResponseSchema,
 } from './oauth';
 
 vi.mock('expo-crypto', () => ({
   CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
-  digest: vi.fn(),
-  getRandomBytesAsync: vi.fn(),
+  digest: vi.fn<typeof ExpoCrypto.digest>(),
+  getRandomBytesAsync: vi.fn<typeof ExpoCrypto.getRandomBytesAsync>(),
 }));
 
 const baseUrl = 'https://phoenix.example.test/phoenix';
 
-function metadata(overrides: Record<string, unknown> = {}) {
+function metadata(overrides: JsonObject = {}): JsonObject {
   return {
     issuer: baseUrl,
     authorization_endpoint: `${baseUrl}/oauth/authorize`,
@@ -31,20 +34,16 @@ function metadata(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function jsonResponse(value: unknown, status = 200): Response {
+function jsonResponse(value: JsonValue, status = 200): Response {
   return new Response(JSON.stringify(value), {
     status,
     headers: { 'content-type': 'application/json' },
   });
 }
 
-async function expectAuthError(promise: Promise<unknown>, code: PhoenixAuthError['code']) {
-  await expect(promise).rejects.toMatchObject({ code });
-}
-
 describe('OAuth discovery', () => {
   beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn());
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>());
   });
 
   afterEach(() => {
@@ -52,10 +51,14 @@ describe('OAuth discovery', () => {
   });
 
   it('accepts valid extensible Phoenix metadata', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(metadata({
-      phoenix_extension: { supported: true },
-      scopes_supported: ['openid', 'profile'],
-    })));
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse(
+        metadata({
+          phoenix_extension: { supported: true },
+          scopes_supported: ['openid', 'profile'],
+        }),
+      ),
+    );
 
     await expect(discoverOAuth(`${baseUrl}/`)).resolves.toEqual({
       type: 'oauth2',
@@ -70,30 +73,39 @@ describe('OAuth discovery', () => {
 
   it('rejects HTML and malformed discovery responses', async () => {
     vi.mocked(fetch)
-      .mockResolvedValueOnce(new Response('<html>not metadata</html>', {
-        headers: { 'content-type': 'text/html' },
-      }))
+      .mockResolvedValueOnce(
+        new Response('<html>not metadata</html>', {
+          headers: { 'content-type': 'text/html' },
+        }),
+      )
       .mockResolvedValueOnce(jsonResponse(metadata({ response_types_supported: 'code' })));
 
-    await expectAuthError(discoverOAuth(baseUrl), 'invalid_server');
-    await expectAuthError(discoverOAuth(baseUrl), 'invalid_server');
+    await expect(discoverOAuth(baseUrl)).rejects.toMatchObject({ code: 'invalid_server' });
+    await expect(discoverOAuth(baseUrl)).rejects.toMatchObject({ code: 'invalid_server' });
   });
 
   it.each([
     ['wrong issuer origin', { issuer: 'https://attacker.example.test/phoenix' }],
     ['wrong issuer path', { issuer: 'https://phoenix.example.test/other' }],
     ['insecure endpoint', { token_endpoint: 'http://phoenix.example.test/phoenix/oauth/token' }],
-    ['endpoint outside deployment', { authorization_endpoint: 'https://phoenix.example.test/oauth/authorize' }],
-    ['credential-bearing endpoint', { revocation_endpoint: 'https://user:secret@phoenix.example.test/phoenix/oauth/revoke' }],
+    [
+      'endpoint outside deployment',
+      { authorization_endpoint: 'https://phoenix.example.test/oauth/authorize' },
+    ],
+    [
+      'credential-bearing endpoint',
+      { revocation_endpoint: 'https://user:secret@phoenix.example.test/phoenix/oauth/revoke' },
+    ],
   ])('rejects %s', async (_label, override) => {
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(metadata(override)));
-    await expectAuthError(discoverOAuth(baseUrl), 'invalid_server');
+    await expect(discoverOAuth(baseUrl)).rejects.toMatchObject({ code: 'invalid_server' });
   });
 
   it('reports a missing registration endpoint as specifically unsupported', async () => {
     const discovered = await (async () => {
       const { registration_endpoint: _registrationEndpoint, ...value } = metadata();
       vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(value));
+
       return discoverOAuth(baseUrl);
     })();
 
@@ -105,15 +117,19 @@ describe('OAuth discovery', () => {
 
   it('requires explicit consent for authenticated HTTP deployments', async () => {
     const localBaseUrl = 'http://192.168.1.65:6006';
-    await expectAuthError(discoverOAuth(localBaseUrl), 'unavailable');
+    await expect(discoverOAuth(localBaseUrl)).rejects.toMatchObject({ code: 'unavailable' });
 
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(metadata({
-      issuer: localBaseUrl,
-      authorization_endpoint: `${localBaseUrl}/oauth2/authorize`,
-      token_endpoint: `${localBaseUrl}/oauth2/token`,
-      revocation_endpoint: `${localBaseUrl}/oauth2/revoke`,
-      registration_endpoint: `${localBaseUrl}/oauth2/register`,
-    })));
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse(
+        metadata({
+          issuer: localBaseUrl,
+          authorization_endpoint: `${localBaseUrl}/oauth2/authorize`,
+          token_endpoint: `${localBaseUrl}/oauth2/token`,
+          revocation_endpoint: `${localBaseUrl}/oauth2/revoke`,
+          registration_endpoint: `${localBaseUrl}/oauth2/register`,
+        }),
+      ),
+    );
 
     await expect(discoverOAuth(localBaseUrl, true)).resolves.toMatchObject({
       allowInsecureTransport: true,
@@ -124,7 +140,9 @@ describe('OAuth discovery', () => {
 
 describe('OAuth callbacks', () => {
   it('accepts only the exact private callback and expected state', () => {
-    expect(parseOAuthCallback(`${OAUTH_CALLBACK_URL}?state=expected&code=auth-code`, 'expected')).toBe('auth-code');
+    expect(
+      parseOAuthCallback(`${OAUTH_CALLBACK_URL}?state=expected&code=auth-code`, 'expected'),
+    ).toBe('auth-code');
 
     for (const callback of [
       'otherapp://oauth/callback?state=expected&code=x',
@@ -132,28 +150,34 @@ describe('OAuth callbacks', () => {
       'phoenixmobile://oauth/other?state=expected&code=x',
       `${OAUTH_CALLBACK_URL}?state=wrong&code=x`,
     ]) {
-      expect(() => parseOAuthCallback(callback, 'expected')).toThrow(expect.objectContaining({ code: 'invalid_callback' }));
+      expect(() => parseOAuthCallback(callback, 'expected')).toThrow(
+        expect.objectContaining({ code: 'invalid_callback' }),
+      );
     }
   });
 
   it('distinguishes access denial and rejects a missing code', () => {
-    expect(() => parseOAuthCallback(`${OAUTH_CALLBACK_URL}?state=s&error=access_denied`, 's'))
-      .toThrow(expect.objectContaining({ code: 'cancelled' }));
-    expect(() => parseOAuthCallback(`${OAUTH_CALLBACK_URL}?state=s`, 's'))
-      .toThrow(expect.objectContaining({ code: 'invalid_callback' }));
+    expect(() =>
+      parseOAuthCallback(`${OAUTH_CALLBACK_URL}?state=s&error=access_denied`, 's'),
+    ).toThrow(expect.objectContaining({ code: 'cancelled' }));
+    expect(() => parseOAuthCallback(`${OAUTH_CALLBACK_URL}?state=s`, 's')).toThrow(
+      expect.objectContaining({ code: 'invalid_callback' }),
+    );
   });
 });
 
 describe('OAuth token responses', () => {
   it('accepts valid responses with unknown fields', () => {
-    expect(tokenResponseSchema.parse({
-      access_token: 'access',
-      refresh_token: 'refresh',
-      expires_in: 300,
-      token_type: 'Bearer',
-      scope: 'openid',
-      server_extension: true,
-    })).toMatchObject({ access_token: 'access', refresh_token: 'refresh' });
+    expect(
+      tokenResponseSchema.parse({
+        access_token: 'access',
+        refresh_token: 'refresh',
+        expires_in: 300,
+        token_type: 'Bearer',
+        scope: 'openid',
+        server_extension: true,
+      }),
+    ).toMatchObject({ access_token: 'access', refresh_token: 'refresh' });
   });
 
   it.each([

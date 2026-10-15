@@ -43,6 +43,7 @@ Current product boundaries:
 - React Hook Form and Zod for forms and validation
 - Reanimated 4, Gesture Handler, and Expo Haptics for interaction
 - Geist typography and Phoenix design tokens
+- oxlint with the vendored anti-slop ruleset, and oxfmt for formatting
 
 Use `npm` for dependency and script commands because this repository commits `package-lock.json`.
 
@@ -61,6 +62,7 @@ src/lib/                  Phoenix client, haptics, and infrastructure
 src/store/                Persisted local state
 src/types/                Domain models
 assets/                   Bundled application assets
+tools/oxlint/anti-slop/   Vendored lint rules (see its UPSTREAM.md before editing)
 ```
 
 ## Architecture Rules
@@ -75,6 +77,15 @@ assets/                   Bundled application assets
 - Construct Phoenix clients with explicit options. Do not rely on Node environment discovery in the mobile runtime.
 - Prefer existing components and tokens before introducing another abstraction or dependency.
 - Avoid compatibility layers without a concrete shipped-data or external-consumer requirement.
+
+## Code Quality Rules
+
+Lint policy lives in `.oxlintrc.json` and the vendored `tools/oxlint/anti-slop` plugin. Fix the code rather than the rule: never add `oxlint-disable` comments, lower a severity, or launder a type to make lint pass. Policy changes go through `.oxlintrc.json` and `tools/oxlint/anti-slop/UPSTREAM.md`, where intentional deviations are recorded.
+
+- Narrow untyped JSON (AI SDK tool payloads, span attributes, `JSON.parse` output) with the predicates in `src/lib/json.ts` and type it as `JsonValue`. Do not add ad hoc `typeof` checks or `unknown` parameters outside type predicates.
+- A type assertion needs a `// SAFETY:` comment stating the invariant that makes it sound. Prefer fixing the types so no assertion is needed.
+- Tests replace dependencies through real seams. Module mocking is allowed only for the native Expo modules listed in `.oxlintrc.json`.
+- Build request objects explicitly instead of spreading conditional empty objects; the Phoenix client drops `undefined` fields.
 
 ## UI Guidelines
 
@@ -114,9 +125,10 @@ assets/                   Bundled application assets
 Run these checks after code changes:
 
 ```bash
-npm run typecheck
-npm run lint
+npm run check
 ```
+
+`npm run check` runs `typecheck`, `lint` (oxlint), `fmt:check` (oxfmt), and `test` (Vitest). Use `npm run lint:fix` and `npm run fmt` to apply autofixes and formatting; run lint again afterwards because the spacing rule and the formatter must agree.
 
 For changes involving routing, native modules, Metro, assets, or platform configuration, also run:
 

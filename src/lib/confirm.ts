@@ -13,6 +13,7 @@ export function confirmAction({
 }) {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     if (window.confirm(`${title}\n\n${message}`)) void onConfirm();
+
     return;
   }
 

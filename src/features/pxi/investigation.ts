@@ -41,7 +41,7 @@ export function createPxiInvestigationKey(
   actionKey: string,
   instanceId: string,
   projectId: string,
-  sessionId: string
+  sessionId: string,
 ): string {
   return JSON.stringify([actionKey, instanceId, projectId, sessionId]);
 }
@@ -51,17 +51,21 @@ export const usePxiInvestigationStore = create<PxiInvestigationState>()((set, ge
   clearRun: (key) =>
     set((state) => {
       const { [key]: _removed, ...runs } = state.runs;
+
       return { runs };
     }),
   startRun: ({ action, instance, key, model, onSettled }) => {
     void get().runs[key]?.chat.stop();
+
     const setStatus = (status: PxiInvestigationStatus) =>
       set((state) =>
         state.runs[key]?.chat === chat
           ? { runs: { ...state.runs, [key]: { ...state.runs[key], status } } }
-          : state
+          : state,
       );
+
     const runId = createPxiId('action');
+
     const chat: Chat<PxiMessage> = new Chat<PxiMessage>({
       id: runId,
       // Each run gets its own ephemeral server session, created on the first
@@ -80,17 +84,22 @@ export const usePxiInvestigationStore = create<PxiInvestigationState>()((set, ge
       onFinish: ({ isAbort, isDisconnect, isError }) => {
         if (isAbort) {
           setStatus('stopped');
+
           return;
         }
+
         if (isError || isDisconnect) {
           setStatus('error');
+
           return;
         }
+
         haptics.success();
         setStatus('done');
         onSettled();
       },
     });
+
     set((state) => ({
       runs: {
         ...state.runs,

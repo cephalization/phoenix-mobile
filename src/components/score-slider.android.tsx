@@ -12,6 +12,7 @@ import type { ScoreSliderProps } from './score-slider';
 export function ScoreSlider({ disabled, max, min, onValueChange, step, value }: ScoreSliderProps) {
   const colors = useAppColors();
   const steps = step > 0 ? Math.max(0, Math.round((max - min) / step) - 1) : 0;
+
   return (
     <Host ignoreSafeArea="all" style={styles.host}>
       <ComposeSlider

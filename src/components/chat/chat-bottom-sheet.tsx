@@ -5,10 +5,12 @@ import { Platform, StyleSheet, Text, View } from 'react-native';
 
 import { AppFonts, useAppColors } from '@/constants/theme';
 
+const DEFAULT_SNAP_POINTS: SnapPoint[] = [{ fraction: 0.58 }, { fraction: 0.88 }];
+
 export function ChatBottomSheet({
   children,
   onClose,
-  snapPoints = [{ fraction: 0.58 }, { fraction: 0.88 }],
+  snapPoints = DEFAULT_SNAP_POINTS,
   subtitle,
   title,
   visible,
@@ -28,13 +30,16 @@ export function ChatBottomSheet({
       modifiers={Platform.OS === 'ios' ? [presentationBackground(colors.background)] : undefined}
       onDismiss={onClose}
       showDragIndicator
-      snapPoints={snapPoints}>
+      snapPoints={snapPoints}
+    >
       <RNHostView>
         <View style={styles.sheet}>
           <View style={styles.header}>
             <View style={styles.headingGroup}>
               <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
-              <Text numberOfLines={1} style={[styles.subtitle, { color: colors.textSecondary }]}>{subtitle}</Text>
+              <Text numberOfLines={1} style={[styles.subtitle, { color: colors.textSecondary }]}>
+                {subtitle}
+              </Text>
             </View>
           </View>
           <View style={styles.body}>{children}</View>

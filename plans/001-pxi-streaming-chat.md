@@ -89,14 +89,14 @@ Match Phoenix's currently deployed client generation by installing `ai@^6.0.219`
 
 ## Commands You Will Need
 
-| Purpose | Command | Expected On Success |
-|---------|---------|---------------------|
-| Install compatible dependencies | `npm install ai@^6.0.219 @ai-sdk/react@^3.0.221` | exit 0; lockfile updated |
-| Install native SVG | `npx expo install react-native-svg` | exit 0; Expo-compatible version installed |
-| Typecheck | `npm run typecheck` | exit 0, no errors |
-| Lint | `npm run lint` | exit 0, no errors |
-| Dependency diagnostics | `npx expo-doctor` | exit 0, no actionable failures |
-| Build all platforms | `npx expo export --platform all --clear` | exit 0; iOS, Android, and web bundles exported |
+| Purpose                         | Command                                          | Expected On Success                            |
+| ------------------------------- | ------------------------------------------------ | ---------------------------------------------- |
+| Install compatible dependencies | `npm install ai@^6.0.219 @ai-sdk/react@^3.0.221` | exit 0; lockfile updated                       |
+| Install native SVG              | `npx expo install react-native-svg`              | exit 0; Expo-compatible version installed      |
+| Typecheck                       | `npm run typecheck`                              | exit 0, no errors                              |
+| Lint                            | `npm run lint`                                   | exit 0, no errors                              |
+| Dependency diagnostics          | `npx expo-doctor`                                | exit 0, no actionable failures                 |
+| Build all platforms             | `npx expo export --platform all --clear`         | exit 0; iOS, Android, and web bundles exported |
 
 Use `npm`; this repository commits `package-lock.json`.
 

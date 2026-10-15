@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { authenticatedFetch } from '@/features/auth/session';
+import type { JsonValue } from '@/lib/json';
+import type { PhoenixInstance } from '@/types/instance';
 
 import {
   createAgentSession,
@@ -11,14 +12,29 @@ import {
 } from './sessions';
 import type { ModelSelection } from './types';
 
-vi.mock('@/features/auth/session', () => ({ authenticatedFetch: vi.fn() }));
+vi.mock('expo-crypto', () => ({}));
 
-const model: ModelSelection = { modelName: 'claude-opus-4-8', provider: 'ANTHROPIC', providerType: 'builtin' };
-const instance = { auth: { type: 'none' }, baseUrl: 'http://phoenix.local:6006', id: 'instance-1' } as Parameters<
-  typeof listAgentSessions
->[0];
+vi.mock('expo-secure-store', () => ({}));
 
-function jsonResponse(payload: unknown, status = 200): Response {
+const model: ModelSelection = {
+  modelName: 'claude-opus-4-8',
+  provider: 'ANTHROPIC',
+  providerType: 'builtin',
+};
+
+// An unauthenticated instance sends its requests straight through the global
+// fetch, which each test stubs.
+const instance: PhoenixInstance = {
+  auth: { type: 'none' },
+  baseUrl: 'http://phoenix.local:6006',
+  createdAt: '2026-08-11T00:00:00.000Z',
+  id: 'instance-1',
+  name: 'Phoenix',
+};
+
+const fetchMock = vi.fn<typeof fetch>();
+
+function jsonResponse(payload: JsonValue, status = 200): Response {
   return new Response(JSON.stringify(payload), {
     headers: { 'Content-Type': 'application/json' },
     status,
@@ -33,38 +49,63 @@ const summaryWire = {
 };
 
 describe('agent session API', () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('creates a session and returns the server id', async () => {
-    vi.mocked(authenticatedFetch).mockResolvedValueOnce(jsonResponse({ data: { id: 'QWdlbnRTZXNzaW9uOjE=' } }));
-    await expect(createAgentSession(instance, { ephemeral: true, model })).resolves.toBe('QWdlbnRTZXNzaW9uOjE=');
-    const [, url, init] = vi.mocked(authenticatedFetch).mock.calls.at(-1)!;
+    fetchMock.mockResolvedValueOnce(jsonResponse({ data: { id: 'QWdlbnRTZXNzaW9uOjE=' } }));
+    await expect(createAgentSession(instance, { ephemeral: true, model })).resolves.toBe(
+      'QWdlbnRTZXNzaW9uOjE=',
+    );
+    const [url, init] = fetchMock.mock.calls.at(-1)!;
     expect(url).toBe('http://phoenix.local:6006/v1/agent_sessions');
+    expect(init?.method).toBe('POST');
     expect(JSON.parse(String(init?.body))).toEqual({ title: '', is_ephemeral: true, model });
   });
 
   it('pages through the session listing until the cursor is exhausted', async () => {
-    vi.mocked(authenticatedFetch)
-      .mockResolvedValueOnce(jsonResponse({ data: [{ ...summaryWire, id: 's1' }], next_cursor: 'cursor-2' }))
-      .mockResolvedValueOnce(jsonResponse({ data: [{ ...summaryWire, id: 's2', is_ephemeral: true }], next_cursor: null }));
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({ data: [{ ...summaryWire, id: 's1' }], next_cursor: 'cursor-2' }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: [{ ...summaryWire, id: 's2', is_ephemeral: true }],
+          next_cursor: null,
+        }),
+      );
     const sessions = await listAgentSessions(instance);
     expect(sessions.map((session) => session.id)).toEqual(['s1', 's2']);
     expect(sessions[1].isEphemeral).toBe(true);
-    const secondUrl = vi.mocked(authenticatedFetch).mock.calls.at(-1)![1];
+    const [secondUrl] = fetchMock.mock.calls.at(-1)!;
     expect(String(secondUrl)).toContain('cursor=cursor-2');
   });
 
   it('assembles a session with its full transcript across message pages', async () => {
-    vi.mocked(authenticatedFetch)
-      .mockResolvedValueOnce(jsonResponse({
-        data: { ...summaryWire, id: 's1', is_active: false, last_message_id: 'm2', model },
-      }))
-      .mockResolvedValueOnce(jsonResponse({
-        data: [{ id: 'm1', parts: [{ type: 'text', text: 'hello' }], role: 'user' }],
-        next_cursor: 'cursor-2',
-      }))
-      .mockResolvedValueOnce(jsonResponse({
-        data: [{ id: 'm2', parts: [{ type: 'text', text: 'hi' }], role: 'assistant' }],
-        next_cursor: null,
-      }));
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: { ...summaryWire, id: 's1', is_active: false, last_message_id: 'm2', model },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: [{ id: 'm1', parts: [{ type: 'text', text: 'hello' }], role: 'user' }],
+          next_cursor: 'cursor-2',
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: [{ id: 'm2', parts: [{ type: 'text', text: 'hi' }], role: 'assistant' }],
+          next_cursor: null,
+        }),
+      );
     const session = await getAgentSession(instance, 's1');
     expect(session.model).toEqual(model);
     expect(session.isActive).toBe(false);
@@ -72,21 +113,26 @@ describe('agent session API', () => {
   });
 
   it('rejects HTML responses from servers without the agent session routes', async () => {
-    vi.mocked(authenticatedFetch).mockResolvedValueOnce(
-      new Response('<!DOCTYPE html>', { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 200 })
+    fetchMock.mockResolvedValueOnce(
+      new Response('<!DOCTYPE html>', {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        status: 200,
+      }),
     );
     await expect(listAgentSessions(instance)).rejects.toThrow('Phoenix 20.0.0 or newer');
   });
 
   it('keeps 409 conflict codes recognizable in thrown errors', async () => {
-    vi.mocked(authenticatedFetch).mockResolvedValueOnce(
-      new Response(JSON.stringify({ code: 'agent_session_model_stale' }), {
-        headers: { 'Content-Type': 'application/json' },
-        status: 409,
-      })
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ code: 'agent_session_model_stale', message: 'Model changed.' }, 409),
     );
-    const failure = await createAgentSession(instance, { ephemeral: false, model }).catch((error: unknown) => error);
-    expect(isAgentSessionStaleError(failure)).toBe(true);
-    expect(isAgentSessionConflict(failure, 'agent_session_busy')).toBe(false);
+
+    const creation = createAgentSession(instance, { ephemeral: false, model });
+
+    await expect(creation).rejects.toThrow('HTTP 409');
+    await expect(creation).rejects.toSatisfy(isAgentSessionStaleError);
+    await expect(creation).rejects.toSatisfy(
+      (error: Error) => !isAgentSessionConflict(error, 'agent_session_busy'),
+    );
   });
 });

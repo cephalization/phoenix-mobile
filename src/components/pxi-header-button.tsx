@@ -16,16 +16,19 @@ export function PxiHeaderButton({ instance }: { instance: PhoenixInstance }) {
       accessibilityRole="button"
       onPress={() => router.push({ pathname: '/instances/[id]/chat', params: { id: instance.id } })}
       scaleTo={0.92}
-      style={Platform.OS === 'ios'
-        ? [styles.button, styles.iosButton]
-        : [
-            styles.button,
-            styles.fallbackButton,
-            {
-              backgroundColor: colors.accent,
-              borderColor: colors.background,
-            },
-          ]}>
+      style={
+        Platform.OS === 'ios'
+          ? [styles.button, styles.iosButton]
+          : [
+              styles.button,
+              styles.fallbackButton,
+              {
+                backgroundColor: colors.accent,
+                borderColor: colors.background,
+              },
+            ]
+      }
+    >
       <PxiGlyph color={Platform.OS === 'ios' ? colors.text : colors.accentForeground} size={20} />
     </MotionPressable>
   );

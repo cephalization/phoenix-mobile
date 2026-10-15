@@ -2,12 +2,24 @@
 
 set -euo pipefail
 
+# Gradle needs a JDK (javac), not a JRE. /usr/libexec/java_home happily returns a
+# JRE-only install such as Zulu 17 JRE, so require javac before accepting a candidate.
 if [[ -z "${JAVA_HOME:-}" ]]; then
   if [[ -x /usr/libexec/java_home ]] && /usr/libexec/java_home -v 17 >/dev/null 2>&1; then
-    JAVA_HOME="$(/usr/libexec/java_home -v 17)"
-  elif command -v brew >/dev/null 2>&1 && brew --prefix openjdk@17 >/dev/null 2>&1; then
+    candidate="$(/usr/libexec/java_home -v 17)"
+    if [[ -x "${candidate}/bin/javac" ]]; then
+      JAVA_HOME="${candidate}"
+    fi
+  fi
+
+  if [[ -z "${JAVA_HOME:-}" ]] && command -v brew >/dev/null 2>&1 && brew --prefix openjdk@17 >/dev/null 2>&1; then
     JAVA_HOME="$(brew --prefix openjdk@17)/libexec/openjdk.jdk/Contents/Home"
   fi
+fi
+
+if [[ -z "${JAVA_HOME:-}" || ! -x "${JAVA_HOME}/bin/javac" ]]; then
+  printf 'JDK 17 (with javac) was not found. Run npm run android:device:clean first or set JAVA_HOME to a JDK.\n' >&2
+  exit 1
 fi
 
 if [[ -z "${ANDROID_HOME:-}" ]]; then
@@ -18,11 +30,6 @@ if [[ -z "${ANDROID_HOME:-}" ]]; then
   elif command -v brew >/dev/null 2>&1; then
     ANDROID_HOME="$(brew --prefix)/share/android-commandlinetools"
   fi
-fi
-
-if [[ -z "${JAVA_HOME:-}" || ! -x "${JAVA_HOME}/bin/java" ]]; then
-  printf 'JDK 17 was not found. Run npm run android:device:clean first or set JAVA_HOME.\n' >&2
-  exit 1
 fi
 
 if [[ -z "${ANDROID_HOME:-}" || ! -d "${ANDROID_HOME}" ]]; then

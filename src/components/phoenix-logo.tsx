@@ -19,8 +19,13 @@ export function PhoenixLogo({ loading = false, size = 28 }: { loading?: boolean;
 
   useEffect(() => {
     cancelAnimation(progress);
+
     if (loading && !reduceMotion) {
-      progress.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }), -1, true);
+      progress.value = withRepeat(
+        withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }),
+        -1,
+        true,
+      );
     } else {
       progress.value = withTiming(0, { duration: 180 });
     }
