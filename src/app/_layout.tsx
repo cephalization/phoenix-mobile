@@ -4,6 +4,7 @@ import {
   Geist_600SemiBold,
   useFonts,
 } from '@expo-google-fonts/geist';
+import { GeistMono_400Regular, GeistMono_500Medium } from '@expo-google-fonts/geist-mono';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -18,6 +19,7 @@ import { PhoenixAuthError } from '@/features/auth/oauth';
 import { useSettingsStore } from '@/store/settings';
 
 SplashScreen.preventAutoHideAsync();
+
 featureFlags.experiment.synchronousScreenUpdatesEnabled = true;
 
 export default function RootLayout() {
@@ -25,11 +27,15 @@ export default function RootLayout() {
   const appearance = useSettingsStore((state) => state.appearance);
   const resolvedScheme = appearance === 'system' ? colorScheme : appearance;
   const colors = Colors[resolvedScheme === 'dark' ? 'dark' : 'light'];
+
   const [fontsLoaded, fontError] = useFonts({
     Geist_400Regular,
     Geist_500Medium,
     Geist_600SemiBold,
+    GeistMono_400Regular,
+    GeistMono_500Medium,
   });
+
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -40,7 +46,7 @@ export default function RootLayout() {
             staleTime: 30_000,
           },
         },
-      })
+      }),
   );
 
   useEffect(() => {
@@ -68,7 +74,8 @@ export default function RootLayout() {
               headerStyle: { backgroundColor: colors.background },
               headerTintColor: colors.text,
               headerTitleStyle: { fontFamily: 'Geist_600SemiBold' },
-            }}>
+            }}
+          >
             <Stack.Screen name="index" options={{ headerShown: false }} />
             <Stack.Screen name="oauth/callback" options={{ headerShown: false }} />
             <Stack.Screen
@@ -82,10 +89,22 @@ export default function RootLayout() {
               }}
             />
             <Stack.Screen name="instances/[id]/index" options={{ title: 'Instance' }} />
-            <Stack.Screen name="instances/[id]/projects/[projectId]" options={{ title: 'Project' }} />
-            <Stack.Screen name="instances/[id]/projects/[projectId]/traces/[traceId]" options={{ title: 'Trace' }} />
-            <Stack.Screen name="instances/[id]/projects/[projectId]/sessions/index" options={{ title: 'Sessions' }} />
-            <Stack.Screen name="instances/[id]/projects/[projectId]/sessions/[sessionId]" options={{ title: 'Session' }} />
+            <Stack.Screen
+              name="instances/[id]/projects/[projectId]"
+              options={{ title: 'Project' }}
+            />
+            <Stack.Screen
+              name="instances/[id]/projects/[projectId]/traces/[traceId]"
+              options={{ title: 'Trace' }}
+            />
+            <Stack.Screen
+              name="instances/[id]/projects/[projectId]/sessions/index"
+              options={{ title: 'Sessions' }}
+            />
+            <Stack.Screen
+              name="instances/[id]/projects/[projectId]/sessions/[sessionId]"
+              options={{ title: 'Session' }}
+            />
             <Stack.Screen
               name="instances/[id]/projects/[projectId]/sessions/add-to-dataset"
               options={{

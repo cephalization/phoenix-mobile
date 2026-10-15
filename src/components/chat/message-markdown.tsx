@@ -1,47 +1,88 @@
 import {
   MarkdownStream,
-  renderRules,
   type MarkdownStyleMap,
   type RenderRules,
 } from '@ronradtke/react-native-markdown-display';
 import * as WebBrowser from 'expo-web-browser';
-import { Platform, Text } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
+import { CodeBlock } from '@/components/chat/code-block';
 import { JsonBlock } from '@/components/json-block';
-import { AppFonts, Colors, useAppColors } from '@/constants/theme';
+import { AppFonts, Colors, Fonts, useAppColors } from '@/constants/theme';
+import { isJsonString } from '@/lib/json';
 
-const monoFont = Platform.select({
-  ios: 'SFMono-Regular',
-  android: 'monospace',
-  web: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-});
-
-export function MessageMarkdown({ onInteraction, streaming, text }: { onInteraction?: () => void; streaming: boolean; text: string }) {
+export function MessageMarkdown({
+  onInteraction,
+  streaming,
+  text,
+}: {
+  onInteraction?: () => void;
+  streaming: boolean;
+  text: string;
+}) {
   const colors = useAppColors();
   const dark = colors.background === Colors.dark.background;
+
+  // Blocks take the full column explicitly, and heading text may shrink inside
+  // its row, so long headings and inline code wrap instead of running off screen.
   const markdownStyles: MarkdownStyleMap = {
     body: {
       color: colors.text,
       fontFamily: AppFonts.regular,
       fontSize: 16,
       lineHeight: 26,
+      width: '100%',
     },
+    textgroup: { flexShrink: 1 },
     paragraph: { marginBottom: 12, marginTop: 0 },
-    heading1: { color: colors.text, fontFamily: AppFonts.semibold, fontSize: 24, lineHeight: 31, marginBottom: 10, marginTop: 8 },
-    heading2: { color: colors.text, fontFamily: AppFonts.semibold, fontSize: 21, lineHeight: 28, marginBottom: 9, marginTop: 8 },
-    heading3: { color: colors.text, fontFamily: AppFonts.semibold, fontSize: 18, lineHeight: 25, marginBottom: 8, marginTop: 6 },
-    heading4: { color: colors.text, fontFamily: AppFonts.semibold, fontSize: 16, lineHeight: 24, marginBottom: 7, marginTop: 6 },
+    heading1: {
+      color: colors.text,
+      fontFamily: AppFonts.semibold,
+      fontSize: 24,
+      lineHeight: 31,
+      marginBottom: 10,
+      marginTop: 8,
+    },
+    heading2: {
+      color: colors.text,
+      fontFamily: AppFonts.semibold,
+      fontSize: 21,
+      lineHeight: 28,
+      marginBottom: 9,
+      marginTop: 8,
+    },
+    heading3: {
+      color: colors.text,
+      fontFamily: AppFonts.semibold,
+      fontSize: 18,
+      lineHeight: 25,
+      marginBottom: 8,
+      marginTop: 6,
+    },
+    heading4: {
+      color: colors.text,
+      fontFamily: AppFonts.semibold,
+      fontSize: 16,
+      lineHeight: 24,
+      marginBottom: 7,
+      marginTop: 6,
+    },
     heading5: { color: colors.text, fontFamily: AppFonts.semibold, fontSize: 15, lineHeight: 22 },
-    heading6: { color: colors.textSecondary, fontFamily: AppFonts.semibold, fontSize: 14, lineHeight: 21 },
+    heading6: {
+      color: colors.textSecondary,
+      fontFamily: AppFonts.semibold,
+      fontSize: 14,
+      lineHeight: 21,
+    },
     strong: { fontFamily: AppFonts.semibold },
     em: { fontStyle: 'italic' },
     link: { color: colors.brand, textDecorationLine: 'underline' },
     blocklink: { borderColor: colors.border },
-    bullet_list: { marginBottom: 10, marginTop: 2 },
-    ordered_list: { marginBottom: 10, marginTop: 2 },
+    bullet_list: { marginBottom: 10, marginTop: 2, width: '100%' },
+    ordered_list: { marginBottom: 10, marginTop: 2, width: '100%' },
     bullet_list_icon: { color: colors.textSecondary, marginLeft: 3, marginRight: 10 },
     ordered_list_icon: { color: colors.textSecondary, marginLeft: 3, marginRight: 10 },
-    list_item: { marginBottom: 4 },
+    list_item: { marginBottom: 4, width: '100%' },
     blockquote: {
       backgroundColor: colors.backgroundSelected,
       borderColor: colors.brandSecondary,
@@ -51,6 +92,7 @@ export function MessageMarkdown({ onInteraction, streaming, text }: { onInteract
       marginLeft: 0,
       paddingHorizontal: 12,
       paddingVertical: 8,
+      width: '100%',
     },
     code_inline: {
       backgroundColor: colors.backgroundSelected,
@@ -58,7 +100,7 @@ export function MessageMarkdown({ onInteraction, streaming, text }: { onInteract
       borderRadius: 5,
       borderWidth: 1,
       color: colors.text,
-      fontFamily: monoFont,
+      fontFamily: Fonts.mono,
       fontSize: 14,
       paddingHorizontal: 5,
       paddingVertical: 2,
@@ -69,36 +111,37 @@ export function MessageMarkdown({ onInteraction, streaming, text }: { onInteract
       borderRadius: 10,
       borderWidth: 1,
       color: colors.text,
-      fontFamily: monoFont,
+      fontFamily: Fonts.mono,
       fontSize: 13,
       lineHeight: 20,
       padding: 12,
     },
-    fence: { borderColor: colors.border, borderRadius: 10, borderWidth: 1, marginBottom: 12 },
-    fence_header: { backgroundColor: colors.backgroundSelected, borderBottomColor: colors.border, paddingHorizontal: 12, paddingVertical: 7 },
-    fence_language_label: { color: colors.textSecondary, fontFamily: monoFont, fontSize: 11 },
+    fence: {
+      borderColor: colors.border,
+      borderRadius: 10,
+      borderWidth: 1,
+      marginBottom: 12,
+      width: '100%',
+    },
+    fence_header: {
+      backgroundColor: colors.backgroundSelected,
+      borderBottomColor: colors.border,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+    },
+    fence_language_label: { color: colors.textSecondary, fontFamily: Fonts.mono, fontSize: 11 },
     fence_code: { backgroundColor: colors.backgroundElement, padding: 12 },
-    fence_token: { fontFamily: monoFont, fontSize: 13, lineHeight: 20 },
-    table: { borderColor: colors.border, borderRadius: 8, borderWidth: 1, marginBottom: 12 },
+    fence_token: { fontFamily: Fonts.mono, fontSize: 13, lineHeight: 20 },
+    table: { borderColor: colors.border, borderRadius: 8, borderWidth: 1 },
     tr: { borderBottomColor: colors.border, borderBottomWidth: 1 },
-    th: { backgroundColor: colors.backgroundSelected, padding: 8 },
-    td: { padding: 8 },
+    // Columns share the width and wrap; the minimum keeps many-column tables
+    // legible by letting the table scroll sideways instead of crushing cells.
+    th: { backgroundColor: colors.backgroundSelected, minWidth: 112, padding: 8 },
+    td: { minWidth: 112, padding: 8 },
     hr: { backgroundColor: colors.border, height: 1, marginVertical: 14 },
   };
-  const defaultRules = renderRules(Text);
-  const rules: RenderRules = {
-    code_block: (node, children, parents, styles, ...extra) => {
-      if (looksLikeJson(node.content)) return <JsonBlock key={node.key} onInteraction={onInteraction} value={node.content} />;
-      return defaultRules.code_block?.(node, children, parents, styles, ...extra);
-    },
-    fence: (node, children, parents, styles, ...extra) => {
-      const language = typeof node.sourceInfo === 'string' ? node.sourceInfo.trim().split(/\s+/)[0]?.toLowerCase() : '';
-      if (language === 'json' || language === 'jsonc') {
-        return <JsonBlock key={node.key} onInteraction={onInteraction} value={node.content} />;
-      }
-      return defaultRules.fence?.(node, children, parents, styles, ...extra);
-    },
-  };
+
+  const rules = createRules(onInteraction);
 
   return (
     <MarkdownStream
@@ -106,21 +149,86 @@ export function MessageMarkdown({ onInteraction, streaming, text }: { onInteract
       cursorColor={colors.brand}
       onLinkPress={(url) => {
         onInteraction?.();
+
         return openMarkdownLink(url);
       }}
       rules={rules}
       streaming={streaming}
-      style={markdownStyles}>
+      style={markdownStyles}
+    >
       {text}
     </MarkdownStream>
   );
 }
 
+function createRules(onInteraction: (() => void) | undefined): RenderRules {
+  return {
+    table: (node, children, _parents, styles) => (
+      <ScrollView
+        contentContainerStyle={tableStyles.content}
+        horizontal
+        key={node.key}
+        nestedScrollEnabled
+        onScrollBeginDrag={onInteraction}
+        showsHorizontalScrollIndicator
+        style={tableStyles.scroller}
+      >
+        <View style={[tableStyles.table, styles.table]}>{children}</View>
+      </ScrollView>
+    ),
+    code_block: (node) => {
+      if (looksLikeJson(node.content))
+        return <JsonBlock key={node.key} onInteraction={onInteraction} value={node.content} />;
+
+      return (
+        <CodeBlock
+          code={trimTrailingNewline(node.content)}
+          key={node.key}
+          language=""
+          onInteraction={onInteraction}
+        />
+      );
+    },
+    fence: (node) => {
+      const language = isJsonString(node.sourceInfo)
+        ? (node.sourceInfo.trim().split(/\s+/)[0]?.toLowerCase() ?? '')
+        : '';
+
+      if (language === 'json' || language === 'jsonc') {
+        return <JsonBlock key={node.key} onInteraction={onInteraction} value={node.content} />;
+      }
+
+      return (
+        <CodeBlock
+          code={trimTrailingNewline(node.content)}
+          key={node.key}
+          language={language}
+          onInteraction={onInteraction}
+        />
+      );
+    },
+  };
+}
+
+const tableStyles = StyleSheet.create({
+  scroller: { marginBottom: 12, width: '100%' },
+  // Narrow tables stretch to the text column; wider ones overflow into the scroll.
+  content: { minWidth: '100%' },
+  table: { flexGrow: 1 },
+});
+
+function trimTrailingNewline(value: string) {
+  return value.endsWith('\n') ? value.slice(0, -1) : value;
+}
+
 function looksLikeJson(value: string) {
   const trimmed = value.trim();
+
   if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return false;
+
   try {
     JSON.parse(trimmed);
+
     return true;
   } catch {
     return false;
@@ -130,9 +238,11 @@ function looksLikeJson(value: string) {
 function openMarkdownLink(url: string): boolean {
   try {
     const protocol = new URL(url).protocol;
+
     if (protocol === 'http:' || protocol === 'https:') void WebBrowser.openBrowserAsync(url);
   } catch {
     // Suppress malformed and non-web links emitted by model output.
   }
+
   return true;
 }

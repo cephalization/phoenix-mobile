@@ -55,6 +55,7 @@ export function useAppColors() {
   const systemScheme = useColorScheme();
   const appearance = useSettingsStore((state) => state.appearance);
   const scheme = appearance === 'system' ? systemScheme : appearance;
+
   return Colors[scheme === 'dark' ? 'dark' : 'light'];
 }
 
@@ -72,20 +73,23 @@ export const Fonts = Platform.select({
     serif: 'ui-serif',
     /** iOS `UIFontDescriptorSystemDesignRounded` */
     rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
+    /** Geist Mono, loaded through expo-font alongside Geist; matches Phoenix's code font. */
+    mono: 'GeistMono_400Regular',
+    monoMedium: 'GeistMono_500Medium',
   },
   default: {
     sans: 'normal',
     serif: 'serif',
     rounded: 'normal',
-    mono: 'monospace',
+    mono: 'GeistMono_400Regular',
+    monoMedium: 'GeistMono_500Medium',
   },
   web: {
     sans: 'var(--font-display)',
     serif: 'var(--font-serif)',
     rounded: 'var(--font-rounded)',
-    mono: 'var(--font-mono)',
+    mono: 'GeistMono_400Regular',
+    monoMedium: 'GeistMono_500Medium',
   },
 });
 
