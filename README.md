@@ -10,7 +10,7 @@ A mobile companion for connecting to and monitoring self-hosted [Arize Phoenix](
 - Refresh server data through TanStack Query
 - Stream PXI conversations against persisted server-side agent sessions, with chat history shared across every PXI client (Phoenix 20.0.0+)
 - Run contextual PXI actions, like open coding a session into PXI notes that reviewers read before annotating (Phoenix 20.11.0+)
-- Support light, dark, mobile, tablet, and web layouts
+- Support light, dark, mobile, tablet, and web layouts, with two-pane iPhone Duo layouts, trailing sheets, and a PXI companion column on the inner display (see [docs/iphone-duo-preview.md](./docs/iphone-duo-preview.md))
 - Connect to unauthenticated servers or Phoenix 19+ instances through native OAuth 2; web currently supports unauthenticated connections only
 
 ## Stack

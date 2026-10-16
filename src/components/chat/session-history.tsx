@@ -1,11 +1,22 @@
 import { SymbolView } from 'expo-symbols';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChatBottomSheet } from '@/components/chat/chat-bottom-sheet';
 import { MotionPressable } from '@/components/motion-pressable';
 import { PxiGlyph } from '@/components/pxi-glyph';
 import { AppFonts, useAppColors } from '@/constants/theme';
 import type { PxiServerSessionSummary } from '@/features/pxi/sessions';
+
+const SUBTITLE = 'Stored on this Phoenix instance';
 
 function formatSessionDate(value: string): string {
   const date = new Date(value);
@@ -25,6 +36,7 @@ function sessionTitle(session: PxiServerSessionSummary): string {
   return session.title.trim() || 'Untitled chat';
 }
 
+/** Compact-width presentation: the history list inside the native bottom sheet. */
 export function SessionHistory({
   activeSessionId,
   onClose,
@@ -39,44 +51,154 @@ export function SessionHistory({
   visible: boolean;
 }) {
   const colors = useAppColors();
-  const separator = <View style={[styles.separator, { backgroundColor: colors.border }]} />;
 
   return (
-    <ChatBottomSheet
-      onClose={onClose}
-      subtitle="Stored on this Phoenix instance"
-      title="Chat history"
-      visible={visible}
-    >
-      <FlatList
-        contentContainerStyle={[styles.listContent, sessions.length === 0 && styles.emptyList]}
-        data={sessions}
-        ItemSeparatorComponent={separator}
-        keyExtractor={(session) => session.id}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <View style={[styles.emptyGlyph, { backgroundColor: colors.accentSoft }]}>
-              <PxiGlyph color={colors.brand} size={28} />
-            </View>
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>No saved chats</Text>
-            <Text style={[styles.emptyCopy, { color: colors.textSecondary }]}>
-              Conversations appear here after you send your first message.
-            </Text>
-          </View>
-        }
-        renderItem={({ item }) => (
-          <SessionRow
-            active={item.id === activeSessionId}
-            onSelect={() => onSelect(item)}
-            session={item}
-          />
-        )}
+    <ChatBottomSheet onClose={onClose} subtitle={SUBTITLE} title="Chat history" visible={visible}>
+      <SessionHistoryList
+        activeSessionId={activeSessionId}
+        onSelect={onSelect}
+        sessions={sessions}
         style={[
-          styles.list,
+          styles.card,
           { backgroundColor: colors.backgroundElement, borderColor: colors.border },
         ]}
       />
     </ChatBottomSheet>
+  );
+}
+
+/**
+ * Regular-width presentation: a persistent rail that replaces the bottom
+ * sheet. Rendered as the secondary pane of the chat's `DuoArrangement`, so
+ * its container has a definite size and the list may flex to fill it.
+ */
+export function SessionHistoryRail({
+  activeSessionId,
+  loading,
+  onNewChat,
+  onSelect,
+  sessions,
+}: {
+  activeSessionId: string | null;
+  loading: boolean;
+  onNewChat: () => void;
+  onSelect: (session: PxiServerSessionSummary) => void;
+  sessions: PxiServerSessionSummary[];
+}) {
+  const colors = useAppColors();
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View
+      accessibilityLabel="Chat history"
+      style={[
+        styles.rail,
+        {
+          backgroundColor: colors.backgroundElement,
+          borderColor: colors.border,
+          paddingBottom: insets.bottom,
+          paddingRight: insets.right,
+        },
+      ]}
+    >
+      <View style={styles.railHeader}>
+        <View style={styles.railHeadingGroup}>
+          <Text numberOfLines={1} style={[styles.railTitle, { color: colors.text }]}>
+            Chat history
+          </Text>
+          <Text numberOfLines={1} style={[styles.railSubtitle, { color: colors.textSecondary }]}>
+            {SUBTITLE}
+          </Text>
+        </View>
+        <MotionPressable
+          accessibilityLabel="Start new chat"
+          accessibilityRole="button"
+          haptic="selection"
+          onPress={onNewChat}
+          style={styles.railNewButton}
+        >
+          <SymbolView
+            name={{ ios: 'square.and.pencil', android: 'edit_square', web: 'edit_square' }}
+            size={20}
+            tintColor={colors.text}
+          />
+        </MotionPressable>
+      </View>
+      <SessionHistoryList
+        activeSessionId={activeSessionId}
+        loading={loading}
+        onSelect={onSelect}
+        sessions={sessions}
+        style={styles.railList}
+      />
+    </View>
+  );
+}
+
+/** The history rows and their empty state, shared by the sheet and the rail. */
+export function SessionHistoryList({
+  activeSessionId,
+  loading = false,
+  onSelect,
+  sessions,
+  style,
+}: {
+  activeSessionId: string | null;
+  /** Show a spinner instead of the empty state while the first page loads. */
+  loading?: boolean;
+  onSelect: (session: PxiServerSessionSummary) => void;
+  sessions: PxiServerSessionSummary[];
+  style?: StyleProp<ViewStyle>;
+}) {
+  const colors = useAppColors();
+  const separator = <View style={[styles.separator, { backgroundColor: colors.border }]} />;
+
+  return (
+    <FlatList
+      contentContainerStyle={[styles.listContent, sessions.length === 0 && styles.emptyList]}
+      data={sessions}
+      ItemSeparatorComponent={separator}
+      keyExtractor={(session) => session.id}
+      ListEmptyComponent={loading ? <LoadingState /> : <EmptyState />}
+      renderItem={({ item }) => (
+        <SessionRow
+          active={item.id === activeSessionId}
+          onSelect={() => onSelect(item)}
+          session={item}
+        />
+      )}
+      style={style}
+    />
+  );
+}
+
+function LoadingState() {
+  const colors = useAppColors();
+
+  return (
+    <View
+      accessibilityLabel="Loading chats"
+      accessibilityRole="progressbar"
+      style={styles.emptyState}
+    >
+      <ActivityIndicator color={colors.brand} />
+    </View>
+  );
+}
+
+function EmptyState() {
+  const colors = useAppColors();
+
+  return (
+    <View style={styles.emptyState}>
+      <View style={[styles.emptyGlyph, { backgroundColor: colors.accentSoft }]}>
+        <PxiGlyph color={colors.brand} size={28} />
+      </View>
+      <Text style={[styles.emptyTitle, { color: colors.text }]}>No saved chats</Text>
+      <Text style={[styles.emptyCopy, { color: colors.textSecondary }]}>
+        Conversations appear here after you send your first message.
+      </Text>
+    </View>
   );
 }
 
@@ -129,7 +251,22 @@ function SessionRow({
 }
 
 const styles = StyleSheet.create({
-  list: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
+  card: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
+  rail: { borderLeftWidth: StyleSheet.hairlineWidth, flex: 1 },
+  railHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    minHeight: 64,
+    paddingLeft: 16,
+    paddingRight: 8,
+    paddingVertical: 8,
+  },
+  railHeadingGroup: { flex: 1, gap: 3, minWidth: 0 },
+  railTitle: { fontFamily: AppFonts.semibold, fontSize: 17, letterSpacing: -0.2 },
+  railSubtitle: { fontFamily: AppFonts.regular, fontSize: 12, lineHeight: 16 },
+  railNewButton: { alignItems: 'center', height: 48, justifyContent: 'center', width: 48 },
+  railList: { flex: 1 },
   listContent: { paddingBottom: 1 },
   emptyList: { flexGrow: 1 },
   emptyState: {
@@ -148,7 +285,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     width: 60,
   },
-  emptyTitle: { fontFamily: AppFonts.semibold, fontSize: 20 },
+  emptyTitle: { fontFamily: AppFonts.semibold, fontSize: 20, textAlign: 'center' },
   emptyCopy: {
     fontFamily: AppFonts.regular,
     fontSize: 15,

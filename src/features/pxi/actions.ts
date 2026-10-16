@@ -1,4 +1,4 @@
-import type { PxiContext } from './types';
+import type { BuiltInProvider, ModelSelection, PxiContext } from './types';
 
 /**
  * Contextual PXI actions run a predetermined prompt in the PXI action sheet.
@@ -6,6 +6,28 @@ import type { PxiContext } from './types';
  * prompt it executes, so screens only pass identifiers through route params.
  */
 export type PxiActionKey = 'investigate-session';
+
+/** Parameters the PXI action route and the PXI pane accept; unknown actions resolve to null. */
+export type PxiActionRouteParams = {
+  action: string;
+  id: string;
+  modelName?: string;
+  modelProvider?: BuiltInProvider;
+  modelProviderId?: string;
+  modelProviderType?: string;
+  projectId?: string;
+  sessionId?: string;
+  sessionNodeId?: string;
+};
+
+/** A fully specified session investigation request. */
+export type PxiActionParams = PxiActionRouteParams & {
+  action: PxiActionKey;
+  modelProviderType?: ModelSelection['providerType'];
+  projectId: string;
+  sessionId: string;
+  sessionNodeId: string;
+};
 
 export type ResolvedPxiAction = {
   key: PxiActionKey;

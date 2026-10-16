@@ -12,8 +12,17 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DuoArrangement } from '@/components/duo/arrangement';
+import { ContentColumn } from '@/components/duo/content-column';
 import { MotionPressable } from '@/components/motion-pressable';
-import { AppFonts, MaxContentWidth, useAppColors } from '@/constants/theme';
+import { usePxiHeaderOptions } from '@/components/pxi-header-button';
+import {
+  SessionDetailView,
+  SessionPane,
+  type SessionQueueFilter,
+} from '@/components/sessions/session-detail';
+import { AppFonts, useAppColors } from '@/constants/theme';
+import { nativeHeaderTitle, useDuoLayout } from '@/features/duo/layout';
 import { classifySessionReview } from '@/features/session-review/classifier';
 import type { SessionData, SessionReviewClassification } from '@/features/session-review/types';
 import { usePhoenixProjects } from '@/hooks/use-phoenix-data';
@@ -29,13 +38,14 @@ import {
   useSessionReviewSettingsStore,
 } from '@/store/session-review-settings';
 
-type QueueFilter = 'needs-review' | 'all' | 'reviewed';
-
-const FILTERS: { label: string; value: QueueFilter }[] = [
+const FILTERS: { label: string; value: SessionQueueFilter }[] = [
   { label: 'Needs review', value: 'needs-review' },
   { label: 'All', value: 'all' },
   { label: 'Reviewed', value: 'reviewed' },
 ];
+
+/** Queue share of the regular-width split; the selected session takes the rest. */
+const QUEUE_SPLIT_RATIO = 0.42;
 
 export default function SessionsScreen() {
   const {
@@ -43,19 +53,25 @@ export default function SessionsScreen() {
     id,
     projectId,
   } = useLocalSearchParams<{
-    filter?: QueueFilter;
+    filter?: SessionQueueFilter;
     id: string;
     projectId: string;
   }>();
 
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
+  const { isRegularWidth, systemBarEdge } = useDuoLayout();
 
-  const [filter, setFilter] = useState<QueueFilter>(
+  const [requestedFilter, setFilter] = useState<SessionQueueFilter>(
     FILTERS.some((option) => option.value === routeFilter) ? routeFilter! : 'needs-review',
   );
 
   const [manualRefreshing, setManualRefreshing] = useState(false);
+
+  // Regular width shows the chosen session beside the queue instead of pushing
+  // it; the selection falls back to the first visible row so the pane is never
+  // empty while the list has content.
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const instance = useInstanceStore((state) => state.instances.find((item) => item.id === id));
   const projects = usePhoenixProjects(instance);
   const project = projects.data?.find((candidate) => candidate.id === projectId);
@@ -83,6 +99,13 @@ export default function SessionsScreen() {
   const availableNames = new Set(configs.map((config) => config.name));
   const staleNames = settings.requiredConfigNames.filter((name) => !availableNames.has(name));
   const queueConfigured = settings.requiredConfigNames.length > 0 && staleNames.length === 0;
+
+  // Without a configured queue the default tab has nothing to show, so fall
+  // back to every session until one is set up.
+  const filter: SessionQueueFilter =
+    requestedFilter === 'needs-review' && settings.requiredConfigNames.length === 0
+      ? 'all'
+      : requestedFilter;
 
   const dataError =
     sessionsQuery.error ??
@@ -126,6 +149,25 @@ export default function SessionsScreen() {
   const loading =
     !dataError && (sessionsQuery.isPending || configsQuery.isPending || !annotationsReady);
 
+  const activeSessionId =
+    isRegularWidth && filteredRows.length > 0
+      ? filteredRows.some((row) => row.session.id === selectedSessionId)
+        ? selectedSessionId
+        : filteredRows[0].session.id
+      : null;
+
+  // PXI replaces the detail pane, so the session it showed moves onto the stack.
+  const moveSessionToStack = () => {
+    if (activeSessionId === null) return;
+
+    router.push({
+      pathname: '/instances/[id]/projects/[projectId]/sessions/[sessionId]',
+      params: { id, projectId, sessionId: activeSessionId, queueFilter: filter },
+    });
+  };
+
+  const pxiHeader = usePxiHeaderOptions(instance, moveSessionToStack);
+
   if (!instance)
     return (
       <UnavailableState
@@ -155,132 +197,192 @@ export default function SessionsScreen() {
     }
   };
 
-  const openSession = (index: number) => {
-    const row = filteredRows[index];
+  const openSession = (sessionId: string) => {
+    if (isRegularWidth) {
+      setSelectedSessionId(sessionId);
+
+      return;
+    }
+
     router.push({
       pathname: '/instances/[id]/projects/[projectId]/sessions/[sessionId]',
       params: {
         id,
         projectId,
-        sessionId: row.session.id,
+        sessionId,
         queueFilter: filter,
       },
     });
   };
 
-  return (
-    <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      <Stack.Screen options={{ headerBackTitle: project?.name ?? 'Project', title: 'Sessions' }} />
-      <FlatList
-        contentContainerStyle={[styles.content, { paddingBottom: 24 + insets.bottom }]}
-        contentInsetAdjustmentBehavior="automatic"
-        data={filteredRows}
-        initialNumToRender={12}
-        keyExtractor={({ session }) => session.id}
-        ListHeaderComponent={
-          <View style={styles.header}>
-            <View style={styles.intro}>
-              <Text style={[styles.title, { color: colors.text }]}>Sessions</Text>
-              <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-                Recent conversations, separated from local PXI history.
-              </Text>
-            </View>
-            <QueueSetupCard
-              configured={queueConfigured}
-              requiredCount={settings.requiredConfigNames.length}
-              staleNames={staleNames}
-              onPress={() =>
-                router.push({
-                  pathname: '/instances/[id]/projects/[projectId]/sessions/settings',
-                  params: { id, projectId },
-                })
-              }
-            />
-            <ScrollView
-              contentContainerStyle={styles.filters}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.filterScroller}
-            >
-              {FILTERS.map((option) => {
-                const selected = option.value === filter;
+  // After "Submit & next" the reviewed row may leave the Needs review list once
+  // annotations refetch, so the next row is chosen now, while it is still here.
+  const selectNextSession = () => {
+    const index = filteredRows.findIndex((row) => row.session.id === activeSessionId);
+    setSelectedSessionId(filteredRows[index + 1]?.session.id ?? null);
+  };
 
-                return (
-                  <MotionPressable
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                    haptic={selected ? 'none' : 'selection'}
-                    key={option.value}
-                    onPress={() => setFilter(option.value)}
-                    style={[
-                      styles.filter,
-                      {
-                        backgroundColor: selected ? colors.accent : colors.backgroundSelected,
-                        borderColor: selected ? colors.accent : colors.border,
-                      },
-                    ]}
-                  >
-                    <Text
+  const list = (
+    <ContentColumn padding={20}>
+      {(column) => (
+        <FlatList
+          contentContainerStyle={[styles.content, column, { paddingBottom: 24 + insets.bottom }]}
+          contentInsetAdjustmentBehavior="automatic"
+          data={filteredRows}
+          initialNumToRender={12}
+          keyExtractor={({ session }) => session.id}
+          ListHeaderComponent={
+            <View style={styles.header}>
+              <View style={styles.intro}>
+                <Text style={[styles.title, { color: colors.text }]}>Sessions</Text>
+                <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+                  Recent conversations, separated from local PXI history.
+                </Text>
+              </View>
+              <QueueSetupCard
+                configured={queueConfigured}
+                requiredCount={settings.requiredConfigNames.length}
+                staleNames={staleNames}
+                onPress={() =>
+                  router.push({
+                    pathname: '/instances/[id]/projects/[projectId]/sessions/settings',
+                    params: { id, projectId },
+                  })
+                }
+              />
+              <ScrollView
+                contentContainerStyle={styles.filters}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.filterScroller}
+              >
+                {FILTERS.map((option) => {
+                  const selected = option.value === filter;
+
+                  return (
+                    <MotionPressable
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      haptic={selected ? 'none' : 'selection'}
+                      key={option.value}
+                      onPress={() => setFilter(option.value)}
                       style={[
-                        styles.filterLabel,
-                        { color: selected ? colors.accentForeground : colors.text },
+                        styles.filter,
+                        {
+                          backgroundColor: selected ? colors.accent : colors.backgroundSelected,
+                          borderColor: selected ? colors.accent : colors.border,
+                        },
                       ]}
                     >
-                      {option.label}
-                    </Text>
-                  </MotionPressable>
-                );
-              })}
-            </ScrollView>
-          </View>
-        }
-        ListEmptyComponent={
-          <SessionListState
-            dataError={dataError}
-            filter={filter}
-            hasNextPage={Boolean(sessionsQuery.hasNextPage)}
-            hasSessions={sessions.length > 0}
-            loading={loading}
-            queueConfigured={queueConfigured}
-            retry={() => void refresh()}
-            scan={() => sessionsQuery.fetchNextPage()}
-          />
-        }
-        ListFooterComponent={
-          sessionsQuery.isFetchingNextPage ? (
-            <ActivityIndicator color={colors.accent} style={styles.footer} />
-          ) : filteredRows.length > 0 && sessionsQuery.hasNextPage ? (
-            <MotionPressable
-              accessibilityRole="button"
-              onPress={() => sessionsQuery.fetchNextPage()}
-              style={[styles.continueButton, { borderColor: colors.border }]}
-            >
-              <Text style={[styles.continueLabel, { color: colors.text }]}>
-                Scan older sessions
+                      <Text
+                        style={[
+                          styles.filterLabel,
+                          { color: selected ? colors.accentForeground : colors.text },
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </MotionPressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          }
+          ListEmptyComponent={
+            <SessionListState
+              dataError={dataError}
+              filter={filter}
+              hasNextPage={Boolean(sessionsQuery.hasNextPage)}
+              hasSessions={sessions.length > 0}
+              loading={loading}
+              queueConfigured={queueConfigured}
+              retry={() => void refresh()}
+              scan={() => sessionsQuery.fetchNextPage()}
+            />
+          }
+          ListFooterComponent={
+            sessionsQuery.isFetchingNextPage ? (
+              <ActivityIndicator color={colors.accent} style={styles.footer} />
+            ) : filteredRows.length > 0 && sessionsQuery.hasNextPage ? (
+              <MotionPressable
+                accessibilityRole="button"
+                onPress={() => sessionsQuery.fetchNextPage()}
+                style={[styles.continueButton, { borderColor: colors.border }]}
+              >
+                <Text style={[styles.continueLabel, { color: colors.text }]}>
+                  Scan older sessions
+                </Text>
+              </MotionPressable>
+            ) : filteredRows.length > 0 ? (
+              <Text style={[styles.listEnd, { color: colors.textSecondary }]}>
+                All loaded sessions shown
               </Text>
-            </MotionPressable>
-          ) : filteredRows.length > 0 ? (
-            <Text style={[styles.listEnd, { color: colors.textSecondary }]}>
-              All loaded sessions shown
-            </Text>
-          ) : null
-        }
-        maxToRenderPerBatch={12}
-        refreshControl={
-          <RefreshControl
-            colors={[colors.brand]}
-            onRefresh={refresh}
-            progressBackgroundColor={colors.backgroundElement}
-            refreshing={manualRefreshing}
-            tintColor={colors.brand}
-          />
-        }
-        removeClippedSubviews={Platform.OS === 'android'}
-        renderItem={({ index, item }) => (
-          <SessionRow {...item} onPress={() => openSession(index)} />
-        )}
-        windowSize={7}
+            ) : null
+          }
+          maxToRenderPerBatch={12}
+          refreshControl={
+            <RefreshControl
+              colors={[colors.brand]}
+              onRefresh={refresh}
+              progressBackgroundColor={colors.backgroundElement}
+              refreshing={manualRefreshing}
+              tintColor={colors.brand}
+            />
+          }
+          removeClippedSubviews={Platform.OS === 'android'}
+          renderItem={({ item }) => (
+            <SessionRow
+              {...item}
+              onPress={() => openSession(item.session.id)}
+              selected={item.session.id === activeSessionId}
+            />
+          )}
+          windowSize={7}
+        />
+      )}
+    </ContentColumn>
+  );
+
+  return (
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <Stack.Screen
+        options={{
+          headerBackTitle: project?.name ?? 'Project',
+          title: nativeHeaderTitle(systemBarEdge, 'Sessions'),
+          ...pxiHeader,
+        }}
       />
+      {isRegularWidth ? (
+        <DuoArrangement
+          preferredAxis="horizontal"
+          primary={list}
+          ratio={QUEUE_SPLIT_RATIO}
+          secondary={
+            <SessionPane>
+              {activeSessionId ? (
+                <SessionDetailView
+                  embedded
+                  instanceId={id}
+                  key={activeSessionId}
+                  onReviewed={selectNextSession}
+                  projectId={projectId}
+                  queueFilter={filter}
+                  sessionId={activeSessionId}
+                />
+              ) : (
+                <View style={styles.paneEmpty}>
+                  <State
+                    title="Select a session"
+                    copy="Choose a session from the queue to read its conversation and review it here."
+                  />
+                </View>
+              )}
+            </SessionPane>
+          }
+        />
+      ) : (
+        list
+      )}
     </View>
   );
 }
@@ -342,10 +444,13 @@ function QueueSetupCard({
 function SessionRow({
   classification,
   onPress,
+  selected,
   session,
 }: {
   classification: SessionReviewClassification;
   onPress: () => void;
+  /** Shown beside the list on regular width; compact rows are never selected. */
+  selected: boolean;
   session: SessionData;
 }) {
   const colors = useAppColors();
@@ -361,8 +466,16 @@ function SessionRow({
       accessibilityHint="Opens session details and review"
       accessibilityLabel={`Session ${session.session_id}, ${status}`}
       accessibilityRole="button"
+      accessibilityState={{ selected }}
       onPress={onPress}
-      style={[styles.sessionRow, { borderBottomColor: colors.border }]}
+      style={[
+        styles.sessionRow,
+        selected ? styles.sessionRowSelected : null,
+        {
+          backgroundColor: selected ? colors.backgroundSelected : 'transparent',
+          borderBottomColor: selected ? 'transparent' : colors.border,
+        },
+      ]}
     >
       <View style={styles.rowTop}>
         <Text numberOfLines={2} selectable style={[styles.sessionId, { color: colors.text }]}>
@@ -433,7 +546,7 @@ function SessionListState({
   scan,
 }: {
   dataError: Error | null;
-  filter: QueueFilter;
+  filter: SessionQueueFilter;
   hasNextPage: boolean;
   hasSessions: boolean;
   loading: boolean;
@@ -579,7 +692,7 @@ function formatCount(value: number) {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   unavailable: { flex: 1, justifyContent: 'center' },
-  content: { alignSelf: 'center', maxWidth: MaxContentWidth, paddingHorizontal: 20, width: '100%' },
+  content: { alignSelf: 'center', width: '100%' },
   header: { paddingTop: 18 },
   intro: { gap: 6, paddingBottom: 20 },
   title: { fontFamily: AppFonts.semibold, fontSize: 32, letterSpacing: -1 },
@@ -621,6 +734,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     paddingVertical: 16,
   },
+  // The highlight bleeds 10pt past the text on each side while the text keeps its offset.
+  sessionRowSelected: { borderRadius: 16, marginHorizontal: -10, paddingHorizontal: 12 },
   rowTop: { alignItems: 'flex-start', flexDirection: 'row', gap: 12 },
   sessionId: { flex: 1, fontFamily: 'monospace', fontSize: 14, lineHeight: 19 },
   statusBadge: {
@@ -639,6 +754,7 @@ const styles = StyleSheet.create({
   metaDot: { fontFamily: AppFonts.regular, fontSize: 12 },
   completion: { fontFamily: AppFonts.semibold, fontSize: 12, marginLeft: 'auto' },
   stateLoader: { paddingVertical: 64 },
+  paneEmpty: { flex: 1, justifyContent: 'center' },
   state: { alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingVertical: 58 },
   stateTitle: { fontFamily: AppFonts.semibold, fontSize: 18, textAlign: 'center' },
   stateCopy: {

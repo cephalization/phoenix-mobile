@@ -278,6 +278,44 @@ CSS can color the document but cannot remove normal iOS Safari toolbars. The app
 
 ## Resolved Bugs And Reusable Patterns
 
+### 2026-10-15 - Bar Items In A Navigation Stack That Does Not Span The Window Ignore Touches On iPhone Duo
+
+**Status:** Resolved
+**Area:** iPhone Duo, navigation, PXI pane
+
+With a vertical system bar (both Duo displays except the inner display in portrait), UIKit lays the stack's Back button and icon bar items along the trailing edge of the navigation controller's view. When `PxiPaneShell` first placed the native stack inside a 60 percent-wide `DuoArrangement` pane, UIKit still drew that bar at the pane's trailing edge, but neither Back nor the PXI item responded to taps, with or without a title, while React Native content in the same pane scrolled normally; even JavaScript pressables drawn over that column received nothing, and the window-edge column was dead too. The working configuration keeps the native stack at full window width: the shell is an `overlay` arrangement whose floating pane is PXI, content screens get `contentStyle` padding equal to the covered region (through `usePxiPaneStore().stackContentInset`), and the floating pane leaves the bar column transparent and `box-none` so the system's Back and PXI items stay visible and tappable above it. `useDuoLayout` inside the stack reports the uncovered size, so screens switch to their compact layouts.
+
+**Implication:** Never host a native stack in a pane narrower than the window on iPhone Duo; pad its content instead. When the pane bug matters again (Expo SDK 58's `ArrangementView` or a react-native-screens fix), re-test Back in a narrowed stack before removing the padding approach.
+
+### 2026-10-15 - A Form Sheet Screen Needs A Scroll View As Its Root For Header Insets And A Frame
+
+**Status:** Resolved
+**Area:** sheets, react-native-screens, PXI action sheet
+
+The native header of a `formSheet` route is translucent on iOS 27 and the screen's content starts under it. The existing task sheets work because their root element is a `ScrollView` with `contentInsetAdjustmentBehavior="automatic"`, which react-native-screens insets by the header height. The PXI action sheet rendered a plain `View` with its own header row, which disappeared under the bar; wrapping the state view in a `ScrollView` nested inside that `View` rendered nothing at all (no frame, not even a debug background), on the open Duo's trailing sheet. Making the scroll view the root of the screen, a `FlatList` for the transcript and a `ScrollView` for the status states, fixed both.
+
+**Implication:** Every `formSheet` route returns a `ScrollView` or list as its root with `contentInsetAdjustmentBehavior="automatic"`; put fixed footers inside `ListFooterComponent` rather than beside the list, and let the native header carry the title instead of drawing a second one.
+
+### 2026-10-15 - Percent Flex-Basis Does Not Wrap Inside Row Containers On iOS 27
+
+**Status:** Resolved
+**Area:** iOS, layout, Yoga
+
+Metric tile grids built as `flexDirection: 'row', flexWrap: 'wrap'` with children using `flexBasis: '50%'` (or `'47%'`) wrapped into two rows on Android but rendered as a single crushed row on the iOS 27 simulator with React Native 0.86.3, both inside the Duo arrangement panes and at full width in tabletop pose; the containers measured the expected width and the branch that chose the percentage was correct. The project trace summary and the session metrics now lay their tiles out as explicit rows of two (`flex: 1` children) and pick one row of four only when the measured container is at least 700 pt wide.
+
+**Implication:** Do not rely on percentage `flexBasis` to wrap rows; build the rows explicitly from a measured width. When a layout differs between Android and iOS, log the container's `onLayout` size before changing the breakpoint logic.
+
+### 2026-10-15 - iOS Context Menus Must Pin Hosted Messages To The Row Width
+
+**Status:** Resolved
+**Area:** iOS, Expo UI, PXI, Markdown, layout
+
+On the iPhone Duo simulator (iOS 27.1, `@expo/ui` 57.0.24) every PXI message wrapped in `NativeContextMenu` rendered unwrapped: the user bubble, paragraphs, and list items ran under the vertical system bar and off the window, while tool rows beside them respected the transcript padding. `@expo/ui/community/menu`'s iOS `MenuView` hosts its trigger in a SwiftUI `Host` plus `RNHostView`, both with `matchContents` on both axes, so the React Native subtree is measured from an unbounded root and text takes its max-content width. The same structure caused the Android bug below; iOS had shown it only on the Duo's narrower safe width. Matching only the height (`matchContents={{ vertical: true }}`) wrapped short messages but dropped long Markdown parts from the transcript entirely.
+
+`native-context-menu.native.tsx` now builds the SwiftUI `ContextMenu` itself: an outer React Native view measures the row width with `onLayout`, and the hosted content sits in a view pinned to that width, so Yoga wraps text inside the host. The actions are `@expo/ui/swift-ui` `Button`s, and the SwiftUI preview still shows the message.
+
+**Implication:** Content inside an Expo UI host with `matchContents` needs an explicit width from React Native layout; the host cannot bound it. Measure the row and pin an inner wrapper. Verify transcripts at the Duo's compact width, where the 84 pt bar makes overflow visible that a plain phone hides at the screen edge.
+
 ### 2026-10-14 - Android Context Menus Must Not Host Markdown Content
 
 **Status:** Resolved
@@ -285,7 +323,7 @@ CSS can color the document but cannot remove normal iOS Safari toolbars. The app
 
 Every PXI transcript on Android rendered unwrapped: paragraphs, headings, list items, tables, and code blocks ran off the right edge. The `@expo/ui/community/menu` `MenuView` on Android wraps its trigger in a Compose `Host` plus `RNHostView` with `matchContents`, and that host lays the React Native subtree out from an unbounded root. Pinning an inner wrapper to the measured row width only rescued blocks with percent widths (paragraphs); rows with `flex: 1` children (list items, table cells) still measured their text at max-content width, which `dumpsys activity top` showed as `ReactTextView` nodes up to 2200 px wide inside a 1212 px parent. Rendering the same Markdown outside the host produced zero oversized views.
 
-`native-context-menu.android.tsx` now keeps the content in ordinary React Native layout inside a `Pressable`, and opens the Material dropdown imperatively through `MenuView`'s `ref.show()` with a 1 pt anchor positioned at the long-press point, so the menu also appears next to the finger on long messages. iOS keeps the original hosted structure in `native-context-menu.native.tsx` because the SwiftUI context menu previews the hosted content. Markdown tables additionally render inside a horizontal `ScrollView` with a 112 pt minimum cell width, so many-column tables scroll instead of crushing cells, and heading text groups get `flexShrink: 1` so long headings and inline code wrap.
+`native-context-menu.android.tsx` now keeps the content in ordinary React Native layout inside a `Pressable`, and opens the Material dropdown imperatively through `MenuView`'s `ref.show()` with a 1 pt anchor positioned at the long-press point, so the menu also appears next to the finger on long messages. iOS keeps a hosted structure in `native-context-menu.native.tsx` because the SwiftUI context menu previews the hosted content; it pins the content width instead (see the 2026-10-15 entry above). Markdown tables additionally render inside a horizontal `ScrollView` with a 112 pt minimum cell width, so many-column tables scroll instead of crushing cells, and heading text groups get `flexShrink: 1` so long headings and inline code wrap.
 
 **Implication:** On Android, never place text or any auto-width layout inside an Expo UI host that uses `matchContents`; host only fixed-size anchors and keep real content in React Native views. When verifying layout on a device, `adb shell dumpsys activity top` exposes the sizes of React views inside Compose hosts that `uiautomator` cannot see. Metro only watches files when started without `CI=1`, and a newly added platform-specific file (`*.android.tsx`) still needs a Metro restart with `--clear` before it resolves.
 
@@ -438,6 +476,37 @@ The targeted Metro resolver shim fixed iOS and Android bundling without polyfill
 **Implication:** Prefer a narrow empty-module shim over broad Node polyfills. Track upstream compatibility when upgrading.
 
 ## Design Decisions
+
+### 2026-10-15 - iPhone Duo Vertical Bars Own Navigation; Content Uses The Top Band And The Safe Width
+
+**Status:** Decision
+**Area:** iPhone Duo, navigation, layout, PXI
+
+Measured on the iPhone Duo simulator (iOS 27.1, build against the 27.1 SDK): the open inner display with a vertical hinge is a 951 × 669 pt window and the closed outer display 466 × 678 pt, both with safe-area insets `{ top: 0, right: 84, bottom: 34, left: 0 }`; the inner display rotated to a horizontal hinge is 669 × 951 pt with horizontal bars. The system stacks the status cluster, the stack's Back button, and any _icon_ bar item in the trailing 84 pt column; custom-view header items (`type: 'custom'`) stay in a horizontal bar at the top, and a non-empty title keeps that horizontal bar alive at roughly 66 pt even when every control has moved to the side. Three rules follow. `useDuoLayout().systemBarEdge` classifies the bar edge from the insets (one side at least 60 pt with no top inset; notched iPhones in landscape inset both sides and stay `top`). Screens whose content already carries a title pass `nativeHeaderTitle(systemBarEdge, title)`, which is empty beside a vertical bar so the horizontal bar collapses and content starts at the top edge. The PXI button is a native bar item with a template image (`usePxiHeaderOptions`, `assets/images/pxi-glyph*.png` rasterized from `PxiGlyph`), which iOS moves into the vertical bar directly under Back; Android and web keep the pressable. Content columns use `useContentColumnStyle` (or `ContentColumn` inside an arrangement pane): the column grows by the horizontal insets and pads each side by its own inset, so cards stay centered in the safe width and clear of the bar column, and `DuoArrangement` republishes clipped insets per pane so only the trailing pane pads for the bar. On regular-width windows the header button opens PXI as a floating pane beside the stack (`PxiPaneShell`); the screen that opened it pushes whatever its detail pane showed (the selected trace or session) so the leading side continues as a single screen, and a second press or the pane's close button restores the two-pane layout.
+
+Sheets follow a system rule of their own on the open Duo: every presentation (`formSheet` with or without detents, `pageSheet`, `modal`) docks a 466 pt column, the outer display's width, to the leading edge and dims the rest, so a sheet opened from the trailing pane covers the list the person was working from. The only lever is `UISheetPresentationController.preferredPlacement` (iOS 27, `automatic`, `leading`, `center`, `trailing`), which react-native-screens 4.26 does not expose and which has to be set before presentation to avoid a visible move. The local Expo module `modules/duo-sheets` therefore exchanges `UIViewController.present(_:animated:completion:)` once and applies the app's preferred placement to form sheets on their way in; `DuoSheetPlacement` in the root layout picks `trailing` (or `leading`) whenever the window is regular width with a vertical bar, and the root layout drops detents and the grabber there so the sheet runs the full height of the column. A first attempt that drew the forms inside the detail pane as a JavaScript sheet was rejected because it only looked like a sheet; the real presentation keeps the system's gestures, dimming, and bar handling. Compact width is unchanged, and Settings, Add Instance, and the PXI action sheet use the same trailing placement.
+
+**Implication:** Add new screens with `nativeHeaderTitle`, `usePxiHeaderOptions`, and a content column; put icons on any future bar item so it can go vertical; do not reintroduce `MaxContentWidth` padding that ignores the asymmetric insets. Keep form sheets as native `formSheet` routes; the placement module and the root layout's `formSheet` helper handle large screens. Changing `modules/duo-sheets` needs `pod install` and a native rebuild. The preview harness now uses the measured insets for both displays.
+
+### 2026-10-15 - Every Tap Is Navigate, Task, Or Companion; The Size Class Decides The Rendering
+
+**Status:** Decision
+**Area:** navigation, sheets, PXI, iPhone Duo
+
+After the Duo work landed, PXI reached the screen three different ways (the bar item gave a pane or a route, Investigate gave a pane or a sheet, chat history gave a rail or a bottom sheet), three different trailing columns existed at three widths with three kinds of chrome, and opening PXI from a split changed two places at once. Investigate in particular had regressed on the open Duo: it lost the sheet, its native dismissal, and its full height when it moved into the 40 percent PXI pane. The fix is a surface model with three verbs, recorded in `docs/iphone-duo-preview.md` ("Surface model") with the tap table. Navigate pushes a page on compact width and fills the detail pane on regular width. Task (every form, Settings, Add instance, and Investigate) is always the native form sheet: bottom sheet with detents on compact, full-height trailing sheet on regular, dismissed by swipe or the sheet's own Done, never a close glyph. Companion is the PXI chat only: the full-screen route on compact, a trailing column on regular whose width matches the trailing form sheet (leading edge at 310 pt of the 951 pt Duo window, measured from the review-queue sheet) and whose header is a title plus Done. Two decisions were taken deliberately: opening the companion from a split pushes the selected detail as the page (the one exception to navigate never rearranging the stack, kept so the chat has its context beside it), and the companion column matches the sheet width rather than the detail pane so every docked surface shares one leading edge. The chat's history rail is reserved for the full-screen chat on a wide window; inside the column the chat keeps the history button and sheet.
+
+**Implication:** `usePxiPaneStore` holds only the chat (`open(instanceId)`), `openPxiAction` always pushes the action sheet route, `PxiActionView` has no pane presentation and no close glyph, and `PxiChat`'s `pane` presentation shows Done. Before adding a surface, fill in its row of the tap table; if the three verbs cannot describe it, the design needs a conversation first.
+
+### 2026-10-15 - iPhone Duo Layouts Are Size-Class Arrangements With A Preview Harness
+
+**Status:** Decision
+**Area:** iPhone Duo, layout, navigation, tooling
+
+iPhone Duo (iOS 27.1, shipping 2026-10-23) exposes two displays: the outer 5.4 in display is compact width (466 × 678 pt), the inner 7.6 in display is regular width in every orientation (669 × 951 pt), and a partially folded device divides the inner display with a _division_ reserved region. Apple's rule, repeated across the HIG and the Duo Tech Talks, is to design for the two size classes and let arrangement views and reserved regions handle the fold, never per pose or orientation. Expo SDK 57 has no binding for the hinge, reserved regions, or `ArrangementView` (those arrive with Expo SDK 58 and need Xcode 27.1), so the app carries a JavaScript model in `src/features/duo/layout.ts` (`useDuoLayout`: size classes from a 600 pt breakpoint, a division region active only in book or tabletop pose) and `src/components/duo/arrangement.tsx` (`DuoArrangement`, a rendition of Apple's split and overlay arrangements that snaps 50/50 around an active fold with an animated transition). Screens branch only on `isRegularWidth`: the project trace feed gains an inline trace detail pane, the sessions list an inline session detail pane, the session detail a transcript/review split that becomes content-on-top, controls-on-bottom in tabletop pose, and PXI chat a persistent history rail.
+
+The Duo simulator ships only inside Xcode 27.1 RC; it was installed on 2026-10-15 (27A9275, replacing the 27.0 beta) and the iPhone Duo device type requires the separately downloaded iOS 27.1 simulator runtime (24A94232). The device boots closed, posture is a Device Hub bezel control with no `simctl` equivalent, and `simctl io screenshot --display=1` captures the outer panel. The 27.1 SDK build verified the outer display edge to edge with the system's vertical status bar, which confirms the compact-width path; on 2026-10-15 Device Hub (driven with CGEvent clicks once Accessibility and Screen Recording were granted, since it exposes no accessibility tree) opened the device and every screen was audited on the inner display, see the vertical-bar decision below. `DuoPreviewFrame` (`src/components/duo/preview-frame.tsx`, toggled from Settings) therefore frames the whole app at Duo point sizes on an iPad or iPhone simulator, overrides the safe-area insets with the Duo's trailing-edge bar layout, draws the fold, and drives pose and hinge angle from `useDuoPreviewStore`; `useDuoLayout` reads the framed viewport through `DuoViewportContext`. `app.json` now sets `orientation: "default"`, `ios.supportsTablet: true`, and `ios.requireFullScreen: false` because iOS 27 makes iPhone apps resizable, the inner display ignores orientation locks, and the iPad simulator is the stand-in for the inner display's regular size class.
+
+**Implication:** Never branch Duo layouts on orientation, idiom, or `Dimensions`; read `useDuoLayout`, keep `DuoArrangement` outside scroll views and navigation containers, and give embedded detail views an `embedded` flag so nested panes do not split again. When Xcode 27.1 and Expo SDK 58 land, replace the simulated division region with `expo-hinge` plus a reserved-region binding and `DuoArrangement` with Expo UI's `ArrangementView`, keeping the same component boundaries.
 
 ### 2026-10-14 - Code Blocks Use Phoenix's Pierre Syntax Colors And Geist Mono
 

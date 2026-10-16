@@ -10,6 +10,7 @@ import { phoenixQueryKeys } from '@/hooks/use-phoenix-data';
 import { haptics } from '@/lib/haptics';
 import { confirmAction } from '@/lib/confirm';
 import { useInstanceStore } from '@/store/instances';
+import { useDuoPreviewStore } from '@/features/duo/preview-store';
 import { type Appearance, useSettingsStore } from '@/store/settings';
 
 const appearanceOptions: { label: string; value: Appearance }[] = [
@@ -26,6 +27,8 @@ export default function SettingsScreen() {
   const setAppearance = useSettingsStore((state) => state.setAppearance);
   const instances = useInstanceStore((state) => state.instances);
   const clearInstances = useInstanceStore((state) => state.clearInstances);
+  const duoPreview = useDuoPreviewStore((state) => state.enabled);
+  const setDuoPreview = useDuoPreviewStore((state) => state.setEnabled);
 
   const clearConnections = () => {
     confirmAction({
@@ -110,6 +113,26 @@ export default function SettingsScreen() {
           >
             <Text style={[styles.clearButtonText, { color: colors.danger }]}>
               Remove all connections
+            </Text>
+          </MotionPressable>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeading}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>iPhone Duo preview</Text>
+            <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
+              Frame the app at iPhone Duo sizes with fold and hinge controls. Useful on an iPad or
+              iPhone simulator until the Duo simulator is available.
+            </Text>
+          </View>
+          <MotionPressable
+            accessibilityRole="button"
+            haptic="selection"
+            onPress={() => setDuoPreview(!duoPreview)}
+            style={[styles.clearButton, { borderColor: colors.border }]}
+          >
+            <Text style={[styles.clearButtonText, { color: colors.brandText }]}>
+              {duoPreview ? 'Turn off Duo preview' : 'Turn on Duo preview'}
             </Text>
           </MotionPressable>
         </View>

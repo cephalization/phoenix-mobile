@@ -25,8 +25,9 @@ import Animated, {
 
 import { MotionPressable } from '@/components/motion-pressable';
 import { PhoenixLogo } from '@/components/phoenix-logo';
-import { PxiHeaderButton } from '@/components/pxi-header-button';
-import { AppFonts, MaxContentWidth, Spacing, useAppColors } from '@/constants/theme';
+import { usePxiHeaderOptions } from '@/components/pxi-header-button';
+import { AppFonts, Spacing, useAppColors } from '@/constants/theme';
+import { nativeHeaderTitle, useContentColumnStyle, useDuoLayout } from '@/features/duo/layout';
 import { runOAuthLogin } from '@/features/auth/login';
 import { PhoenixAuthError } from '@/features/auth/oauth';
 import {
@@ -44,8 +45,11 @@ export default function InstanceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
+  const { systemBarEdge } = useDuoLayout();
+  const column = useContentColumnStyle(20);
   const queryClient = useQueryClient();
   const instance = useInstanceStore((state) => state.instances.find((item) => item.id === id));
+  const pxiHeader = usePxiHeaderOptions(instance);
   const removeInstance = useInstanceStore((state) => state.removeInstance);
   const setActiveInstanceId = useInstanceStore((state) => state.setActiveInstanceId);
   const version = usePhoenixVersion(instance);
@@ -128,8 +132,6 @@ export default function InstanceScreen() {
           ? { label: 'Connected anonymously', color: colors.success }
           : { label: 'Authenticated', color: colors.success };
 
-  const pxiHeaderButton = <PxiHeaderButton instance={instance} />;
-
   return (
     <ScrollView
       contentContainerStyle={styles.scrollContent}
@@ -148,13 +150,12 @@ export default function InstanceScreen() {
       <Stack.Screen
         options={{
           headerBackTitle: 'Instances',
-          headerRight: () => pxiHeaderButton,
           scrollEdgeEffects: { bottom: 'soft' },
-          title: instance.name,
-          unstable_headerRightItems: () => [{ element: pxiHeaderButton, type: 'custom' }],
+          title: nativeHeaderTitle(systemBarEdge, instance.name),
+          ...pxiHeader,
         }}
       />
-      <View style={[styles.content, { paddingBottom: 20 + insets.bottom }]}>
+      <View style={[styles.content, column, { paddingBottom: 20 + insets.bottom }]}>
         <View style={styles.hero}>
           <View style={styles.authStatusLine}>
             <View style={[styles.statusRow, { backgroundColor: colors.backgroundSelected }]}>
@@ -375,7 +376,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   center: { alignItems: 'center', flex: 1, gap: Spacing.three, justifyContent: 'center' },
   scrollContent: { flexGrow: 1 },
-  content: { alignSelf: 'center', gap: 30, maxWidth: MaxContentWidth, padding: 20, width: '100%' },
+  content: { alignSelf: 'center', gap: 30, paddingTop: 20, width: '100%' },
   hero: { gap: 10 },
   authStatusLine: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   statusRow: {

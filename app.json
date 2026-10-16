@@ -3,7 +3,7 @@
     "name": "Phoenix Mobile",
     "slug": "phoenix-mobile",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "phoenixmobile",
     "userInterfaceStyle": "automatic",
@@ -21,7 +21,9 @@
           "NSAllowsArbitraryLoads": true
         }
       },
-      "bundleIdentifier": "com.anonymous.phoenix-mobile"
+      "bundleIdentifier": "com.anonymous.phoenix-mobile",
+      "supportsTablet": true,
+      "requireFullScreen": false
     },
     "android": {
       "adaptiveIcon": {

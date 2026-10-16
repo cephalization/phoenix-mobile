@@ -6,12 +6,12 @@ import {
   ActivityIndicator,
   AppState,
   FlatList,
+  type LayoutChangeEvent,
   Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,9 +23,13 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { DuoArrangement, useArrangementPane } from '@/components/duo/arrangement';
+import { ContentColumn } from '@/components/duo/content-column';
 import { MotionPressable } from '@/components/motion-pressable';
-import { PxiHeaderButton } from '@/components/pxi-header-button';
-import { AppFonts, MaxContentWidth, Spacing, useAppColors } from '@/constants/theme';
+import { usePxiHeaderOptions } from '@/components/pxi-header-button';
+import { TraceDetailView } from '@/components/traces/trace-detail';
+import { AppFonts, Spacing, useAppColors } from '@/constants/theme';
+import { nativeHeaderTitle, useDuoLayout } from '@/features/duo/layout';
 import {
   type PhoenixTraceFilter,
   type PhoenixTraceListItem,
@@ -66,12 +70,20 @@ const RANGE_PRESETS: {
   },
 ];
 
+/** Primary share of the regular-width split: the feed leads, the trace detail takes the rest. */
+const SplitRatio = 0.44;
+
+/** The feed switches from stacked rows to a table once its own pane is at least this wide. */
+const WideFeedBreakpoint = 700;
+
 export default function ProjectTracesScreen() {
   const { id, projectId } = useLocalSearchParams<{ id: string; projectId: string }>();
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-  const isWide = width >= 700;
+  const { isRegularWidth, systemBarEdge } = useDuoLayout();
+  const [feedWidth, setFeedWidth] = useState(0);
+  const isWide = feedWidth >= WideFeedBreakpoint;
+  const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [filter, setFilter] = useState<PhoenixTraceFilter>('recent');
 
   const [range, setRange] = useState<TraceRangeSelection>(() =>
@@ -95,6 +107,30 @@ export default function ProjectTracesScreen() {
   const summary = usePhoenixProjectTraceSummary(instance, projectId, range);
   const activeTraces = usePhoenixProjectTraces(instance, projectId, filter, range);
   const traces = activeTraces.data?.pages.flatMap((page) => page.items) ?? [];
+  const firstTraceId = traces[0]?.traceId ?? null;
+
+  // Latch the first loaded trace into the split during render (React's derived-state pattern)
+  // so streaming updates do not move the detail pane until the user picks another trace.
+  if (isRegularWidth && selectedTraceId === null && firstTraceId !== null) {
+    setSelectedTraceId(firstTraceId);
+  }
+
+  const selectedInList = traces.some((trace) => trace.traceId === selectedTraceId);
+
+  // The detail pane shows the chosen trace while it is listed, falls back to the newest
+  // trace when a filter or range change drops it, and keeps it while the list is empty.
+  const activeTraceId = selectedInList || firstTraceId === null ? selectedTraceId : firstTraceId;
+
+  // PXI takes the detail pane's place, so the trace it showed moves onto the
+  // stack and the feed becomes a single screen again.
+  const pxiHeader = usePxiHeaderOptions(instance, () => {
+    if (!instance || activeTraceId === null) return;
+
+    router.push({
+      pathname: '/instances/[id]/projects/[projectId]/traces/[traceId]',
+      params: { id: instance.id, projectId, traceId: activeTraceId },
+    });
+  });
 
   const dataRefreshing =
     (activeTraces.isRefetching && !activeTraces.isFetchingNextPage) || summary.isRefetching;
@@ -171,184 +207,272 @@ export default function ProjectTracesScreen() {
     }
   };
 
-  const pxiHeaderButton = <PxiHeaderButton instance={instance} />;
+  const handleFeedLayout = (event: LayoutChangeEvent) => {
+    const nextWidth = event.nativeEvent.layout.width;
+    setFeedWidth((current) => (current === nextWidth ? current : nextWidth));
+  };
+
+  const feed = (
+    <View onLayout={handleFeedLayout} style={styles.feed}>
+      <ContentColumn padding={20}>
+        {(column) => (
+          <FlatList
+            extraData={activeTraceId}
+            contentContainerStyle={[styles.content, column, { paddingBottom: 24 + insets.bottom }]}
+            contentInsetAdjustmentBehavior="automatic"
+            data={traces}
+            initialNumToRender={12}
+            keyExtractor={(trace) => trace.id}
+            ListEmptyComponent={
+              <TraceListState
+                filter={filter}
+                isError={activeTraces.isError}
+                isPending={activeTraces.isPending}
+                message={activeTraces.error?.message}
+                retry={() => activeTraces.refetch()}
+              />
+            }
+            ListFooterComponent={
+              activeTraces.isFetchingNextPage ? (
+                <ActivityIndicator color={colors.accent} style={styles.footerLoader} />
+              ) : traces.length > 0 ? (
+                <Text style={[styles.listEnd, { color: colors.textSecondary }]}>
+                  All available traces loaded
+                </Text>
+              ) : null
+            }
+            ListHeaderComponent={
+              <View style={styles.headerContent}>
+                <View style={styles.projectIntro}>
+                  <Text numberOfLines={2} style={[styles.title, { color: colors.text }]}>
+                    {project?.name ?? 'Project traces'}
+                  </Text>
+                  {project?.description ? (
+                    <Text style={[styles.description, { color: colors.textSecondary }]}>
+                      {project.description}
+                    </Text>
+                  ) : (
+                    <Text style={[styles.description, { color: colors.textSecondary }]}>
+                      Recent activity and performance at a glance.
+                    </Text>
+                  )}
+                </View>
+
+                <MotionPressable
+                  accessibilityHint="Opens remote sessions and the human review queue"
+                  accessibilityRole="button"
+                  onPress={() =>
+                    router.push({
+                      pathname: '/instances/[id]/projects/[projectId]/sessions',
+                      params: { id: instance.id, projectId },
+                    })
+                  }
+                  style={[
+                    styles.sessionsEntry,
+                    { backgroundColor: colors.backgroundElement, borderColor: colors.border },
+                  ]}
+                >
+                  <View style={[styles.sessionsGlyph, { backgroundColor: colors.accentSoft }]}>
+                    <SymbolView
+                      name={{
+                        android: 'forum',
+                        ios: 'bubble.left.and.bubble.right.fill',
+                        web: 'forum',
+                      }}
+                      size={22}
+                      tintColor={colors.brand}
+                      weight="semibold"
+                    />
+                  </View>
+                  <View style={styles.sessionsEntryCopy}>
+                    <Text style={[styles.sessionsEntryTitle, { color: colors.text }]}>
+                      Sessions
+                    </Text>
+                    <Text
+                      style={[styles.sessionsEntryDescription, { color: colors.textSecondary }]}
+                    >
+                      Browse conversations and work the human review queue.
+                    </Text>
+                  </View>
+                  <Text style={[styles.sessionsEntryAction, { color: colors.text }]}>Open</Text>
+                </MotionPressable>
+
+                <TraceRangeSelector
+                  onChange={(preset) => {
+                    if (preset === range.preset) return;
+                    haptics.selection();
+                    setTraceRangePreset(preset);
+                    setRange(createTraceRange(preset));
+                  }}
+                  range={range}
+                  streaming={streaming}
+                  onStreamingChange={(value) => {
+                    haptics.selection();
+                    setStreaming(value);
+                  }}
+                />
+                <TraceSummary
+                  isLoading={summary.isPending}
+                  isWide={isWide}
+                  summary={summary.data}
+                />
+
+                <View style={styles.traceHeading}>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>Traces</Text>
+                </View>
+                <ScrollView
+                  contentContainerStyle={styles.filters}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.filterScroller}
+                >
+                  {FILTERS.map((option) => {
+                    const selected = option.value === filter;
+
+                    return (
+                      <MotionPressable
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                        haptic={selected ? 'none' : 'selection'}
+                        key={option.value}
+                        onPress={() => setFilter(option.value)}
+                        style={[
+                          styles.filter,
+                          {
+                            backgroundColor: selected ? colors.accent : colors.backgroundSelected,
+                            borderColor: selected ? colors.accent : colors.border,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.filterLabel,
+                            { color: selected ? colors.accentForeground : colors.text },
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </MotionPressable>
+                    );
+                  })}
+                </ScrollView>
+                {isWide && traces.length > 0 ? <TraceTableHeader /> : null}
+              </View>
+            }
+            maxToRenderPerBatch={12}
+            onEndReached={() => {
+              if (activeTraces.hasNextPage && !activeTraces.isFetchingNextPage)
+                activeTraces.fetchNextPage();
+            }}
+            onEndReachedThreshold={0.35}
+            refreshControl={
+              <RefreshControl
+                colors={[colors.brand]}
+                onRefresh={refresh}
+                progressBackgroundColor={colors.backgroundElement}
+                refreshing={manualRefreshing}
+                tintColor={colors.brand}
+              />
+            }
+            removeClippedSubviews={Platform.OS === 'android'}
+            renderItem={({ item }) => (
+              <TraceRow
+                isWide={isWide}
+                onPress={() => {
+                  if (isRegularWidth) {
+                    setSelectedTraceId(item.traceId);
+
+                    return;
+                  }
+
+                  router.push({
+                    pathname: '/instances/[id]/projects/[projectId]/traces/[traceId]',
+                    params: { id: instance.id, projectId, traceId: item.traceId },
+                  });
+                }}
+                selected={isRegularWidth && item.traceId === activeTraceId}
+                trace={item}
+              />
+            )}
+            style={styles.list}
+            windowSize={7}
+          />
+        )}
+      </ContentColumn>
+    </View>
+  );
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <Stack.Screen
         options={{
           headerBackTitle: instance?.name ?? 'Instance',
-          headerRight: () => pxiHeaderButton,
           scrollEdgeEffects: { bottom: 'soft' },
-          title: project?.name ?? 'Project',
-          unstable_headerRightItems: () => [{ element: pxiHeaderButton, type: 'custom' }],
+          title: nativeHeaderTitle(systemBarEdge, project?.name ?? 'Project'),
+          ...pxiHeader,
         }}
       />
-      <FlatList
-        contentContainerStyle={[styles.content, { paddingBottom: 24 + insets.bottom }]}
-        contentInsetAdjustmentBehavior="automatic"
-        data={traces}
-        initialNumToRender={12}
-        keyExtractor={(trace) => trace.id}
-        ListEmptyComponent={
-          <TraceListState
-            filter={filter}
-            isError={activeTraces.isError}
-            isPending={activeTraces.isPending}
-            message={activeTraces.error?.message}
-            retry={() => activeTraces.refetch()}
-          />
-        }
-        ListFooterComponent={
-          activeTraces.isFetchingNextPage ? (
-            <ActivityIndicator color={colors.accent} style={styles.footerLoader} />
-          ) : traces.length > 0 ? (
-            <Text style={[styles.listEnd, { color: colors.textSecondary }]}>
-              All available traces loaded
-            </Text>
-          ) : null
-        }
-        ListHeaderComponent={
-          <View style={styles.headerContent}>
-            <View style={styles.projectIntro}>
-              <Text numberOfLines={2} style={[styles.title, { color: colors.text }]}>
-                {project?.name ?? 'Project traces'}
-              </Text>
-              {project?.description ? (
-                <Text style={[styles.description, { color: colors.textSecondary }]}>
-                  {project.description}
-                </Text>
-              ) : (
-                <Text style={[styles.description, { color: colors.textSecondary }]}>
-                  Recent activity and performance at a glance.
-                </Text>
-              )}
-            </View>
-
-            <MotionPressable
-              accessibilityHint="Opens remote sessions and the human review queue"
-              accessibilityRole="button"
-              onPress={() =>
-                router.push({
-                  pathname: '/instances/[id]/projects/[projectId]/sessions',
-                  params: { id: instance.id, projectId },
-                })
-              }
-              style={[
-                styles.sessionsEntry,
-                { backgroundColor: colors.backgroundElement, borderColor: colors.border },
-              ]}
-            >
-              <View style={[styles.sessionsGlyph, { backgroundColor: colors.accentSoft }]}>
-                <SymbolView
-                  name={{
-                    android: 'forum',
-                    ios: 'bubble.left.and.bubble.right.fill',
-                    web: 'forum',
-                  }}
-                  size={22}
-                  tintColor={colors.brand}
-                  weight="semibold"
-                />
-              </View>
-              <View style={styles.sessionsEntryCopy}>
-                <Text style={[styles.sessionsEntryTitle, { color: colors.text }]}>Sessions</Text>
-                <Text style={[styles.sessionsEntryDescription, { color: colors.textSecondary }]}>
-                  Browse conversations and work the human review queue.
-                </Text>
-              </View>
-              <Text style={[styles.sessionsEntryAction, { color: colors.text }]}>Open</Text>
-            </MotionPressable>
-
-            <TraceRangeSelector
-              onChange={(preset) => {
-                if (preset === range.preset) return;
-                haptics.selection();
-                setTraceRangePreset(preset);
-                setRange(createTraceRange(preset));
-              }}
-              range={range}
-              streaming={streaming}
-              onStreamingChange={(value) => {
-                haptics.selection();
-                setStreaming(value);
-              }}
+      {isRegularWidth ? (
+        <DuoArrangement
+          preferredAxis="horizontal"
+          primary={feed}
+          ratio={SplitRatio}
+          secondary={
+            <TraceDetailPane
+              instanceId={instance.id}
+              projectId={projectId}
+              traceId={activeTraceId}
             />
-            <TraceSummary isLoading={summary.isPending} isWide={isWide} summary={summary.data} />
+          }
+        />
+      ) : (
+        feed
+      )}
+    </View>
+  );
+}
 
-            <View style={styles.traceHeading}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Traces</Text>
-            </View>
-            <ScrollView
-              contentContainerStyle={styles.filters}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.filterScroller}
-            >
-              {FILTERS.map((option) => {
-                const selected = option.value === filter;
+function TraceDetailPane({
+  instanceId,
+  projectId,
+  traceId,
+}: {
+  instanceId: string;
+  projectId: string;
+  traceId: string | null;
+}) {
+  const colors = useAppColors();
+  const pane = useArrangementPane();
 
-                return (
-                  <MotionPressable
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                    haptic={selected ? 'none' : 'selection'}
-                    key={option.value}
-                    onPress={() => setFilter(option.value)}
-                    style={[
-                      styles.filter,
-                      {
-                        backgroundColor: selected ? colors.accent : colors.backgroundSelected,
-                        borderColor: selected ? colors.accent : colors.border,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.filterLabel,
-                        { color: selected ? colors.accentForeground : colors.text },
-                      ]}
-                    >
-                      {option.label}
-                    </Text>
-                  </MotionPressable>
-                );
-              })}
-            </ScrollView>
-            {isWide && traces.length > 0 ? <TraceTableHeader /> : null}
-          </View>
-        }
-        maxToRenderPerBatch={12}
-        onEndReached={() => {
-          if (activeTraces.hasNextPage && !activeTraces.isFetchingNextPage)
-            activeTraces.fetchNextPage();
-        }}
-        onEndReachedThreshold={0.35}
-        refreshControl={
-          <RefreshControl
-            colors={[colors.brand]}
-            onRefresh={refresh}
-            progressBackgroundColor={colors.backgroundElement}
-            refreshing={manualRefreshing}
-            tintColor={colors.brand}
-          />
-        }
-        removeClippedSubviews={Platform.OS === 'android'}
-        renderItem={({ item }) => (
-          <TraceRow
-            isWide={isWide}
-            onPress={() =>
-              router.push({
-                pathname: '/instances/[id]/projects/[projectId]/traces/[traceId]',
-                params: { id: instance.id, projectId, traceId: item.traceId },
-              })
-            }
-            trace={item}
-          />
-        )}
-        style={styles.list}
-        windowSize={7}
-      />
+  // A flat split has no gutter, so draw a hairline on the pane's leading edge; the fold
+  // supplies its own separation when the device is partially folded.
+  const divider =
+    pane === null || pane.isFolded
+      ? null
+      : pane.axis === 'horizontal'
+        ? { borderLeftColor: colors.border, borderLeftWidth: StyleSheet.hairlineWidth }
+        : pane.axis === 'vertical'
+          ? { borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth }
+          : null;
+
+  return (
+    <View style={[styles.detailPane, { backgroundColor: colors.background }, divider]}>
+      {traceId === null ? (
+        <View style={styles.state}>
+          <Text style={[styles.stateTitle, { color: colors.text }]}>Select a trace</Text>
+          <Text style={[styles.stateCopy, { color: colors.textSecondary }]}>
+            Trace details appear here as you move through the feed.
+          </Text>
+        </View>
+      ) : (
+        <TraceDetailView
+          embedded
+          instanceId={instanceId}
+          key={traceId}
+          projectId={projectId}
+          traceId={traceId}
+        />
+      )}
     </View>
   );
 }
@@ -405,6 +529,10 @@ function TraceSummary({
     },
   ];
 
+  // Explicit rows: percent flex-basis inside a wrapping row does not break lines
+  // reliably on iOS when the container sits in an absolutely positioned pane.
+  const rows = isWide ? [metrics] : [metrics.slice(0, 2), metrics.slice(2)];
+
   return (
     <View
       style={[
@@ -412,27 +540,34 @@ function TraceSummary({
         { backgroundColor: colors.backgroundElement, borderColor: colors.border },
       ]}
     >
-      {metrics.map((metric, index) => (
+      {rows.map((row, rowIndex) => (
         <View
-          key={metric.label}
+          key={rowIndex === 0 ? 'first' : 'second'}
           style={[
-            styles.metric,
-            { flexBasis: isWide ? '25%' : '50%' },
-            index > 0 &&
-              (isWide || index % 2 === 1) && { borderLeftColor: colors.border, borderLeftWidth: 1 },
-            !isWide && index > 1 && { borderTopColor: colors.border, borderTopWidth: 1 },
+            styles.summaryRow,
+            rowIndex > 0 && { borderTopColor: colors.border, borderTopWidth: 1 },
           ]}
         >
-          <Text numberOfLines={1} style={[styles.metricLabel, { color: colors.textSecondary }]}>
-            {metric.label}
-          </Text>
-          {isLoading ? (
-            <ActivityIndicator color={colors.accent} size="small" style={styles.metricLoader} />
-          ) : (
-            <Text numberOfLines={1} style={[styles.metricValue, { color: colors.text }]}>
-              {metric.value}
-            </Text>
-          )}
+          {row.map((metric, index) => (
+            <View
+              key={metric.label}
+              style={[
+                styles.metric,
+                index > 0 && { borderLeftColor: colors.border, borderLeftWidth: 1 },
+              ]}
+            >
+              <Text numberOfLines={1} style={[styles.metricLabel, { color: colors.textSecondary }]}>
+                {metric.label}
+              </Text>
+              {isLoading ? (
+                <ActivityIndicator color={colors.accent} size="small" style={styles.metricLoader} />
+              ) : (
+                <Text numberOfLines={1} style={[styles.metricValue, { color: colors.text }]}>
+                  {metric.value}
+                </Text>
+              )}
+            </View>
+          ))}
         </View>
       ))}
     </View>
@@ -610,10 +745,12 @@ function TraceTableHeader() {
 function TraceRow({
   isWide,
   onPress,
+  selected,
   trace,
 }: {
   isWide: boolean;
   onPress: () => void;
+  selected: boolean;
   trace: PhoenixTraceListItem;
 }) {
   const colors = useAppColors();
@@ -633,8 +770,14 @@ function TraceRow({
         accessibilityLabel={`${trace.name}, ${statusLabel}, ${formatDuration(trace.latencyMs)}`}
         accessibilityHint="Opens trace details"
         accessibilityRole="button"
+        accessibilityState={{ selected }}
         onPress={onPress}
-        style={[styles.tableRow, { borderBottomColor: colors.border }]}
+        style={[
+          styles.tableRow,
+          { borderBottomColor: colors.border },
+          selected && styles.selectedTableRow,
+          selected && { backgroundColor: colors.backgroundSelected },
+        ]}
       >
         <View style={styles.operationColumn}>
           <Text numberOfLines={1} style={[styles.traceName, { color: colors.text }]}>
@@ -668,8 +811,14 @@ function TraceRow({
       accessibilityLabel={`${trace.name}, ${statusLabel}, ${formatDuration(trace.latencyMs)}`}
       accessibilityHint="Opens trace details"
       accessibilityRole="button"
+      accessibilityState={{ selected }}
       onPress={onPress}
-      style={[styles.mobileRow, { borderBottomColor: colors.border }]}
+      style={[
+        styles.mobileRow,
+        { borderBottomColor: colors.border },
+        selected && styles.selectedMobileRow,
+        selected && { backgroundColor: colors.backgroundSelected },
+      ]}
     >
       <View style={styles.mobilePrimaryRow}>
         <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
@@ -830,7 +979,9 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   list: { flex: 1 },
-  content: { alignSelf: 'center', maxWidth: MaxContentWidth, paddingHorizontal: 20, width: '100%' },
+  feed: { flex: 1 },
+  detailPane: { flex: 1, justifyContent: 'center' },
+  content: { alignSelf: 'center', width: '100%' },
   headerContent: { paddingTop: 18 },
   projectIntro: { gap: 7, paddingBottom: 28 },
   title: { fontFamily: AppFonts.semibold, fontSize: 32, letterSpacing: -1, lineHeight: 38 },
@@ -892,14 +1043,9 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   streamingLabel: { flex: 1, fontFamily: AppFonts.medium, fontSize: 14 },
-  summary: {
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    overflow: 'hidden',
-  },
-  metric: { flexGrow: 1, gap: 6, minHeight: 86, paddingHorizontal: 16, paddingVertical: 14 },
+  summary: { borderRadius: 18, borderWidth: 1, overflow: 'hidden' },
+  summaryRow: { flexDirection: 'row' },
+  metric: { flex: 1, gap: 6, minHeight: 86, paddingHorizontal: 16, paddingVertical: 14 },
   metricLabel: { fontFamily: AppFonts.regular, fontSize: 12 },
   metricValue: { fontFamily: AppFonts.semibold, fontSize: 23, letterSpacing: -0.5 },
   metricLoader: { alignSelf: 'flex-start', height: 28 },
@@ -936,6 +1082,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 11,
   },
+  selectedTableRow: { borderRadius: 14 },
   tableCell: { fontFamily: AppFonts.regular, fontSize: 13 },
   operationColumn: { flex: 1, minWidth: 0, paddingRight: 12 },
   statusColumn: { width: 90 },
@@ -962,6 +1109,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     paddingVertical: 15,
   },
+  // Net horizontal inset matches mobileRow, so selecting a row does not shift its content.
+  selectedMobileRow: { borderRadius: 14, marginHorizontal: -10, paddingHorizontal: 12 },
   mobilePrimaryRow: { alignItems: 'center', flexDirection: 'row', gap: 9 },
   mobileTraceName: { flex: 1, fontSize: 15 },
   mobileTime: { fontFamily: AppFonts.regular, fontSize: 12 },
