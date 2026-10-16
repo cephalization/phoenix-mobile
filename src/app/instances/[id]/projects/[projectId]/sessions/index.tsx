@@ -317,7 +317,7 @@ export default function SessionsScreen() {
               <Text style={[styles.listEnd, { color: colors.textSecondary }]}>
                 All loaded sessions shown
               </Text>
-            ) : null
+            ) : undefined
           }
           maxToRenderPerBatch={12}
           refreshControl={

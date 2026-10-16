@@ -354,7 +354,7 @@ export default function NewInstanceScreen() {
             }
             accessibilityRole="button"
             disabled={connect.isPending}
-            onPress={handleSubmit((values) => connect.mutate(values))}
+            onPress={() => void handleSubmit((values) => connect.mutate(values))()}
             style={[
               styles.submit,
               { backgroundColor: colors.accent, opacity: connect.isPending ? 0.9 : 1 },

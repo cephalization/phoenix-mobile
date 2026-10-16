@@ -676,7 +676,7 @@ function ChatSession({
         keyboardShouldPersistTaps="handled"
         keyExtractor={(message) => message.id}
         ListEmptyComponent={<EmptyChat instanceName={instance.name} />}
-        ListFooterComponent={isAwaitingAssistant ? <PendingAssistant /> : null}
+        ListFooterComponent={isAwaitingAssistant ? <PendingAssistant /> : undefined}
         onContentSizeChange={(_width, height) => {
           const grew = height > contentHeight.current + 1;
           contentHeight.current = height;

@@ -16,7 +16,7 @@ Do not duplicate the same information across all four documents. Update the docu
 1. Read `FINDINGS.md` and `GOALS.md`.
 2. Inspect the affected route, shared components, stores, and data hooks before choosing an implementation.
 3. Check the exact installed package versions in `package.json`.
-4. Read the versioned Expo SDK 57 documentation at `https://docs.expo.dev/versions/v57.0.0/` before relying on an Expo API. Expo and Expo Router behavior changes materially between SDK releases.
+4. Read the versioned Expo SDK 58 documentation at `https://docs.expo.dev/versions/v58.0.0/` before relying on an Expo API. Expo and Expo Router behavior changes materially between SDK releases.
 5. Preserve unrelated work in a dirty worktree.
 
 ## Product Context
@@ -33,8 +33,8 @@ Current product boundaries:
 
 ## Technology
 
-- Expo SDK 57 and Expo Router
-- React 19 and React Native 0.86
+- Expo SDK 58 and Expo Router
+- React 19 and React Native 0.88
 - Strict TypeScript with React Compiler enabled
 - TanStack Query for Phoenix server state
 - Zustand and AsyncStorage for persisted non-secret client state

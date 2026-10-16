@@ -239,7 +239,7 @@ export default function ProjectTracesScreen() {
                 <Text style={[styles.listEnd, { color: colors.textSecondary }]}>
                   All available traces loaded
                 </Text>
-              ) : null
+              ) : undefined
             }
             ListHeaderComponent={
               <View style={styles.headerContent}>

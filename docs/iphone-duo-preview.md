@@ -51,7 +51,7 @@ The Duo simulator ships only inside Xcode 27.1, so the app includes a harness th
 Run it on the iPad Pro 11-inch simulator, which has the inner display's regular size class, and on an iPhone simulator for the outer display:
 
 ```bash
-export DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 npx expo prebuild --platform ios --no-install && (cd ios && pod install)
 xcodebuild -workspace ios/PhoenixMobile.xcworkspace -scheme PhoenixMobile -configuration Debug \
   -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPad Pro 11-inch (M5)' \
@@ -81,4 +81,4 @@ The device boots closed. Opening, closing, rotating, and folding are bezel contr
 
 ## Upgrading to the real APIs
 
-Expo SDK 58 adds `expo-hinge` and Expo UI's `ArrangementView` (Xcode 27.1 required). Replace the simulated division region in `useDuoLayout` with the hinge and a reserved-region binding, and `DuoArrangement` with the native arrangement, keeping the same primary/secondary boundaries.
+The app runs on Expo SDK 58 (since 2026-10-16), which ships `expo-hinge` (`useHinge()`, `getHinge()`, `addHingeListener()`; iOS 27.1+ and Android 11 foldables) and Expo UI's `ArrangementView` with `ArrangementView.Primary` and `ArrangementView.Secondary` children plus the `arrangementViewStyle('split' | 'overlay')`, `splitArrangementLayoutSize`, and `overlayArrangementEdge` modifiers (iOS 27.1+; below that the children render without a container). Neither is adopted yet: `useDuoLayout` still simulates the division region and `DuoArrangement` still draws the split in JavaScript. When adopting them, keep the same primary/secondary boundaries, use the hinge for effects rather than layout as Apple recommends, and re-test Back inside a narrowed native stack first (see `FINDINGS.md`, 2026-10-15 bar-items entry) because `ArrangementView` would place the stack in a pane again.

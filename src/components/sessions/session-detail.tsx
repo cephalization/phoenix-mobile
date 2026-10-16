@@ -14,6 +14,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  type TextInputInstance,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -315,7 +316,6 @@ export function SessionDetailView({
         primary={
           <ConversationList
             actions={null}
-            footer={null}
             instanceId={id}
             projectId={projectId}
             refreshControl={refreshControl}
@@ -416,7 +416,7 @@ function ConversationList({
 }: {
   /** Session-level actions shown in the hero; null when a sibling pane hosts them. */
   actions: ReactNode;
-  footer: ReactElement | null;
+  footer?: ReactElement;
   instanceId: string;
   projectId: string;
   refreshControl: ReactElement<RefreshControlProps>;
@@ -1391,15 +1391,14 @@ function ReviewControl({
         ? config.lower_bound!
         : 0;
 
-  const scoreAccessibilityValue: AccessibilityValue = {};
+  const continuousRange = config.type === 'CONTINUOUS' && finiteRange;
 
-  if (config.type === 'CONTINUOUS' && finiteRange) {
-    scoreAccessibilityValue.max = config.upper_bound!;
-    scoreAccessibilityValue.min = config.lower_bound!;
-  }
-
-  if (Number.isFinite(numericValue)) scoreAccessibilityValue.now = numericValue;
-  scoreAccessibilityValue.text = value.value || 'No score entered';
+  const scoreAccessibilityValue: AccessibilityValue = {
+    max: continuousRange ? config.upper_bound! : undefined,
+    min: continuousRange ? config.lower_bound! : undefined,
+    now: Number.isFinite(numericValue) ? numericValue : undefined,
+    text: value.value || 'No score entered',
+  };
 
   return (
     <View
@@ -1562,7 +1561,7 @@ function ExplanationSheet({
   value: string;
 }) {
   const colors = useAppColors();
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
 
   // autoFocus inside the native bottom sheet places the cursor without raising
   // the Android keyboard, so re-focus after the sheet has presented.

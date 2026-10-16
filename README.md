@@ -15,7 +15,7 @@ A mobile companion for connecting to and monitoring self-hosted [Arize Phoenix](
 
 ## Stack
 
-- Expo SDK 57 and Expo Router
+- Expo SDK 58 and Expo Router
 - React Native and strict TypeScript
 - TanStack Query for Phoenix server state
 - Zustand and AsyncStorage for persisted instance metadata
@@ -51,7 +51,7 @@ Pass a device name or UDID to skip Expo's device prompt:
 npm run ios:device:clean -- "My iPhone"
 ```
 
-The clean script selects `/Applications/Xcode.app`, completes Xcode's first-launch setup, installs locked JavaScript dependencies, regenerates the iOS project with the Xcode 27 scene-lifecycle workaround, installs CocoaPods dependencies, and builds and installs Phoenix Mobile. Xcode discovers a locally configured development team for signing; no team identifier is stored in the repository. Set `XCODE_APP` when Xcode is installed elsewhere.
+The clean script selects `/Applications/Xcode.app`, completes Xcode's first-launch setup, installs locked JavaScript dependencies, regenerates the iOS project, installs CocoaPods dependencies, and builds and installs Phoenix Mobile. Xcode discovers a locally configured development team for signing; no team identifier is stored in the repository. Set `XCODE_APP` when Xcode is installed elsewhere.
 
 For normal JavaScript and TypeScript development, leave the installed development client on the phone and run `npm start` for Fast Refresh. Use `npm run ios:device` only when an incremental native rebuild is needed.
 

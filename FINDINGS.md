@@ -13,6 +13,23 @@ This is the project's living technical memory. Record discoveries that would oth
 
 ## Active Constraints
 
+### 2026-10-16 - Expo SDK 58 Brings React Native 0.88 Strict Types And The Built-In Scene Lifecycle
+
+**Status:** Active
+**Area:** Expo, React Native, dependencies, iOS, tooling
+
+`npx expo install expo@^58.0.0 --fix` stopped with an npm `ERESOLVE` between `expo-router@58` and `expo-symbols@57` because npm resolved against the half-updated lockfile; deleting `node_modules` and `package-lock.json` and running `npm install` produced a clean tree: expo 58.0.12, React Native 0.88.0, React 19.3, `@expo/ui` 58.0.19, expo-router 58.0.21, react-native-screens 4.30, react-native-gesture-handler 3.3, Reanimated 4.7.1, react-native-worklets 0.13, TypeScript 6.0. The upgrade forced these code changes:
+
+- React Native's Strict TypeScript API is the default. `FlatList` header and footer components no longer accept `null` (use `undefined`), `TextInput` refs are typed `TextInputInstance`, `AccessibilityValue` is read-only (build the literal in one expression), `useColorScheme()` returns `ColorSchemeName | null` (`'unspecified'` is gone), `RefreshControl.onRefresh` must return `void`, and React Hook Form's `handleSubmit` result is no longer assignable to `onPress` (wrap it in an arrow that discards the promise).
+- Vitest's oxc transform fails with `Failed to load tsconfig 'expo/tsconfig.base'` unless `tsconfig.json` extends `expo/tsconfig.base.json` with the explicit suffix; `tsc` accepts both spellings.
+- The local `with-ios-scene-lifecycle` config plugin is gone: `npx expo prebuild` now generates `SceneDelegate.swift` (an `ExpoAppSceneDelegate` subclass that creates the window) and the `UIApplicationSceneManifest`, and the old plugin would have refused the new `AppDelegate` template.
+- `expo-doctor` 1.21.4 reports `ios.icon - cannot access file at './assets/expo.icon'` for the Icon Composer `.icon` bundle, which is a directory. Prebuild copies and links the bundle as before, so treat that single schema failure as a false positive until doctor learns about `.icon` bundles.
+- `@expo/ui` 58 top-aligns `<Host>` content on iOS instead of centering it and defaults `spacing` to the system value in stacks; the app's hosts hold single sliders and the context-menu trigger, which were re-checked on the Duo simulator.
+
+`ios/` was regenerated with `npx expo prebuild --clean --platform ios --no-install`, `DEV_CLIENT_DEFAULT_LAUNCHER_URL` re-added to `Info.plist`, pods installed, and the app rebuilt for the iPhone Duo simulator; the `modules/duo-sheets` module compiles unchanged against the SDK 58 modules core. `npx expo export --platform all --clear` passes. `expo-hinge` and `ArrangementView` are available but not yet adopted (see the 2026-10-15 Duo decision below).
+
+**Implication:** Regenerate every native build after this upgrade (`npm run ios:device:clean`, `npm run android:device:clean`), start Metro with `--clear` once, and prefer `undefined` over `null` for optional list slots and read-only React Native prop objects. Keep `tsconfig.json` pointing at the `.json` base. Android has not been rebuilt or exercised on SDK 58 yet; the gesture-handler 3 and R8-by-default changes still need a device pass there.
+
 ### 2026-10-14 - Phoenix 20.11 Removed write_span_note; PXI Notes Go Through createSpanNote
 
 **Status:** Decision
@@ -148,19 +165,6 @@ The Android manifest opt-out behind `predictiveBackGestureEnabled: false` is dep
 
 **Implication:** Verify on a physical Android device: back gesture through the chat route, open form sheets, and open bottom sheets; and keyboard behavior in the connection sheet at both detents. Also note `sheetGrabberVisible` and `sheetCornerRadius` are iOS-only in `react-native-screens`, and `@expo/ui` fractional snap points resolve to half/full on Android.
 
-### 2026-07-16 - Xcode 27 Beta Requires The UIKit Scene Lifecycle
-
-**Status:** Active
-**Area:** iOS, Expo, Xcode
-
-Building the generated SDK 57 app with Xcode 27 beta raises `SIGTRAP` in `UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption` because the template uses the legacy application lifecycle. Expo accepted [expo/expo#46664](https://github.com/expo/expo/issues/46664) for the same failure on SDK 56 and tracks it as an iOS 27 issue with upstream React Native work.
-
-The local `with-ios-scene-lifecycle` config plugin moves React startup into `SceneDelegate`, assigns the scene window to both `SceneDelegate.window` and `AppDelegate.window`, and forwards scene URL opens through the existing AppDelegate path. Assigning `AppDelegate.window` is essential: without it, Expo Dev Launcher can load while the React root stays detached and black. This exact flow was verified on a physical iOS 27 device with Expo SDK 57.0.6 and Xcode 27 beta.
-
-The App Store version of Expo Go does not yet include SDK 57. `eas go` and EAS physical-device builds require a paid Apple Developer membership, so local Xcode builds signed by the configured Personal Team are the available no-cost device workflow.
-
-**Implication:** Keep the local scene plugin and regenerate iOS through `npm run ios:device:clean` until Expo resolves the accepted lifecycle issue. Revalidate React mounting, Expo Dev Launcher, initial URLs, and deep links whenever the generated AppDelegate changes.
-
 ### 2026-07-14 - PXI Uses The External Server-Agent Stream
 
 **Status:** Decision
@@ -285,7 +289,7 @@ CSS can color the document but cannot remove normal iOS Safari toolbars. The app
 
 With a vertical system bar (both Duo displays except the inner display in portrait), UIKit lays the stack's Back button and icon bar items along the trailing edge of the navigation controller's view. When `PxiPaneShell` first placed the native stack inside a 60 percent-wide `DuoArrangement` pane, UIKit still drew that bar at the pane's trailing edge, but neither Back nor the PXI item responded to taps, with or without a title, while React Native content in the same pane scrolled normally; even JavaScript pressables drawn over that column received nothing, and the window-edge column was dead too. The working configuration keeps the native stack at full window width: the shell is an `overlay` arrangement whose floating pane is PXI, content screens get `contentStyle` padding equal to the covered region (through `usePxiPaneStore().stackContentInset`), and the floating pane leaves the bar column transparent and `box-none` so the system's Back and PXI items stay visible and tappable above it. `useDuoLayout` inside the stack reports the uncovered size, so screens switch to their compact layouts.
 
-**Implication:** Never host a native stack in a pane narrower than the window on iPhone Duo; pad its content instead. When the pane bug matters again (Expo SDK 58's `ArrangementView` or a react-native-screens fix), re-test Back in a narrowed stack before removing the padding approach.
+**Implication:** Never host a native stack in a pane narrower than the window on iPhone Duo; pad its content instead. When the pane bug matters again (Expo SDK 58's `ArrangementView` or a react-native-screens fix), re-test Back in a narrowed stack before removing the padding approach. Expo SDK 58 (installed 2026-10-16) ships `ArrangementView` and react-native-screens 4.30; neither has been re-tested against this bug yet.
 
 ### 2026-10-15 - A Form Sheet Screen Needs A Scroll View As Its Root For Header Insets And A Frame
 
@@ -506,7 +510,7 @@ iPhone Duo (iOS 27.1, shipping 2026-10-23) exposes two displays: the outer 5.4 i
 
 The Duo simulator ships only inside Xcode 27.1 RC; it was installed on 2026-10-15 (27A9275, replacing the 27.0 beta) and the iPhone Duo device type requires the separately downloaded iOS 27.1 simulator runtime (24A94232). The device boots closed, posture is a Device Hub bezel control with no `simctl` equivalent, and `simctl io screenshot --display=1` captures the outer panel. The 27.1 SDK build verified the outer display edge to edge with the system's vertical status bar, which confirms the compact-width path; on 2026-10-15 Device Hub (driven with CGEvent clicks once Accessibility and Screen Recording were granted, since it exposes no accessibility tree) opened the device and every screen was audited on the inner display, see the vertical-bar decision below. `DuoPreviewFrame` (`src/components/duo/preview-frame.tsx`, toggled from Settings) therefore frames the whole app at Duo point sizes on an iPad or iPhone simulator, overrides the safe-area insets with the Duo's trailing-edge bar layout, draws the fold, and drives pose and hinge angle from `useDuoPreviewStore`; `useDuoLayout` reads the framed viewport through `DuoViewportContext`. `app.json` now sets `orientation: "default"`, `ios.supportsTablet: true`, and `ios.requireFullScreen: false` because iOS 27 makes iPhone apps resizable, the inner display ignores orientation locks, and the iPad simulator is the stand-in for the inner display's regular size class.
 
-**Implication:** Never branch Duo layouts on orientation, idiom, or `Dimensions`; read `useDuoLayout`, keep `DuoArrangement` outside scroll views and navigation containers, and give embedded detail views an `embedded` flag so nested panes do not split again. When Xcode 27.1 and Expo SDK 58 land, replace the simulated division region with `expo-hinge` plus a reserved-region binding and `DuoArrangement` with Expo UI's `ArrangementView`, keeping the same component boundaries.
+**Implication:** Never branch Duo layouts on orientation, idiom, or `Dimensions`; read `useDuoLayout`, keep `DuoArrangement` outside scroll views and navigation containers, and give embedded detail views an `embedded` flag so nested panes do not split again. Expo SDK 58 (installed 2026-10-16) ships `expo-hinge` and Expo UI's `ArrangementView` (both iOS 27.1+); replacing the simulated division region with the hinge plus a reserved-region binding and `DuoArrangement` with the native arrangement is pending, keeping the same component boundaries (see `docs/iphone-duo-preview.md`).
 
 ### 2026-10-14 - Code Blocks Use Phoenix's Pierre Syntax Colors And Geist Mono
 
@@ -580,10 +584,23 @@ Reanimated provides press response, loading motion, staggered row entrance, and 
 **Status:** Watch  
 **Area:** Dependencies
 
-On 2026-10-14 `npm audit --omit=dev` reports 49 advisories (1 critical in `shell-quote`, 29 high) after the SDK 57 patch alignment. Every critical and high finding sits in build-time tooling (Expo CLI, Metro, `@expo/config-plugins`, `node-forge`, `micromatch`) rather than in code shipped inside the app binary, and npm's proposed fixes downgrade to Expo 44 or React Native 0.72. No forced upgrade has been applied.
+On 2026-10-14 `npm audit --omit=dev` reported 49 advisories (1 critical in `shell-quote`, 29 high) after the SDK 57 patch alignment; on 2026-10-16, after the SDK 58 upgrade, it reports 27 advisories (0 critical, 19 high, 8 moderate), all still in build-time tooling. Every critical and high finding sits in build-time tooling (Expo CLI, Metro, `@expo/config-plugins`, `node-forge`, `micromatch`) rather than in code shipped inside the app binary, and npm's proposed fixes downgrade to Expo 44 or React Native 0.72. No forced upgrade has been applied.
 
 **Implication:** Review advisories before each release and track them against the Expo SDK changelog. Do not run `npm audit fix --force`; it would break the SDK.
 
 ## Superseded
 
-No entries yet.
+### 2026-07-16 - Xcode 27 Beta Requires The UIKit Scene Lifecycle
+
+**Status:** Superseded
+**Area:** iOS, Expo, Xcode
+
+Building the generated SDK 57 app with Xcode 27 beta raises `SIGTRAP` in `UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption` because the template uses the legacy application lifecycle. Expo accepted [expo/expo#46664](https://github.com/expo/expo/issues/46664) for the same failure on SDK 56 and tracks it as an iOS 27 issue with upstream React Native work.
+
+The local `with-ios-scene-lifecycle` config plugin moves React startup into `SceneDelegate`, assigns the scene window to both `SceneDelegate.window` and `AppDelegate.window`, and forwards scene URL opens through the existing AppDelegate path. Assigning `AppDelegate.window` is essential: without it, Expo Dev Launcher can load while the React root stays detached and black. This exact flow was verified on a physical iOS 27 device with Expo SDK 57.0.6 and Xcode 27 beta.
+
+The App Store version of Expo Go does not yet include SDK 57. `eas go` and EAS physical-device builds require a paid Apple Developer membership, so local Xcode builds signed by the configured Personal Team are the available no-cost device workflow.
+
+**Implication:** Keep the local scene plugin and regenerate iOS through `npm run ios:device:clean` until Expo resolves the accepted lifecycle issue. Revalidate React mounting, Expo Dev Launcher, initial URLs, and deep links whenever the generated AppDelegate changes.
+
+**Superseded on 2026-10-16:** Expo SDK 58 generates `SceneDelegate.swift` and the `UIApplicationSceneManifest` itself (`ExpoAppSceneDelegate` creates the window and starts React Native), so the local plugin was deleted; see the 2026-10-16 upgrade entry under Active Constraints.

@@ -101,7 +101,7 @@ export function TraceDetailView({
         refreshControl={
           <RefreshControl
             colors={[colors.brand]}
-            onRefresh={() => trace.refetch()}
+            onRefresh={() => void trace.refetch()}
             progressBackgroundColor={colors.backgroundElement}
             refreshing={trace.isRefetching}
             tintColor={colors.brand}
