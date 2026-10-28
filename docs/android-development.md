@@ -1,6 +1,6 @@
 # Android Device Development
 
-Phoenix Mobile uses an Expo development build rather than Expo Go because the app includes native modules and targets Expo SDK 57. The repository generates `android/` locally from `app.json`; the native directory is intentionally ignored by Git.
+This guide covers the Expo development build, which is needed for the trailing-sheet native module and OAuth sign-in. For a first look at the app, Expo Go is faster: see [Quick start with Expo Go](../README.md#quick-start-with-expo-go) in the README. The repository generates `android/` locally from `app.json`; the native directory is intentionally ignored by Git.
 
 ## Phone Preparation
 

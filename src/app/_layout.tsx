@@ -27,6 +27,10 @@ SplashScreen.preventAutoHideAsync();
 
 featureFlags.experiment.synchronousScreenUpdatesEnabled = true;
 
+// A deep link straight to a sheet or the OAuth callback keeps the instance list
+// underneath it, so dismissing the sheet or pressing Back lands somewhere.
+export const unstable_settings = { anchor: 'index' };
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const appearance = useSettingsStore((state) => state.appearance);

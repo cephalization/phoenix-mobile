@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
@@ -47,11 +47,20 @@ const connectionSchema = z.object({
 
 type ConnectionForm = z.infer<typeof connectionSchema>;
 
+/**
+ * Optional prefill carried by a link such as
+ * `phoenixmobile://instances/new?host=192.168.1.20:6006` (or the Expo Go form,
+ * `exp://<computer>:8081/--/instances/new?host=...`), so a collaborator can be
+ * handed a connection instead of typing it. Nothing is saved until verified.
+ */
+type ConnectionLinkParams = { host?: string; name?: string };
+
 export default function NewInstanceScreen() {
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const reduceMotion = useReducedMotion();
+  const linkParams = useLocalSearchParams<ConnectionLinkParams>();
 
   const [connectionStatus, setConnectionStatus] = useState<
     'idle' | 'verifying' | 'authorizing' | 'success'
@@ -72,7 +81,11 @@ export default function NewInstanceScreen() {
     setError,
   } = useForm<ConnectionForm>({
     resolver: zodResolver(connectionSchema),
-    defaultValues: { allowInsecureOAuth: false, host: '', name: '' },
+    defaultValues: {
+      allowInsecureOAuth: false,
+      host: isJsonString(linkParams.host) ? linkParams.host : '',
+      name: isJsonString(linkParams.name) ? linkParams.name : '',
+    },
   });
 
   const connect = useMutation({

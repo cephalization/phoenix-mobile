@@ -13,6 +13,17 @@ This is the project's living technical memory. Record discoveries that would oth
 
 ## Active Constraints
 
+### 2026-10-27 - Expo Go Runs The App; Trailing Sheets And OAuth Need A Development Build
+
+**Status:** Decision
+**Area:** Expo Go, onboarding, iOS, OAuth
+
+The App Store Expo Go (58.0.5, released about 5 days after SDK 58) runs this project: `@expo/ui`, `expo-glass-effect`, SecureStore, Reanimated, and the rest of the dependency list are bundled in Expo Go. Because `expo-dev-client` is installed, plain `npx expo start` serves the development build and an Expo Go scan hands off to an app the collaborator does not have, so `npm run start:go` (`expo start --go`) is the Expo Go entry point. Two features stay dev-build only: `modules/duo-sheets` is loaded with `requireOptionalNativeModule` and is a no-op in Expo Go, so form sheets dock to the leading edge of the open Duo, and OAuth returns through the exact private `phoenixmobile://oauth/callback` redirect (see the 2026-07-24 OAuth entry), which Expo Go cannot own. Deriving the redirect from `Linking.createURL` was considered and rejected: it would register an `exp://<dev-machine>:8081/--/...` redirect with the Phoenix client, relax the exact-callback check that the OAuth entry relies on, and the registered client would stop matching when the same person switches between Expo Go and a development build.
+
+The connection sheet reads optional `host` and `name` search params, so `exp://<computer>:8081/--/instances/new?host=192.168.1.20:6006` (Expo Go) or `phoenixmobile://instances/new?host=...` (dev build) opens the sheet prefilled; verification still runs before anything is saved. The root layout declares `unstable_settings.anchor = "index"` so a cold deep link to a sheet or the OAuth callback keeps the instance list underneath. `@expo/ngrok` is a devDependency so `npm run start:go -- --tunnel` works without an install step, `packageManager` names npm (it previously named yarn while the repository commits `package-lock.json`), and the create-expo-app `reset-project` script is gone.
+
+**Implication:** Point new collaborators at the README quick start and Expo Go first; the development build is for trailing sheets, OAuth, and native changes. Keep the OAuth redirect private and exact; do not make it environment-dependent for Expo Go. The prefill link and the anchor were verified by typecheck, lint, and tests only; exercise a cold deep link on a device when touching the root stack.
+
 ### 2026-10-16 - Expo SDK 58 Brings React Native 0.88 Strict Types And The Built-In Scene Lifecycle
 
 **Status:** Active
