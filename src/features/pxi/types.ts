@@ -1,18 +1,23 @@
 import type { Types } from '@arizeai/phoenix-client';
 import type { UIMessage } from 'ai';
 
+// Phoenix namespaces UIMessage metadata; assistant turns carry their trace
+// identity under `phoenix.turnTraceContext`.
 export type AssistantMessageMetadata = {
-  sessionId?: string;
-  trace?: {
-    traceId: string;
-    rootSpanId: string;
-  } | null;
-  usage?: {
-    tokens: {
-      prompt: number;
-      completion: number;
-      total: number;
-    };
+  phoenix?: {
+    type: 'assistant' | 'user';
+    sessionId?: string;
+    turnTraceContext?: {
+      traceId: string;
+      rootSpanId: string;
+    } | null;
+    usage?: {
+      tokens: {
+        prompt: number;
+        completion: number;
+        total: number;
+      };
+    } | null;
   } | null;
 };
 

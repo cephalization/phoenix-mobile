@@ -348,7 +348,7 @@ export function ChatMessage({
   const colors = useAppColors();
   const isUser = message.role === 'user';
   const textParts = message.parts.filter((part) => part.type === 'text');
-  const traceId = message.metadata?.trace?.traceId;
+  const traceId = message.metadata?.phoenix?.turnTraceContext?.traceId;
   const hasVisibleContent = message.parts.some(hasVisibleOutput);
 
   if (isUser) {
