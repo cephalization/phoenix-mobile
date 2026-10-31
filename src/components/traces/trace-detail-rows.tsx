@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { MessageMarkdown } from '@/components/chat/message-markdown';
 import { isJsonBlockValue, JsonBlock } from '@/components/json-block';
 import { RowInset, RowSeparator } from '@/components/ui/list-row';
 import { Type, useAppColors } from '@/constants/theme';
@@ -79,16 +80,19 @@ function KeyValueRow({ inset, row }: { inset: number; row: KeyValue }) {
 }
 
 /**
- * A payload: a JSON block when it is structured, otherwise selectable text
- * with a preview for long values. Used for trace input and output and for
+ * A payload: a JSON block when it is structured, otherwise Markdown or
+ * selectable text with a preview for long values. Used for trace input and output and for
  * long span attributes.
  */
 export function ContentValue({
+  markdown = false,
   mono = false,
   tone = 'default',
   value,
 }: {
   value: JsonValue;
+  /** Renders prose as Markdown, as model input and output usually is. */
+  markdown?: boolean;
   mono?: boolean;
   tone?: 'default' | 'danger';
 }) {
@@ -107,15 +111,19 @@ export function ContentValue({
 
   return (
     <View style={styles.content}>
-      <Text
-        selectable
-        style={[
-          mono ? Type.mono : Type.body,
-          { color: tone === 'danger' ? colors.danger : colors.text },
-        ]}
-      >
-        {display}
-      </Text>
+      {markdown ? (
+        <MessageMarkdown streaming={false} text={display} />
+      ) : (
+        <Text
+          selectable
+          style={[
+            mono ? Type.mono : Type.body,
+            { color: tone === 'danger' ? colors.danger : colors.text },
+          ]}
+        >
+          {display}
+        </Text>
+      )}
       {long ? (
         <Pressable
           accessibilityRole="button"

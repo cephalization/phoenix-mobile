@@ -191,7 +191,7 @@ function TraceContent({
         <>
           <SectionHeader label="Input" />
           <View style={styles.payload}>
-            <ContentValue value={input} />
+            <ContentValue markdown value={input} />
           </View>
         </>
       ) : null}
@@ -200,7 +200,7 @@ function TraceContent({
         <>
           <SectionHeader label="Output" />
           <View style={styles.payload}>
-            <ContentValue value={output} />
+            <ContentValue markdown value={output} />
           </View>
         </>
       ) : null}
