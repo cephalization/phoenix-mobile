@@ -1,13 +1,26 @@
 import { useChat } from '@ai-sdk/react';
 import { useQueryClient } from '@tanstack/react-query';
+import { Stack } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef } from 'react';
-import { ActivityIndicator, FlatList, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChatMessage } from '@/components/chat/chat-message';
+import { barButton } from '@/components/duo/column-header';
 import { MotionPressable } from '@/components/motion-pressable';
 import { PxiGlyph } from '@/components/pxi-glyph';
-import { AppFonts, useAppColors } from '@/constants/theme';
+import { EmptyState } from '@/components/ui/empty-state';
+import { StatusLabel } from '@/components/ui/status-label';
+import { AppFonts, Type, useAppColors } from '@/constants/theme';
 import { useContentColumnStyle } from '@/features/duo/layout';
 import {
   resolvePxiAction,
@@ -33,9 +46,9 @@ import type { PhoenixInstance } from '@/types/instance';
  * A contextual PXI run (today: investigate a session) with its brief and
  * streamed transcript. The action route presents it as a form sheet: a bottom
  * sheet on compact width, a full-height sheet beside the vertical bar on
- * regular width. The native header carries the title, the brief card names the
- * instance and model, and the sheet dismisses by swipe, like every other task
- * sheet.
+ * regular width. The native header carries the title and Done (and Stop while
+ * PXI runs) on iOS; the brief names the instance and model above the
+ * transcript, and the sheet also dismisses by swipe, like every other task sheet.
  */
 export function PxiActionView({
   onClose,
@@ -153,16 +166,19 @@ export function PxiActionView({
     />
   ) : !instance ? (
     <SheetState
+      onClose={onClose}
       title="Instance not found"
       copy="This Phoenix connection is no longer on this device."
     />
   ) : !action ? (
     <SheetState
+      onClose={onClose}
       title="Unknown PXI action"
       copy="This contextual action is missing or has incomplete parameters."
     />
   ) : version.isError ? (
     <SheetState
+      onClose={onClose}
       title="Couldn’t check this server"
       copy={version.error.message}
       action="Try again"
@@ -170,6 +186,7 @@ export function PxiActionView({
     />
   ) : viewer.isError ? (
     <SheetState
+      onClose={onClose}
       title="Couldn’t check your Phoenix access"
       copy={viewer.error.message}
       action="Try again"
@@ -177,16 +194,19 @@ export function PxiActionView({
     />
   ) : versionSupported === false ? (
     <SheetState
+      onClose={onClose}
       title="Phoenix upgrade required"
       copy={`${action.capability} requires Phoenix ${action.minimumVersion.join('.')} or newer; this server is ${version.data}.`}
     />
   ) : viewer.isSuccess && readOnly ? (
     <SheetState
+      onClose={onClose}
       title="Read-only access"
       copy="Your Phoenix Viewer role can browse this instance, but PXI cannot save notes on its behalf."
     />
   ) : !selectedModel && catalog.isError ? (
     <SheetState
+      onClose={onClose}
       title="PXI isn’t ready"
       copy={formatPxiError(catalog.error)}
       action="Try again"
@@ -194,13 +214,14 @@ export function PxiActionView({
     />
   ) : !selectedModel && catalog.isSuccess ? (
     <SheetState
+      onClose={onClose}
       title="No recommended model is configured"
       copy="Configure a Phoenix-recommended agent model, then try again."
       action="Check again"
       onPress={() => catalog.refetch()}
     />
   ) : (
-    <SheetState loading copy="Preparing PXI…" />
+    <SheetState loading copy="Preparing PXI…" onClose={onClose} />
   );
 }
 
@@ -248,7 +269,7 @@ function ActionRun({
 }) {
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
-  const column = useContentColumnStyle(18);
+  const column = useContentColumnStyle(20);
   const clearRun = usePxiInvestigationStore((state) => state.clearRun);
   const listRef = useRef<FlatList<PxiMessage>>(null);
   const followLiveEdge = useRef(true);
@@ -276,88 +297,94 @@ function ActionRun({
 
   return (
     <FlatList
-      contentContainerStyle={[styles.transcript, column, { paddingBottom: 16 + insets.bottom }]}
+      contentContainerStyle={[styles.transcript, column, { paddingBottom: 20 + insets.bottom }]}
       contentInsetAdjustmentBehavior="automatic"
       style={[styles.run, { backgroundColor: colors.background }]}
       data={assistantMessages}
       keyExtractor={(message) => message.id}
       ListHeaderComponent={
-        <View
-          style={[
-            styles.briefCard,
-            { backgroundColor: colors.backgroundSelected, borderColor: colors.border },
-          ]}
-        >
-          <Text style={[styles.briefCopy, { color: colors.textSecondary }]}>{action.brief}</Text>
-          <Text style={[styles.briefMeta, { color: colors.textSecondary }]}>
+        <View style={[styles.brief, { borderBottomColor: colors.separator }]}>
+          <SheetBar onClose={onClose} onStop={isStreaming ? () => void stop() : undefined} />
+          <Text style={[Type.subhead, { color: colors.textSecondary }]}>{action.brief}</Text>
+          <Text numberOfLines={1} style={[Type.mono, { color: colors.textTertiary }]}>
             {instance.name} · {modelLabel}
           </Text>
         </View>
       }
       ListFooterComponent={
-        <>
+        <View style={styles.footer}>
           {isAwaitingAssistant ? (
             <View
               accessibilityLabel="PXI is thinking"
               accessibilityRole="progressbar"
               style={styles.pending}
             >
-              <ActivityIndicator color={colors.brand} size="small" />
-              <Text style={[styles.pendingLabel, { color: colors.textSecondary }]}>Thinking…</Text>
+              <ActivityIndicator
+                color={colors.textTertiary}
+                size="small"
+                style={styles.pendingSpinner}
+              />
+              <Text style={[Type.subhead, { color: colors.textSecondary }]}>Thinking…</Text>
             </View>
           ) : null}
           {finished ? (
-            <Text style={[styles.doneCopy, { color: colors.success }]}>
-              PXI finished. Its notes now appear on the session screen below the conversation.
-            </Text>
+            <View style={styles.outcome}>
+              <StatusLabel label="Finished" tone="ok" />
+              <Text style={[Type.subhead, { color: colors.textSecondary }]}>
+                PXI’s notes now appear on the session, below the conversation.
+              </Text>
+            </View>
           ) : null}
           {failed && !isStreaming ? (
-            <View
-              style={[
-                styles.errorBar,
-                { backgroundColor: colors.backgroundSelected, borderColor: colors.border },
-              ]}
-            >
-              <Text style={[styles.errorText, { color: colors.text }]}>
+            <View accessibilityLiveRegion="polite" style={styles.notice}>
+              <SymbolView
+                name={{ ios: 'exclamationmark.triangle', android: 'warning', web: 'warning' }}
+                size={13}
+                tintColor={run.status === 'stopped' ? colors.textSecondary : colors.danger}
+              />
+              <Text style={[Type.subhead, styles.noticeText, { color: colors.textSecondary }]}>
                 {run.status === 'stopped'
                   ? 'The investigation stopped before it finished.'
                   : formatPxiError(
                       error ?? new Error('PXI could not complete this investigation.'),
                     )}
               </Text>
-              <MotionPressable accessibilityRole="button" haptic="selection" onPress={retry}>
-                <Text style={[styles.retryText, { color: colors.brand }]}>Retry</Text>
-              </MotionPressable>
-            </View>
-          ) : null}
-          <View style={styles.footer}>
-            {isStreaming ? (
               <MotionPressable
                 accessibilityRole="button"
                 haptic="selection"
-                onPress={() => void stop()}
-                style={[styles.footerButton, { borderColor: colors.border, borderWidth: 1 }]}
+                hitSlop={12}
+                onPress={retry}
               >
-                <Text style={[styles.footerButtonLabel, { color: colors.text }]}>Stop</Text>
+                <Text style={[styles.noticeAction, { color: colors.text }]}>Retry</Text>
               </MotionPressable>
-            ) : (
-              <MotionPressable
-                accessibilityRole="button"
-                onPress={onClose}
-                style={[styles.footerButton, { backgroundColor: colors.accent }]}
-              >
-                <Text style={[styles.footerButtonLabel, { color: colors.accentForeground }]}>
-                  {finished ? 'Done' : 'Close'}
-                </Text>
-              </MotionPressable>
-            )}
-            <Text style={[styles.disclaimer, { color: colors.textSecondary }]}>
-              {isStreaming
-                ? 'You can close this — PXI keeps investigating and the notes will appear when it finishes.'
-                : 'PXI can make mistakes. Verify its notes against the conversation.'}
-            </Text>
-          </View>
-        </>
+            </View>
+          ) : null}
+          {Platform.OS === 'ios' ? null : isStreaming ? (
+            <MotionPressable
+              accessibilityRole="button"
+              haptic="selection"
+              onPress={() => void stop()}
+              style={[styles.footerButton, { borderColor: colors.border, borderWidth: 1 }]}
+            >
+              <Text style={[styles.footerButtonLabel, { color: colors.text }]}>Stop</Text>
+            </MotionPressable>
+          ) : (
+            <MotionPressable
+              accessibilityRole="button"
+              onPress={onClose}
+              style={[styles.footerButton, { backgroundColor: colors.accent }]}
+            >
+              <Text style={[styles.footerButtonLabel, { color: colors.accentForeground }]}>
+                Done
+              </Text>
+            </MotionPressable>
+          )}
+          <Text style={[Type.label, styles.disclaimer, { color: colors.textTertiary }]}>
+            {isStreaming
+              ? 'You can close this. PXI keeps investigating, and its notes appear when it finishes.'
+              : 'PXI can make mistakes. Check its notes against the conversation.'}
+          </Text>
+        </View>
       }
       onContentSizeChange={() => {
         if (followLiveEdge.current) {
@@ -382,16 +409,51 @@ function ActionRun({
   );
 }
 
+/**
+ * The sheet's bar items on iOS: Done at the far end, so it tops iPhone Duo's
+ * vertical bar, and Stop beside it while PXI runs. Closing never stops a run.
+ * Other platforms show the same actions in the content.
+ */
+function SheetBar({ onClose, onStop }: { onClose: () => void; onStop?: () => void }) {
+  if (Platform.OS !== 'ios') return null;
+
+  const done = barButton({
+    type: 'button',
+    label: 'Done',
+    icon: { type: 'sfSymbol', name: 'checkmark' },
+    onPress: onClose,
+    variant: 'done',
+    visibilityPriority: 'high',
+  });
+
+  const items = onStop
+    ? [
+        barButton({
+          type: 'button',
+          label: 'Stop',
+          icon: { type: 'sfSymbol', name: 'stop.circle' },
+          onPress: onStop,
+          visibilityPriority: 'high',
+        }),
+        done,
+      ]
+    : [done];
+
+  return <Stack.Screen options={{ unstable_headerRightItems: () => items }} />;
+}
+
 function SheetState({
   action,
   copy,
   loading,
+  onClose,
   onPress,
   title,
 }: {
   action?: string;
   copy: string;
   loading?: boolean;
+  onClose: () => void;
   onPress?: () => void;
   title?: string;
 }) {
@@ -403,26 +465,14 @@ function SheetState({
       contentInsetAdjustmentBehavior="automatic"
       style={[styles.screen, { backgroundColor: colors.background }]}
     >
-      <View style={styles.center}>
-        {loading ? (
-          <ActivityIndicator color={colors.brand} />
-        ) : (
-          <PxiGlyph color={colors.brand} size={28} />
-        )}
-        {title ? <Text style={[styles.stateTitle, { color: colors.text }]}>{title}</Text> : null}
-        <Text style={[styles.stateCopy, { color: colors.textSecondary }]}>{copy}</Text>
-        {action && onPress ? (
-          <MotionPressable
-            accessibilityRole="button"
-            onPress={onPress}
-            style={[styles.stateButton, { backgroundColor: colors.accent }]}
-          >
-            <Text style={[styles.stateButtonLabel, { color: colors.accentForeground }]}>
-              {action}
-            </Text>
-          </MotionPressable>
-        ) : null}
-      </View>
+      <SheetBar onClose={onClose} />
+      <EmptyState
+        action={action && onPress ? { label: action, onPress } : undefined}
+        art={loading ? undefined : <PxiGlyph color={colors.brand} size={28} />}
+        loading={loading}
+        message={title ? copy : undefined}
+        title={title ?? copy}
+      />
     </ScrollView>
   );
 }
@@ -430,43 +480,17 @@ function SheetState({
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   run: { flex: 1 },
-  transcript: { alignSelf: 'center', gap: 24, paddingTop: 18, width: '100%' },
-  briefCard: { borderRadius: 18, borderWidth: 1, gap: 7, marginBottom: 4, padding: 15 },
-  briefCopy: { fontFamily: AppFonts.regular, fontSize: 13, lineHeight: 19 },
-  briefMeta: { fontFamily: AppFonts.medium, fontSize: 11 },
-  pending: { alignItems: 'center', flexDirection: 'row', gap: 8, minHeight: 24 },
-  pendingLabel: { fontFamily: AppFonts.regular, fontSize: 12, fontStyle: 'italic' },
-  doneCopy: { fontFamily: AppFonts.medium, fontSize: 13, lineHeight: 19 },
-  errorBar: {
-    alignItems: 'center',
-    borderRadius: 14,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 12,
-    padding: 11,
-  },
-  errorText: { flex: 1, fontFamily: AppFonts.regular, fontSize: 12, lineHeight: 17 },
-  retryText: { fontFamily: AppFonts.semibold, fontSize: 13 },
-  footer: { gap: 7, paddingTop: 4 },
-  footerButton: { alignItems: 'center', borderRadius: 16, justifyContent: 'center', minHeight: 50 },
+  transcript: { alignSelf: 'center', gap: 24, paddingTop: 12, width: '100%' },
+  brief: { borderBottomWidth: StyleSheet.hairlineWidth, gap: 6, paddingBottom: 16 },
+  footer: { gap: 14 },
+  pending: { alignItems: 'center', flexDirection: 'row', gap: 6, minHeight: 24 },
+  pendingSpinner: { marginLeft: -4, transform: [{ scale: 0.8 }] },
+  outcome: { gap: 6 },
+  notice: { alignItems: 'center', flexDirection: 'row', gap: 8 },
+  noticeText: { flex: 1 },
+  noticeAction: { fontFamily: AppFonts.semibold, fontSize: 13 },
+  footerButton: { alignItems: 'center', borderRadius: 24, justifyContent: 'center', minHeight: 48 },
   footerButtonLabel: { fontFamily: AppFonts.semibold, fontSize: 15 },
-  disclaimer: { fontFamily: AppFonts.regular, fontSize: 10, textAlign: 'center' },
+  disclaimer: { textAlign: 'center' },
   fill: { flexGrow: 1 },
-  center: { alignItems: 'center', flex: 1, gap: 10, justifyContent: 'center', padding: 28 },
-  stateTitle: { fontFamily: AppFonts.semibold, fontSize: 20, textAlign: 'center' },
-  stateCopy: {
-    fontFamily: AppFonts.regular,
-    fontSize: 14,
-    lineHeight: 21,
-    maxWidth: 340,
-    textAlign: 'center',
-  },
-  stateButton: {
-    borderRadius: 14,
-    justifyContent: 'center',
-    marginTop: 4,
-    minHeight: 48,
-    paddingHorizontal: 17,
-  },
-  stateButtonLabel: { fontFamily: AppFonts.semibold, fontSize: 14 },
 });

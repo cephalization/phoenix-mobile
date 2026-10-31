@@ -49,10 +49,6 @@ export function PxiPaneShell({ children }: { children: ReactNode }) {
   const viewport: DuoViewport = {
     width: layout.width,
     height: layout.height,
-    source: layout.source,
-    display: layout.display,
-    pose: layout.pose,
-    hinge: layout.hinge,
     systemBarEdge: layout.systemBarEdge,
   };
 
@@ -115,8 +111,6 @@ function StackViewport({
             ...window,
             width: frame.width - coveredRight,
             height: frame.height - coveredBottom,
-            display: 'unknown',
-            pose: 'flat',
           }
         : window,
     [coveredBottom, coveredRight, frame, open, window],
@@ -157,10 +151,7 @@ function PaneViewport({
   const paneHeight = pane?.frame.height ?? 0;
 
   const viewport = useMemo<DuoViewport>(
-    () =>
-      open && paneWidth > 0
-        ? { ...window, width: paneWidth, height: paneHeight, display: 'unknown', pose: 'flat' }
-        : window,
+    () => (open && paneWidth > 0 ? { ...window, width: paneWidth, height: paneHeight } : window),
     [open, paneHeight, paneWidth, window],
   );
 

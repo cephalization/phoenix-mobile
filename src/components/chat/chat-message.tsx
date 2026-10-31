@@ -1,16 +1,15 @@
 import { isToolUIPart } from 'ai';
 import * as Clipboard from 'expo-clipboard';
-import { SymbolView } from 'expo-symbols';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
 import { ActivityIndicator, Share, StyleSheet, Text, View } from 'react-native';
 
-import { MotionPressable } from '@/components/motion-pressable';
 import { MessageMarkdown } from '@/components/chat/message-markdown';
 import { isJsonBlockValue, JsonBlock } from '@/components/json-block';
+import { MotionPressable } from '@/components/motion-pressable';
 import { NativeContextMenu, type NativeContextMenuAction } from '@/components/native-context-menu';
-import { PxiGlyph } from '@/components/pxi-glyph';
-import { AppFonts, Fonts, useAppColors } from '@/constants/theme';
+import { AppFonts, Type, useAppColors } from '@/constants/theme';
 import type { PxiMessage } from '@/features/pxi/types';
 import { haptics } from '@/lib/haptics';
 import { isJsonObject, isJsonString, isJsonValue, type JsonValue } from '@/lib/json';
@@ -116,6 +115,26 @@ function getToolLabel(toolName: string, complete: boolean): string {
   return label ? label[complete ? 1 : 0] : titleCase(toolName);
 }
 
+type SymbolName = SymbolViewProps['name'];
+
+const Symbols = {
+  check: { ios: 'checkmark', android: 'check', web: 'check' },
+  failed: { ios: 'exclamationmark.triangle.fill', android: 'warning', web: 'warning' },
+  denied: { ios: 'minus.circle', android: 'block', web: 'block' },
+  approval: { ios: 'questionmark.circle', android: 'help', web: 'help' },
+  expand: { ios: 'chevron.down', android: 'keyboard_arrow_down', web: 'keyboard_arrow_down' },
+  collapsed: { ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' },
+  copy: { ios: 'doc.on.doc', android: 'content_copy', web: 'content_copy' },
+  trace: { ios: 'arrow.up.right', android: 'north_east', web: 'north_east' },
+  link: { ios: 'link', android: 'link', web: 'link' },
+  file: { ios: 'doc', android: 'description', web: 'description' },
+  update: { ios: 'arrow.triangle.2.circlepath', android: 'sync', web: 'sync' },
+} satisfies Record<string, SymbolName>;
+
+/**
+ * A tool call as one quiet line: status, what PXI did, and the call's gist in
+ * monospace. Tapping it unfolds the input and result.
+ */
 function ToolPart({
   onInteraction,
   part,
@@ -165,115 +184,103 @@ function ToolPart({
   const hasDetails =
     detailInput !== undefined || (complete && detailOutput !== undefined) || error !== undefined;
 
+  const label = getToolLabel(toolName, complete);
+
   const stateLabel = failed
     ? 'Failed'
     : denied
       ? 'Denied'
       : approval
-        ? 'Approval needed'
+        ? 'Needs approval'
         : complete
           ? ''
           : 'Running';
 
-  const details =
-    expanded && hasDetails ? (
-      <View style={[styles.toolDetails, { backgroundColor: colors.backgroundElement }]}>
-        {detailInput !== undefined ? (
-          <ToolDetail
-            label={command ? 'Command' : 'Input'}
-            onInteraction={onInteraction}
-            value={detailInput}
-          />
-        ) : null}
-        {complete && detailOutput !== undefined ? (
-          <ToolDetail
-            label={stdout !== undefined ? 'Output' : 'Result'}
-            onInteraction={onInteraction}
-            value={detailOutput}
-            separated={detailInput !== undefined}
-          />
-        ) : null}
-        {error !== undefined ? (
-          <ToolDetail
-            danger
-            label="Error"
-            onInteraction={onInteraction}
-            value={error}
-            separated={detailInput !== undefined || detailOutput !== undefined}
-          />
-        ) : null}
-      </View>
-    ) : null;
-
   return (
-    <View style={styles.tool}>
+    <View>
       <MotionPressable
-        accessibilityHint={hasDetails ? 'Shows tool input and result' : undefined}
+        accessibilityHint={hasDetails ? 'Shows the tool’s input and result' : undefined}
+        accessibilityLabel={[label, preview, stateLabel].filter(Boolean).join(', ')}
         accessibilityRole="button"
         accessibilityState={{ disabled: !hasDetails, expanded }}
         disabled={!hasDetails}
+        hitSlop={{ bottom: 6, top: 6 }}
         onPress={() => {
           onInteraction?.();
           setExpanded((value) => !value);
         }}
-        scaleTo={0.995}
-        style={styles.toolHeading}
+        scaleTo={0.99}
+        style={styles.toolRow}
       >
-        <View style={styles.toolStateSlot}>
+        <View style={styles.toolSymbol}>
           {complete ? (
-            <Text style={[styles.toolStateGlyph, { color: colors.success }]}>✓</Text>
+            <SymbolView
+              name={Symbols.check}
+              size={11}
+              tintColor={colors.textTertiary}
+              weight="bold"
+            />
           ) : failed ? (
-            <Text style={[styles.toolStateGlyph, { color: colors.danger }]}>×</Text>
+            <SymbolView name={Symbols.failed} size={12} tintColor={colors.danger} />
           ) : denied ? (
-            <Text style={[styles.toolStateGlyph, { color: colors.textSecondary }]}>−</Text>
+            <SymbolView name={Symbols.denied} size={12} tintColor={colors.textTertiary} />
           ) : approval ? (
-            <Text style={[styles.toolStateGlyph, { color: colors.brand }]}>?</Text>
+            <SymbolView name={Symbols.approval} size={12} tintColor={colors.text} />
           ) : (
-            <ActivityIndicator color={colors.brand} size="small" style={styles.toolSpinner} />
+            <ActivityIndicator
+              color={colors.textTertiary}
+              size="small"
+              style={styles.toolSpinner}
+            />
           )}
         </View>
-        <View style={styles.toolCopy}>
-          <View style={styles.toolTitleRow}>
-            <Text numberOfLines={1} style={[styles.toolName, { color: colors.text }]}>
-              {getToolLabel(toolName, complete)}
-            </Text>
-            {stateLabel ? (
-              <Text
-                style={[
-                  styles.toolStatus,
-                  { color: failed ? colors.danger : colors.textSecondary },
-                ]}
-              >
-                {stateLabel}
-              </Text>
-            ) : null}
-          </View>
-          {preview ? (
-            <Text numberOfLines={1} style={[styles.toolPreview, { color: colors.textSecondary }]}>
-              {preview}
-            </Text>
-          ) : null}
-        </View>
+        <Text
+          numberOfLines={1}
+          style={[Type.subhead, styles.toolLabel, { color: colors.textSecondary }]}
+        >
+          {label}
+        </Text>
+        <Text
+          numberOfLines={1}
+          style={[Type.mono, styles.toolPreview, { color: colors.textTertiary }]}
+        >
+          {preview}
+        </Text>
+        {stateLabel ? (
+          <Text style={[Type.label, { color: failed ? colors.danger : colors.textTertiary }]}>
+            {stateLabel}
+          </Text>
+        ) : null}
         {hasDetails ? (
-          <View style={styles.disclosure}>
-            <SymbolView
-              name={
-                expanded
-                  ? {
-                      ios: 'chevron.down',
-                      android: 'keyboard_arrow_down',
-                      web: 'keyboard_arrow_down',
-                    }
-                  : { ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }
-              }
-              size={14}
-              tintColor={colors.textSecondary}
-              weight="semibold"
-            />
-          </View>
+          <SymbolView
+            name={expanded ? Symbols.expand : Symbols.collapsed}
+            size={10}
+            tintColor={colors.textTertiary}
+            weight="semibold"
+          />
         ) : null}
       </MotionPressable>
-      {details}
+      {expanded && hasDetails ? (
+        <View style={styles.toolDetails}>
+          {detailInput !== undefined ? (
+            <ToolDetail
+              label={command ? 'Command' : 'Input'}
+              onInteraction={onInteraction}
+              value={detailInput}
+            />
+          ) : null}
+          {complete && detailOutput !== undefined ? (
+            <ToolDetail
+              label={stdout !== undefined ? 'Output' : 'Result'}
+              onInteraction={onInteraction}
+              value={detailOutput}
+            />
+          ) : null}
+          {error !== undefined ? (
+            <ToolDetail danger label="Error" onInteraction={onInteraction} value={error} />
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -282,52 +289,55 @@ function ToolDetail({
   danger = false,
   label,
   onInteraction,
-  separated = false,
   value,
 }: {
   danger?: boolean;
   label: string;
   onInteraction?: () => void;
-  separated?: boolean;
   value: JsonValue;
 }) {
   const colors = useAppColors();
 
   return (
-    <View
-      style={[
-        styles.toolDetailSection,
-        separated && { borderTopColor: colors.border, borderTopWidth: 1 },
-      ]}
-    >
+    <View style={styles.toolDetail}>
       <View style={styles.toolDetailHeading}>
-        <Text
-          style={[styles.toolDetailLabel, { color: danger ? colors.danger : colors.textSecondary }]}
-        >
+        <Text style={[Type.label, { color: danger ? colors.danger : colors.textSecondary }]}>
           {label}
         </Text>
         <MotionPressable
           accessibilityLabel={`Copy ${label.toLowerCase()}`}
           accessibilityRole="button"
           haptic="selection"
+          hitSlop={10}
           onPress={() => {
             onInteraction?.();
             void Clipboard.setStringAsync(serialize(value)).then(haptics.success);
           }}
-          style={styles.toolDetailCopyButton}
+          style={styles.inlineAction}
         >
-          <Text style={[styles.toolDetailCopyLabel, { color: colors.textSecondary }]}>Copy</Text>
+          <Text style={[Type.label, { color: colors.textSecondary }]}>Copy</Text>
         </MotionPressable>
       </View>
       {isJsonBlockValue(value) ? (
         <JsonBlock onInteraction={onInteraction} value={value} />
       ) : (
-        <Text
-          selectable
-          style={[styles.toolDetailText, { color: danger ? colors.danger : colors.textSecondary }]}
+        <View
+          style={[
+            styles.toolText,
+            { backgroundColor: colors.backgroundElement, borderColor: colors.border },
+          ]}
         >
-          {serialize(value)}
-        </Text>
+          <Text
+            selectable
+            style={[
+              Type.mono,
+              styles.toolTextLine,
+              { color: danger ? colors.danger : colors.textSecondary },
+            ]}
+          >
+            {serialize(value)}
+          </Text>
+        </View>
       )}
     </View>
   );
@@ -360,8 +370,8 @@ export function ChatMessage({
         onAction={(id) => handleTextMenuAction(id, text, onInteraction)}
       >
         <View style={styles.userRow}>
-          <View style={[styles.userBubble, { backgroundColor: colors.accent }]}>
-            <Text selectable style={[styles.userText, { color: colors.accentForeground }]}>
+          <View style={[styles.userBubble, { backgroundColor: colors.bubble }]}>
+            <Text selectable style={[styles.userText, { color: colors.text }]}>
               {text}
             </Text>
           </View>
@@ -370,14 +380,17 @@ export function ChatMessage({
     );
   }
 
+  const replyText = textParts
+    .map((part) => part.text.trim())
+    .filter(Boolean)
+    .join('\n\n');
+
+  const showFooter = !pending && (replyText.length > 0 || traceId !== undefined);
+
   return (
-    <View style={styles.assistantRow}>
-      <View style={styles.assistantLabel}>
-        <PxiGlyph color={colors.brand} size={15} />
-        <Text style={[styles.assistantName, { color: colors.textSecondary }]}>PXI</Text>
-      </View>
+    <View style={styles.assistant}>
       {hasVisibleContent ? null : (
-        <Text style={[styles.thinking, { color: colors.textSecondary }]}>
+        <Text style={[Type.subhead, { color: colors.textSecondary }]}>
           {pending ? 'Thinking…' : 'No response was recorded for this turn.'}
         </Text>
       )}
@@ -394,21 +407,66 @@ export function ChatMessage({
           part={part}
         />
       ))}
-      {traceId && (
-        <MotionPressable
-          accessibilityRole="link"
-          onPress={() => {
-            onInteraction?.();
-            void WebBrowser.openBrowserAsync(
-              `${instanceBaseUrl.replace(/\/+$/, '')}/redirects/traces/${encodeURIComponent(traceId)}`,
-            );
-          }}
-          style={styles.traceLink}
-        >
-          <Text style={[styles.traceText, { color: colors.brand }]}>View trace</Text>
-        </MotionPressable>
-      )}
+      {showFooter ? (
+        <View style={styles.footer}>
+          {replyText.length > 0 ? (
+            <FooterAction
+              accessibilityLabel="Copy response"
+              label="Copy"
+              onPress={() => {
+                onInteraction?.();
+                void Clipboard.setStringAsync(replyText).then(haptics.success);
+              }}
+              symbol={Symbols.copy}
+            />
+          ) : null}
+          {traceId !== undefined ? (
+            <FooterAction
+              accessibilityLabel="View this turn’s trace in Phoenix"
+              label="Trace"
+              onPress={() => {
+                onInteraction?.();
+                void WebBrowser.openBrowserAsync(
+                  `${instanceBaseUrl.replace(/\/+$/, '')}/redirects/traces/${encodeURIComponent(traceId)}`,
+                );
+              }}
+              role="link"
+              symbol={Symbols.trace}
+            />
+          ) : null}
+        </View>
+      ) : null}
     </View>
+  );
+}
+
+function FooterAction({
+  accessibilityLabel,
+  label,
+  onPress,
+  role = 'button',
+  symbol,
+}: {
+  accessibilityLabel: string;
+  label: string;
+  onPress: () => void;
+  role?: 'button' | 'link';
+  symbol: SymbolName;
+}) {
+  const colors = useAppColors();
+
+  return (
+    <MotionPressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole={role}
+      haptic="selection"
+      hitSlop={10}
+      onPress={onPress}
+      style={styles.footerAction}
+    >
+      <SymbolView name={symbol} size={12} tintColor={colors.textTertiary} weight="medium" />
+      <Text style={[Type.label, { color: colors.textTertiary }]}>{label}</Text>
+    </MotionPressable>
   );
 }
 
@@ -418,6 +476,55 @@ function hasVisibleOutput(part: PxiMessage['parts'][number]): boolean {
   if (part.type === 'text' || part.type === 'reasoning') return part.text.trim().length > 0;
 
   return part.type !== 'step-start';
+}
+
+/** Sources, files, and data updates: one line with a symbol, a title, and a mono detail. */
+function AttachmentRow({
+  detail,
+  onPress,
+  symbol,
+  title,
+}: {
+  detail?: string;
+  onPress?: () => void;
+  symbol: SymbolName;
+  title: string;
+}) {
+  const colors = useAppColors();
+
+  const content = (
+    <>
+      <View style={styles.toolSymbol}>
+        <SymbolView name={symbol} size={12} tintColor={colors.textTertiary} />
+      </View>
+      <Text numberOfLines={1} style={[Type.subhead, styles.toolLabel, { color: colors.text }]}>
+        {title}
+      </Text>
+      {detail ? (
+        <Text
+          numberOfLines={1}
+          style={[Type.mono, styles.toolPreview, { color: colors.textTertiary }]}
+        >
+          {detail}
+        </Text>
+      ) : null}
+    </>
+  );
+
+  if (!onPress) return <View style={styles.toolRow}>{content}</View>;
+
+  return (
+    <MotionPressable
+      accessibilityLabel={title}
+      accessibilityRole="link"
+      hitSlop={{ bottom: 6, top: 6 }}
+      onPress={onPress}
+      scaleTo={0.99}
+      style={styles.toolRow}
+    >
+      {content}
+    </MotionPressable>
+  );
 }
 
 function AssistantPart({
@@ -450,145 +557,90 @@ function AssistantPart({
 
   if (part.type === 'reasoning') {
     return part.state === 'streaming' ? (
-      <Text style={[styles.thinking, { color: colors.textSecondary }]}>Thinking…</Text>
+      <Text style={[Type.subhead, { color: colors.textSecondary }]}>Thinking…</Text>
     ) : null;
   }
 
   if (part.type === 'source-url') {
     return (
-      <MotionPressable
-        accessibilityRole="link"
+      <AttachmentRow
+        detail={hostOf(part.url)}
         onPress={() => {
           onInteraction?.();
           void WebBrowser.openBrowserAsync(part.url);
         }}
-        style={[styles.source, { backgroundColor: colors.backgroundSelected }]}
-      >
-        <Text numberOfLines={1} style={[styles.sourceText, { color: colors.text }]}>
-          {part.title ?? part.url}
-        </Text>
-      </MotionPressable>
+        symbol={Symbols.link}
+        title={part.title ?? part.url}
+      />
     );
   }
 
   if (part.type === 'file') {
     return (
-      <MotionPressable
-        accessibilityRole="link"
+      <AttachmentRow
+        detail={part.mediaType}
         onPress={() => {
           onInteraction?.();
           void WebBrowser.openBrowserAsync(part.url);
         }}
-        style={[
-          styles.attachment,
-          { backgroundColor: colors.backgroundElement, borderColor: colors.border },
-        ]}
-      >
-        <Text numberOfLines={1} style={[styles.attachmentTitle, { color: colors.text }]}>
-          {part.filename ?? 'PXI file'}
-        </Text>
-        <Text style={[styles.attachmentType, { color: colors.textSecondary }]}>
-          {part.mediaType}
-        </Text>
-      </MotionPressable>
+        symbol={Symbols.file}
+        title={part.filename ?? 'PXI file'}
+      />
     );
   }
 
   if (part.type === 'source-document') {
     return (
-      <View
-        style={[
-          styles.attachment,
-          { backgroundColor: colors.backgroundElement, borderColor: colors.border },
-        ]}
-      >
-        <Text numberOfLines={1} style={[styles.attachmentTitle, { color: colors.text }]}>
-          {part.title}
-        </Text>
-        <Text style={[styles.attachmentType, { color: colors.textSecondary }]}>
-          {part.filename ?? part.mediaType}
-        </Text>
-      </View>
+      <AttachmentRow
+        detail={part.filename ?? part.mediaType}
+        symbol={Symbols.file}
+        title={part.title}
+      />
     );
   }
 
   if (part.type.startsWith('data-')) {
     return (
-      <View
-        style={[
-          styles.attachment,
-          { backgroundColor: colors.backgroundElement, borderColor: colors.border },
-        ]}
-      >
-        <Text style={[styles.attachmentTitle, { color: colors.text }]}>PXI update</Text>
-        <Text style={[styles.attachmentType, { color: colors.textSecondary }]}>
-          {titleCase(part.type.replace(/^data-/, ''))}
-        </Text>
-      </View>
+      <AttachmentRow
+        detail={titleCase(part.type.replace(/^data-/, ''))}
+        symbol={Symbols.update}
+        title="PXI update"
+      />
     );
   }
 
   return null;
 }
 
+function hostOf(url: string): string | undefined {
+  try {
+    return new URL(url).host;
+  } catch {
+    return undefined;
+  }
+}
+
 const styles = StyleSheet.create({
-  userRow: { alignItems: 'flex-end', paddingLeft: 42 },
-  userBubble: {
-    borderRadius: 19,
-    borderBottomRightRadius: 6,
-    maxWidth: '88%',
-    paddingHorizontal: 15,
-    paddingVertical: 11,
-  },
-  userText: { fontFamily: AppFonts.regular, fontSize: 16, lineHeight: 23 },
-  assistantRow: { gap: 11, paddingRight: 8 },
-  assistantLabel: { alignItems: 'center', flexDirection: 'row', gap: 7 },
-  assistantName: { fontFamily: AppFonts.semibold, fontSize: 12, letterSpacing: 0.5 },
-  thinking: { fontFamily: AppFonts.regular, fontSize: 12, fontStyle: 'italic' },
-  tool: { marginVertical: -2 },
-  toolHeading: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 9,
-    minHeight: 48,
-    paddingVertical: 7,
-  },
-  toolStateSlot: { alignItems: 'center', height: 28, justifyContent: 'center', width: 18 },
-  toolStateGlyph: { fontFamily: AppFonts.semibold, fontSize: 16, lineHeight: 22 },
-  toolSpinner: { transform: [{ translateX: -1.5 }] },
-  toolCopy: { flex: 1, gap: 2, minWidth: 0 },
-  toolTitleRow: { alignItems: 'center', flexDirection: 'row', gap: 8, minHeight: 22 },
-  toolName: { flexShrink: 1, fontFamily: AppFonts.medium, fontSize: 14 },
-  toolStatus: { fontFamily: AppFonts.regular, fontSize: 11 },
-  toolPreview: { fontFamily: AppFonts.regular, fontSize: 13, lineHeight: 18 },
-  disclosure: { alignItems: 'center', height: 28, justifyContent: 'center', width: 24 },
-  toolDetails: { borderRadius: 11, marginBottom: 8, marginLeft: 27, overflow: 'hidden' },
-  toolDetailSection: { gap: 5, paddingHorizontal: 12, paddingVertical: 10 },
+  userRow: { alignItems: 'flex-end', paddingLeft: 48 },
+  userBubble: { borderRadius: 20, paddingHorizontal: 15, paddingVertical: 10 },
+  userText: { fontFamily: AppFonts.regular, fontSize: 16, lineHeight: 22 },
+  assistant: { gap: 6 },
+  toolRow: { alignItems: 'center', flexDirection: 'row', gap: 8, minHeight: 34 },
+  toolSymbol: { alignItems: 'center', justifyContent: 'center', width: 16 },
+  toolSpinner: { transform: [{ scale: 0.7 }] },
+  toolLabel: { flexShrink: 0, maxWidth: '62%' },
+  toolPreview: { flex: 1, minWidth: 0 },
+  toolDetails: { gap: 10, paddingBottom: 8, paddingLeft: 24, paddingTop: 2 },
+  toolDetail: { gap: 6 },
   toolDetailHeading: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    minHeight: 48,
+    minHeight: 24,
   },
-  toolDetailLabel: {
-    fontFamily: AppFonts.semibold,
-    fontSize: 10,
-    letterSpacing: 0.7,
-    textTransform: 'uppercase',
-  },
-  toolDetailCopyButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 48,
-    minWidth: 48,
-  },
-  toolDetailCopyLabel: { fontFamily: AppFonts.medium, fontSize: 11 },
-  toolDetailText: { fontFamily: Fonts.mono, fontSize: 12, lineHeight: 18 },
-  source: { borderRadius: 12, maxWidth: '100%', paddingHorizontal: 10, paddingVertical: 7 },
-  sourceText: { fontFamily: AppFonts.medium, fontSize: 12, maxWidth: 260 },
-  attachment: { borderRadius: 14, borderWidth: 1, gap: 3, padding: 12 },
-  attachmentTitle: { fontFamily: AppFonts.medium, fontSize: 13 },
-  attachmentType: { fontFamily: AppFonts.regular, fontSize: 11 },
-  traceLink: { alignSelf: 'flex-start', minHeight: 40, justifyContent: 'center' },
-  traceText: { fontFamily: AppFonts.medium, fontSize: 13 },
+  inlineAction: { justifyContent: 'center', minHeight: 24, paddingLeft: 12 },
+  toolText: { borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, padding: 10 },
+  toolTextLine: { lineHeight: 18 },
+  footer: { flexDirection: 'row', gap: 18, marginTop: -2 },
+  footerAction: { alignItems: 'center', flexDirection: 'row', gap: 5, minHeight: 28 },
 });

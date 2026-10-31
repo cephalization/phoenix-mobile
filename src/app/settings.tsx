@@ -1,19 +1,22 @@
 import { useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
+import { router, Stack } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { MotionPressable } from '@/components/motion-pressable';
-import { PhoenixLogo } from '@/components/phoenix-logo';
-import { AppFonts, MaxContentWidth, useAppColors } from '@/constants/theme';
+import { barButton } from '@/components/duo/column-header';
+import { ListRow, RowInset } from '@/components/ui/list-row';
+import { SectionHeader } from '@/components/ui/section-header';
+import { SegmentedControl } from '@/components/ui/segmented-control';
+import { Type, useAppColors } from '@/constants/theme';
 import { phoenixQueryKeys } from '@/hooks/use-phoenix-data';
 import { haptics } from '@/lib/haptics';
 import { confirmAction } from '@/lib/confirm';
 import { useInstanceStore } from '@/store/instances';
-import { useDuoPreviewStore } from '@/features/duo/preview-store';
 import { type Appearance, useSettingsStore } from '@/store/settings';
+import { useContentColumnStyle } from '@/features/duo/layout';
 
-const appearanceOptions: { label: string; value: Appearance }[] = [
+const appearanceOptions: readonly { label: string; value: Appearance }[] = [
   { label: 'System', value: 'system' },
   { label: 'Light', value: 'light' },
   { label: 'Dark', value: 'dark' },
@@ -22,13 +25,13 @@ const appearanceOptions: { label: string; value: Appearance }[] = [
 export default function SettingsScreen() {
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
+  // Pads clear of iPhone Duo's vertical bar, which runs down a sheet's trailing edge.
+  const column = useContentColumnStyle(0);
   const queryClient = useQueryClient();
   const appearance = useSettingsStore((state) => state.appearance);
   const setAppearance = useSettingsStore((state) => state.setAppearance);
   const instances = useInstanceStore((state) => state.instances);
   const clearInstances = useInstanceStore((state) => state.clearInstances);
-  const duoPreview = useDuoPreviewStore((state) => state.enabled);
-  const setDuoPreview = useDuoPreviewStore((state) => state.setEnabled);
 
   const clearConnections = () => {
     confirmAction({
@@ -48,104 +51,57 @@ export default function SettingsScreen() {
     });
   };
 
+  const saved =
+    instances.length === 1
+      ? '1 instance on this device'
+      : `${instances.length} instances on this device`;
+
   return (
     <ScrollView
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[styles.content, column, { paddingBottom: 24 + insets.bottom }]}
       contentInsetAdjustmentBehavior="automatic"
       style={[styles.screen, { backgroundColor: colors.background }]}
     >
-      <View style={[styles.content, { paddingBottom: 20 + insets.bottom }]}>
-        <View style={styles.section}>
-          <View style={styles.sectionHeading}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Appearance</Text>
-            <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
-              Choose how Phoenix Mobile looks.
-            </Text>
-          </View>
-          <View style={[styles.segmentedControl, { backgroundColor: colors.backgroundSelected }]}>
-            {appearanceOptions.map((option) => {
-              const isSelected = appearance === option.value;
+      {/* The sheet's own way out besides the swipe: at the top of iPhone Duo's
+          vertical bar on the closed display, top trailing elsewhere. */}
+      <Stack.Screen
+        options={{
+          unstable_headerRightItems: () => [
+            barButton({
+              type: 'button',
+              label: 'Done',
+              icon: { type: 'sfSymbol', name: 'checkmark' },
+              onPress: () => router.back(),
+              variant: 'done',
+              visibilityPriority: 'high',
+            }),
+          ],
+        }}
+      />
+      <SectionHeader label="Appearance" />
+      <View style={styles.control}>
+        <SegmentedControl onChange={setAppearance} options={appearanceOptions} value={appearance} />
+      </View>
 
-              return (
-                <MotionPressable
-                  accessibilityRole="button"
-                  haptic="selection"
-                  key={option.value}
-                  onPress={() => setAppearance(option.value)}
-                  scaleTo={0.97}
-                  style={[
-                    styles.appearanceOption,
-                    isSelected && { backgroundColor: colors.accent },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.appearanceLabel,
-                      { color: isSelected ? colors.accentForeground : colors.textSecondary },
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                </MotionPressable>
-              );
-            })}
-          </View>
-        </View>
+      <SectionHeader label="Connections" />
+      <ListRow
+        accessibilityHint="Removes every saved connection from this device"
+        dimmed={instances.length === 0}
+        onPress={instances.length > 0 ? clearConnections : undefined}
+        subtitle={saved}
+        title="Remove all connections"
+        titleTone="danger"
+        variant="flat"
+      />
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeading}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Connections</Text>
-            <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
-              {instances.length === 1
-                ? '1 instance saved on this device.'
-                : `${instances.length} instances saved on this device.`}
-            </Text>
-          </View>
-          <MotionPressable
-            accessibilityRole="button"
-            disabled={instances.length === 0}
-            haptic="warning"
-            onPress={clearConnections}
-            style={[
-              styles.clearButton,
-              { borderColor: colors.border, opacity: instances.length === 0 ? 0.45 : 1 },
-            ]}
-          >
-            <Text style={[styles.clearButtonText, { color: colors.danger }]}>
-              Remove all connections
-            </Text>
-          </MotionPressable>
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeading}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>iPhone Duo preview</Text>
-            <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
-              Frame the app at iPhone Duo sizes with fold and hinge controls. Useful on an iPad or
-              iPhone simulator until the Duo simulator is available.
-            </Text>
-          </View>
-          <MotionPressable
-            accessibilityRole="button"
-            haptic="selection"
-            onPress={() => setDuoPreview(!duoPreview)}
-            style={[styles.clearButton, { borderColor: colors.border }]}
-          >
-            <Text style={[styles.clearButtonText, { color: colors.brandText }]}>
-              {duoPreview ? 'Turn off Duo preview' : 'Turn on Duo preview'}
-            </Text>
-          </MotionPressable>
-        </View>
-
-        <View style={[styles.about, { borderColor: colors.border }]}>
-          <PhoenixLogo size={40} />
-          <View style={styles.aboutCopy}>
-            <Text style={[styles.aboutTitle, { color: colors.text }]}>Phoenix Mobile</Text>
-            <Text style={[styles.aboutVersion, { color: colors.textSecondary }]}>
-              Version {Constants.expoConfig?.version ?? '1.0.0'}
-            </Text>
-          </View>
-        </View>
+      <SectionHeader label="About" />
+      <View accessible style={styles.aboutRow}>
+        <Text style={[Type.headline, styles.aboutTitle, { color: colors.text }]}>
+          Phoenix Mobile
+        </Text>
+        <Text style={[Type.mono, { color: colors.textSecondary }]}>
+          {Constants.expoConfig?.version ?? '1.0.0'}
+        </Text>
       </View>
     </ScrollView>
   );
@@ -153,31 +109,14 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  scrollContent: { flexGrow: 1 },
-  content: { alignSelf: 'center', gap: 30, maxWidth: MaxContentWidth, padding: 20, width: '100%' },
-  section: { gap: 14 },
-  sectionHeading: { gap: 5 },
-  sectionTitle: { fontFamily: AppFonts.semibold, fontSize: 18 },
-  sectionDescription: { fontFamily: AppFonts.regular, fontSize: 14, lineHeight: 20 },
-  segmentedControl: { borderRadius: 16, flexDirection: 'row', gap: 4, padding: 4 },
-  appearanceOption: {
+  content: { alignSelf: 'center', width: '100%' },
+  control: { paddingHorizontal: RowInset, paddingVertical: 8 },
+  aboutRow: {
     alignItems: 'center',
-    borderRadius: 12,
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 44,
+    flexDirection: 'row',
+    gap: 10,
+    minHeight: 56,
+    paddingHorizontal: RowInset,
   },
-  appearanceLabel: { fontFamily: AppFonts.medium, fontSize: 14 },
-  clearButton: {
-    alignItems: 'center',
-    borderRadius: 14,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 48,
-  },
-  clearButtonText: { fontFamily: AppFonts.medium, fontSize: 14 },
-  about: { alignItems: 'center', borderTopWidth: 1, flexDirection: 'row', gap: 12, paddingTop: 20 },
-  aboutCopy: { gap: 2 },
-  aboutTitle: { fontFamily: AppFonts.semibold, fontSize: 15 },
-  aboutVersion: { fontFamily: AppFonts.regular, fontSize: 13 },
+  aboutTitle: { flex: 1 },
 });

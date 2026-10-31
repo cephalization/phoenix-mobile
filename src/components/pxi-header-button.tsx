@@ -7,6 +7,7 @@ import type { PxiActionRouteParams } from '@/features/pxi/actions';
 import { usePxiPaneStore } from '@/features/pxi/pane-store';
 import type { PhoenixInstance } from '@/types/instance';
 
+import { barButton } from './duo/column-header';
 import { MotionPressable } from './motion-pressable';
 import { PxiGlyph } from './pxi-glyph';
 
@@ -74,14 +75,16 @@ export function usePxiHeaderOptions(
   if (Platform.OS === 'ios') {
     return {
       unstable_headerRightItems: () => [
-        {
+        barButton({
           type: 'button',
           accessibilityLabel,
           icon: { type: 'image', source: pxiGlyphTemplate },
           label,
           onPress,
           selected: paneOpen,
-        },
+          visibilityPriority: 'high',
+          xcasset: 'PxiGlyph',
+        }),
       ],
     };
   }

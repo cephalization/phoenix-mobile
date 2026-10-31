@@ -1,10 +1,10 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PxiChat } from '@/components/chat/pxi-chat';
-import { MotionPressable } from '@/components/motion-pressable';
-import { AppFonts, Spacing, useAppColors } from '@/constants/theme';
+import { EmptyState } from '@/components/ui/empty-state';
+import { useAppColors } from '@/constants/theme';
 import { useInstanceStore } from '@/store/instances';
 
 export default function PxiChatScreen() {
@@ -17,25 +17,25 @@ export default function PxiChatScreen() {
 
   if (!instance) {
     return (
-      <SafeAreaView style={[styles.center, { backgroundColor: colors.background }]}>
-        <Text style={[styles.stateTitle, { color: colors.text }]}>Instance not found</Text>
-        <MotionPressable onPress={() => router.replace('/')}>
-          <Text style={[styles.link, { color: colors.brand }]}>Return home</Text>
-        </MotionPressable>
+      <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
+        <EmptyState
+          action={{ label: 'Return home', onPress: () => router.replace('/') }}
+          message="This Phoenix connection is no longer on this device."
+          symbol={{ ios: 'questionmark.circle', android: 'help', web: 'help' }}
+          title="Instance not found"
+        />
       </SafeAreaView>
     );
   }
 
   const closeChat = () => {
     if (router.canGoBack()) router.back();
-    else router.replace({ pathname: '/instances/[id]', params: { id: instance.id } });
+    else router.replace('/');
   };
 
   return <PxiChat instance={instance} onClose={closeChat} presentation="screen" />;
 }
 
 const styles = StyleSheet.create({
-  center: { alignItems: 'center', flex: 1, gap: Spacing.two, justifyContent: 'center' },
-  stateTitle: { fontFamily: AppFonts.semibold, fontSize: 20, textAlign: 'center' },
-  link: { fontFamily: AppFonts.medium, fontSize: 14 },
+  screen: { flex: 1 },
 });

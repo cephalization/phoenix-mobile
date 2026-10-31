@@ -1,36 +1,14 @@
 import { SymbolView } from 'expo-symbols';
-import {
-  ActivityIndicator,
-  FlatList,
-  StyleSheet,
-  Text,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import { FlatList, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChatBottomSheet } from '@/components/chat/chat-bottom-sheet';
 import { MotionPressable } from '@/components/motion-pressable';
-import { PxiGlyph } from '@/components/pxi-glyph';
-import { AppFonts, useAppColors } from '@/constants/theme';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ListRow, RowInset, RowSeparator } from '@/components/ui/list-row';
+import { Type, useAppColors } from '@/constants/theme';
 import type { PxiServerSessionSummary } from '@/features/pxi/sessions';
-
-const SUBTITLE = 'Stored on this Phoenix instance';
-
-function formatSessionDate(value: string): string {
-  const date = new Date(value);
-  const today = new Date();
-  const isToday = date.toDateString() === today.toDateString();
-
-  return isToday
-    ? date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-    : date.toLocaleDateString([], {
-        day: 'numeric',
-        month: 'short',
-        year: date.getFullYear() === today.getFullYear() ? undefined : 'numeric',
-      });
-}
+import { formatRelativeTime } from '@/lib/format';
 
 function sessionTitle(session: PxiServerSessionSummary): string {
   return session.title.trim() || 'Untitled chat';
@@ -50,18 +28,13 @@ export function SessionHistory({
   sessions: PxiServerSessionSummary[];
   visible: boolean;
 }) {
-  const colors = useAppColors();
-
   return (
-    <ChatBottomSheet onClose={onClose} subtitle={SUBTITLE} title="Chat history" visible={visible}>
+    <ChatBottomSheet flush onClose={onClose} title="History" visible={visible}>
       <SessionHistoryList
         activeSessionId={activeSessionId}
         onSelect={onSelect}
         sessions={sessions}
-        style={[
-          styles.card,
-          { backgroundColor: colors.backgroundElement, borderColor: colors.border },
-        ]}
+        variant="flat"
       />
     </ChatBottomSheet>
   );
@@ -94,22 +67,21 @@ export function SessionHistoryRail({
       style={[
         styles.rail,
         {
-          backgroundColor: colors.backgroundElement,
-          borderColor: colors.border,
+          backgroundColor: colors.sidebar,
+          borderLeftColor: colors.separator,
           paddingBottom: insets.bottom,
           paddingRight: insets.right,
         },
       ]}
     >
       <View style={styles.railHeader}>
-        <View style={styles.railHeadingGroup}>
-          <Text numberOfLines={1} style={[styles.railTitle, { color: colors.text }]}>
-            Chat history
-          </Text>
-          <Text numberOfLines={1} style={[styles.railSubtitle, { color: colors.textSecondary }]}>
-            {SUBTITLE}
-          </Text>
-        </View>
+        <Text
+          accessibilityRole="header"
+          numberOfLines={1}
+          style={[Type.label, styles.railTitle, { color: colors.textSecondary }]}
+        >
+          History
+        </Text>
         <MotionPressable
           accessibilityLabel="Start new chat"
           accessibilityRole="button"
@@ -119,7 +91,7 @@ export function SessionHistoryRail({
         >
           <SymbolView
             name={{ ios: 'square.and.pencil', android: 'edit_square', web: 'edit_square' }}
-            size={20}
+            size={18}
             tintColor={colors.text}
           />
         </MotionPressable>
@@ -130,18 +102,23 @@ export function SessionHistoryRail({
         onSelect={onSelect}
         sessions={sessions}
         style={styles.railList}
+        variant="sidebar"
       />
     </View>
   );
 }
 
-/** The history rows and their empty state, shared by the sheet and the rail. */
+/**
+ * The history rows and their empty state, shared by the sheet and the rail.
+ * `flat` rows mark the open chat with a checkmark; `sidebar` rows with a fill.
+ */
 export function SessionHistoryList({
   activeSessionId,
   loading = false,
   onSelect,
   sessions,
   style,
+  variant,
 }: {
   activeSessionId: string | null;
   /** Show a spinner instead of the empty state while the first page loads. */
@@ -149,166 +126,70 @@ export function SessionHistoryList({
   onSelect: (session: PxiServerSessionSummary) => void;
   sessions: PxiServerSessionSummary[];
   style?: StyleProp<ViewStyle>;
+  variant: 'flat' | 'sidebar';
 }) {
   const colors = useAppColors();
-  const separator = <View style={[styles.separator, { backgroundColor: colors.border }]} />;
 
   return (
     <FlatList
       contentContainerStyle={[styles.listContent, sessions.length === 0 && styles.emptyList]}
       data={sessions}
-      ItemSeparatorComponent={separator}
+      ItemSeparatorComponent={variant === 'flat' ? RowSeparator : undefined}
       keyExtractor={(session) => session.id}
-      ListEmptyComponent={loading ? <LoadingState /> : <EmptyState />}
-      renderItem={({ item }) => (
-        <SessionRow
-          active={item.id === activeSessionId}
-          onSelect={() => onSelect(item)}
-          session={item}
-        />
-      )}
+      ListEmptyComponent={
+        loading ? (
+          <EmptyState loading title="Loading chats" />
+        ) : (
+          <EmptyState
+            message="Chats appear here after you send a message. They’re stored on this Phoenix server."
+            symbol={{ ios: 'clock', android: 'history', web: 'history' }}
+            title="No chats yet"
+          />
+        )
+      }
+      renderItem={({ item }) => {
+        const active = item.id === activeSessionId;
+        const title = sessionTitle(item);
+        const time = formatRelativeTime(item.updatedAt);
+
+        return (
+          <ListRow
+            accessibilityLabel={`${title}, ${time}${active ? ', open' : ''}`}
+            meta={time}
+            onPress={() => onSelect(item)}
+            selected={variant === 'sidebar' && active}
+            title={title}
+            trailing={
+              variant === 'flat' && active ? (
+                <SymbolView
+                  name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                  size={15}
+                  tintColor={colors.text}
+                  weight="semibold"
+                />
+              ) : null
+            }
+            variant={variant}
+          />
+        );
+      }}
       style={style}
     />
   );
 }
 
-function LoadingState() {
-  const colors = useAppColors();
-
-  return (
-    <View
-      accessibilityLabel="Loading chats"
-      accessibilityRole="progressbar"
-      style={styles.emptyState}
-    >
-      <ActivityIndicator color={colors.brand} />
-    </View>
-  );
-}
-
-function EmptyState() {
-  const colors = useAppColors();
-
-  return (
-    <View style={styles.emptyState}>
-      <View style={[styles.emptyGlyph, { backgroundColor: colors.accentSoft }]}>
-        <PxiGlyph color={colors.brand} size={28} />
-      </View>
-      <Text style={[styles.emptyTitle, { color: colors.text }]}>No saved chats</Text>
-      <Text style={[styles.emptyCopy, { color: colors.textSecondary }]}>
-        Conversations appear here after you send your first message.
-      </Text>
-    </View>
-  );
-}
-
-function SessionRow({
-  active,
-  onSelect,
-  session,
-}: {
-  active: boolean;
-  onSelect: () => void;
-  session: PxiServerSessionSummary;
-}) {
-  const colors = useAppColors();
-
-  return (
-    <MotionPressable
-      accessibilityLabel={`${sessionTitle(session)}, ${formatSessionDate(session.updatedAt)}`}
-      accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      haptic="selection"
-      onPress={onSelect}
-      scaleTo={0.99}
-      style={[
-        styles.sessionButton,
-        { backgroundColor: active ? colors.backgroundSelected : colors.backgroundElement },
-      ]}
-    >
-      <View style={styles.sessionCopy}>
-        <Text numberOfLines={2} style={[styles.sessionTitle, { color: colors.text }]}>
-          {sessionTitle(session)}
-        </Text>
-        <Text style={[styles.sessionMeta, { color: colors.textSecondary }]}>
-          {formatSessionDate(session.updatedAt)}
-        </Text>
-      </View>
-      <View style={styles.accessorySlot}>
-        <SymbolView
-          name={
-            active
-              ? { ios: 'checkmark', android: 'check', web: 'check' }
-              : { ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }
-          }
-          size={active ? 17 : 15}
-          tintColor={active ? colors.brand : colors.textSecondary}
-          weight="semibold"
-        />
-      </View>
-    </MotionPressable>
-  );
-}
-
 const styles = StyleSheet.create({
-  card: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
   rail: { borderLeftWidth: StyleSheet.hairlineWidth, flex: 1 },
   railHeader: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 8,
-    minHeight: 64,
-    paddingLeft: 16,
-    paddingRight: 8,
-    paddingVertical: 8,
+    minHeight: 52,
+    paddingLeft: RowInset,
+    paddingRight: 4,
   },
-  railHeadingGroup: { flex: 1, gap: 3, minWidth: 0 },
-  railTitle: { fontFamily: AppFonts.semibold, fontSize: 17, letterSpacing: -0.2 },
-  railSubtitle: { fontFamily: AppFonts.regular, fontSize: 12, lineHeight: 16 },
+  railTitle: { flex: 1 },
   railNewButton: { alignItems: 'center', height: 48, justifyContent: 'center', width: 48 },
   railList: { flex: 1 },
-  listContent: { paddingBottom: 1 },
+  listContent: { paddingBottom: 12 },
   emptyList: { flexGrow: 1 },
-  emptyState: {
-    alignItems: 'center',
-    flex: 1,
-    gap: 9,
-    justifyContent: 'center',
-    minHeight: 250,
-    padding: 28,
-  },
-  emptyGlyph: {
-    alignItems: 'center',
-    borderRadius: 22,
-    height: 60,
-    justifyContent: 'center',
-    marginBottom: 4,
-    width: 60,
-  },
-  emptyTitle: { fontFamily: AppFonts.semibold, fontSize: 20, textAlign: 'center' },
-  emptyCopy: {
-    fontFamily: AppFonts.regular,
-    fontSize: 15,
-    lineHeight: 21,
-    maxWidth: 300,
-    textAlign: 'center',
-  },
-  separator: { height: StyleSheet.hairlineWidth, marginLeft: 14 },
-  sessionButton: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    minHeight: 72,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-  },
-  sessionCopy: { flex: 1, gap: 5, minWidth: 0 },
-  sessionTitle: { fontFamily: AppFonts.medium, fontSize: 15, lineHeight: 20 },
-  sessionMeta: { fontFamily: AppFonts.regular, fontSize: 12 },
-  accessorySlot: {
-    alignItems: 'center',
-    height: 28,
-    justifyContent: 'center',
-    marginLeft: 10,
-    width: 28,
-  },
 });

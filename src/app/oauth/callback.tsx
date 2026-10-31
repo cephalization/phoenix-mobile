@@ -52,7 +52,8 @@ export default function OAuthCallbackScreen() {
         for (const id of replacedIds)
           queryClient.removeQueries({ queryKey: phoenixQueryKeys.instance(id) });
         haptics.success();
-        router.replace({ pathname: '/instances/[id]', params: { id: instance.id } });
+        useInstanceStore.getState().setActiveInstanceId(instance.id);
+        router.replace('/');
       } catch (reason) {
         haptics.error();
         setError(

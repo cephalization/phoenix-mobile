@@ -51,16 +51,20 @@ Use `npm` for dependency and script commands because this repository commits `pa
 
 ```text
 src/app/                  Expo Router routes and route layouts
-src/app/index.tsx         Instance collection and primary navigation
+src/app/index.tsx         Projects of the active instance (the root) and its instance switcher
+src/app/instances/index.tsx Connections sheet: instances and the active one's server details
 src/app/instances/new.tsx Connection form sheet
-src/app/instances/[id].tsx Instance dashboard and project list
 src/app/settings.tsx      Settings form sheet
 src/components/           Reusable UI and interaction primitives
+src/components/ui/        Design-system primitives (see docs/design.md)
 src/constants/            Theme and motion tokens
 src/hooks/                TanStack Query hooks and query keys
 src/lib/                  Phoenix client, haptics, and infrastructure
 src/store/                Persisted local state
 src/types/                Domain models
+src/features/duo/         iPhone Duo layout model and split-column routing
+modules/duo-native/       Local Expo module: layout metrics and trailing sheets
+deps/                     Vendored react-native-screens fork (see docs/iphone-duo.md)
 assets/                   Bundled application assets
 tools/oxlint/anti-slop/   Vendored lint rules (see its UPSTREAM.md before editing)
 ```
@@ -90,6 +94,7 @@ Lint policy lives in `.oxlintrc.json` and the vendored `tools/oxlint/anti-slop` 
 ## UI Guidelines
 
 - Design is a primary product requirement. Inspect changes at phone dimensions in light and dark modes.
+- Follow `docs/design.md`: flat full-width lists built from `src/components/ui`, actions as native bar items, monospaced figures, and colour only for errors, OK states, and the Phoenix brand.
 - Prefer utility-first application layouts: direct titles, immediate content, thumb-reachable actions, and native sheets.
 - Reuse Phoenix tokens from `src/constants/theme.ts`. The semantic primary is monochrome; cyan and seafoam belong to Phoenix branding and supporting states.
 - Use Geist font families from `AppFonts`; do not mix arbitrary font weights with custom font files.

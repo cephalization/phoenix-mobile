@@ -1,18 +1,15 @@
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MotionPressable } from '@/components/motion-pressable';
-import { AppFonts, MaxContentWidth, useAppColors } from '@/constants/theme';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ListRow, RowInset } from '@/components/ui/list-row';
+import { SectionHeader } from '@/components/ui/section-header';
+import { SegmentedControl } from '@/components/ui/segmented-control';
+import { AppFonts, Fonts, Type, useAppColors } from '@/constants/theme';
 import type {
   AnnotationConfigOptimizationDirection,
   AnnotationConfigValueDraft,
@@ -21,6 +18,7 @@ import { usePhoenixViewer } from '@/hooks/use-phoenix-data';
 import { useCreatePhoenixAnnotationConfig } from '@/hooks/use-phoenix-sessions';
 import { haptics } from '@/lib/haptics';
 import { useInstanceStore } from '@/store/instances';
+import { useContentColumnStyle } from '@/features/duo/layout';
 
 type ConfigType = 'CATEGORICAL' | 'CONTINUOUS' | 'FREEFORM';
 
@@ -34,13 +32,13 @@ function createValueRow(): ValueRow {
   return { id: valueRowSequence, label: '', score: '' };
 }
 
-const CONFIG_TYPES: { detail: string; label: string; type: ConfigType }[] = [
-  { detail: 'Pick one label per session', label: 'Categorical', type: 'CATEGORICAL' },
-  { detail: 'Score within a numeric range', label: 'Continuous', type: 'CONTINUOUS' },
-  { detail: 'Write free-text feedback', label: 'Freeform', type: 'FREEFORM' },
+const CONFIG_TYPES: readonly { detail: string; label: string; value: ConfigType }[] = [
+  { detail: 'Reviewers pick one label per session.', label: 'Categorical', value: 'CATEGORICAL' },
+  { detail: 'Reviewers score within a numeric range.', label: 'Continuous', value: 'CONTINUOUS' },
+  { detail: 'Reviewers write free-text feedback.', label: 'Freeform', value: 'FREEFORM' },
 ];
 
-const DIRECTIONS: { label: string; value: AnnotationConfigOptimizationDirection }[] = [
+const DIRECTIONS: readonly { label: string; value: AnnotationConfigOptimizationDirection }[] = [
   { label: 'None', value: 'NONE' },
   { label: 'Maximize', value: 'MAXIMIZE' },
   { label: 'Minimize', value: 'MINIMIZE' },
@@ -58,6 +56,8 @@ export default function NewAnnotationConfigScreen() {
   const { id, projectId } = useLocalSearchParams<{ id: string; projectId: string }>();
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
+  // Pads clear of iPhone Duo's vertical bar, which runs down a sheet's trailing edge.
+  const column = useContentColumnStyle(0);
   const instance = useInstanceStore((state) => state.instances.find((item) => item.id === id));
   const viewer = usePhoenixViewer(instance);
   const createConfig = useCreatePhoenixAnnotationConfig(instance, projectId);
@@ -82,12 +82,17 @@ export default function NewAnnotationConfigScreen() {
 
   if (!instance) {
     return (
-      <View style={[styles.screen, { backgroundColor: colors.background }]}>
-        <Stack.Screen options={{ title: 'New annotation config' }} />
-        <Text style={[styles.copy, styles.centered, { color: colors.textSecondary }]}>
-          This Phoenix connection is no longer on this device.
-        </Text>
-      </View>
+      <ScrollView
+        contentContainerStyle={styles.fill}
+        contentInsetAdjustmentBehavior="automatic"
+        style={[styles.screen, { backgroundColor: colors.background }]}
+      >
+        <EmptyState
+          message="This Phoenix connection is no longer on this device."
+          symbol={{ ios: 'questionmark.circle', android: 'help', web: 'help' }}
+          title="Instance not found"
+        />
+      </ScrollView>
     );
   }
 
@@ -102,8 +107,8 @@ export default function NewAnnotationConfigScreen() {
     setValues((current) => current.filter((_value, position) => position !== index));
   };
 
+  // ListRow gives the selection haptic.
   const addValue = () => {
-    haptics.selection();
     setValues((current) => [...current, createValueRow()]);
   };
 
@@ -154,170 +159,141 @@ export default function NewAnnotationConfigScreen() {
     }
   };
 
+  const inputColors = {
+    backgroundColor: colors.backgroundElement,
+    borderColor: colors.border,
+    color: colors.text,
+  };
+
+  const typeDetail = CONFIG_TYPES.find((option) => option.value === type)?.detail;
+
   return (
     <ScrollView
       automaticallyAdjustKeyboardInsets
-      contentContainerStyle={[styles.content, { paddingBottom: 28 + insets.bottom }]}
+      contentContainerStyle={[styles.content, column, { paddingBottom: 28 + insets.bottom }]}
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
       style={[styles.screen, { backgroundColor: colors.background }]}
     >
-      <Stack.Screen options={{ title: 'New annotation config' }} />
-      <View style={styles.intro}>
-        <Text style={[styles.title, { color: colors.text }]}>Define a rating</Text>
-        <Text style={[styles.copy, { color: colors.textSecondary }]}>
-          Create an annotation configuration on this server and assign it to this project so
-          sessions can be reviewed with it.
-        </Text>
-      </View>
+      <Text style={[Type.subhead, styles.inset, { color: colors.textSecondary }]}>
+        Creates a rating on this server and assigns it to this project, so its sessions can be
+        reviewed with it.
+      </Text>
 
       {viewer.isPending ? (
-        <ActivityIndicator color={colors.accent} style={styles.loader} />
+        <EmptyState fill={false} loading title="Checking your access" />
       ) : readOnly ? (
-        <View
-          style={[
-            styles.stateCard,
-            { backgroundColor: colors.backgroundElement, borderColor: colors.border },
-          ]}
-        >
-          <Text style={[styles.stateTitle, { color: colors.text }]}>Read-only access</Text>
-          <Text style={[styles.copy, { color: colors.textSecondary }]}>
-            Your Phoenix Viewer role can browse annotation configurations but cannot create them.
-          </Text>
-        </View>
+        <EmptyState
+          fill={false}
+          message="Your Phoenix Viewer role can browse annotation configurations but cannot create them."
+          symbol={{ ios: 'lock', android: 'lock', web: 'lock' }}
+          title="Read-only access"
+        />
       ) : (
         <>
-          <View style={[styles.optionList, { borderColor: colors.border }]}>
-            {CONFIG_TYPES.map((option, index) => {
-              const selected = type === option.type;
-
-              return (
-                <MotionPressable
-                  accessibilityLabel={`${option.label} annotation type`}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: selected }}
-                  haptic={selected ? 'none' : 'selection'}
-                  key={option.type}
-                  onPress={() => setType(option.type)}
-                  style={[
-                    styles.optionRow,
-                    index > 0 && {
-                      borderTopColor: colors.border,
-                      borderTopWidth: StyleSheet.hairlineWidth,
-                    },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.radio,
-                      { borderColor: selected ? colors.accent : colors.border },
-                    ]}
-                  >
-                    {selected ? (
-                      <View style={[styles.radioDot, { backgroundColor: colors.accent }]} />
-                    ) : null}
-                  </View>
-                  <View style={styles.optionCopy}>
-                    <Text style={[styles.optionName, { color: colors.text }]}>{option.label}</Text>
-                    <Text style={[styles.optionDetail, { color: colors.textSecondary }]}>
-                      {option.detail}
-                    </Text>
-                  </View>
-                </MotionPressable>
-              );
-            })}
+          <SectionHeader label="Type" />
+          <View style={[styles.inset, styles.group]}>
+            <SegmentedControl onChange={setType} options={CONFIG_TYPES} value={type} />
+            {typeDetail ? (
+              <Text style={[Type.subhead, { color: colors.textTertiary }]}>{typeDetail}</Text>
+            ) : null}
           </View>
 
-          <View style={styles.fields}>
+          <SectionHeader label="Details" />
+          <View style={[styles.inset, styles.group]}>
             <TextInput
               accessibilityLabel="Configuration name"
               autoCapitalize="none"
               autoCorrect={false}
               onChangeText={setName}
-              placeholder="Name, e.g. helpfulness"
-              placeholderTextColor={colors.textSecondary}
-              style={[styles.input, { borderColor: colors.border, color: colors.text }]}
+              placeholder="Name, such as helpfulness"
+              placeholderTextColor={colors.textTertiary}
+              style={[styles.input, inputColors]}
               value={name}
             />
             <TextInput
               accessibilityLabel="Configuration description"
               onChangeText={setDescription}
               placeholder="Description (optional)"
-              placeholderTextColor={colors.textSecondary}
-              style={[styles.input, { borderColor: colors.border, color: colors.text }]}
+              placeholderTextColor={colors.textTertiary}
+              style={[styles.input, inputColors]}
               value={description}
             />
           </View>
 
           {type === 'CATEGORICAL' ? (
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Values</Text>
-              {values.map((value, index) => (
-                <View key={value.id} style={styles.valueRow}>
-                  <TextInput
-                    accessibilityLabel={`Label for value ${index + 1}`}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    onChangeText={(label) => updateValue(index, { label })}
-                    placeholder="Label"
-                    placeholderTextColor={colors.textSecondary}
-                    style={[
-                      styles.input,
-                      styles.valueLabel,
-                      { borderColor: colors.border, color: colors.text },
-                    ]}
-                    value={value.label}
+            <>
+              <SectionHeader label="Values" />
+              <View style={[styles.inset, styles.group]}>
+                {values.map((value, index) => (
+                  <View key={value.id} style={styles.valueRow}>
+                    <TextInput
+                      accessibilityLabel={`Label for value ${index + 1}`}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      onChangeText={(label) => updateValue(index, { label })}
+                      placeholder="Label"
+                      placeholderTextColor={colors.textTertiary}
+                      style={[styles.input, styles.valueLabel, inputColors]}
+                      value={value.label}
+                    />
+                    <TextInput
+                      accessibilityLabel={`Score for value ${index + 1}`}
+                      keyboardType={numericKeyboard}
+                      onChangeText={(score) => updateValue(index, { score })}
+                      placeholder="Score"
+                      placeholderTextColor={colors.textTertiary}
+                      style={[styles.input, styles.numberInput, styles.valueScore, inputColors]}
+                      value={value.score}
+                    />
+                    {values.length > 1 ? (
+                      <MotionPressable
+                        accessibilityLabel={`Remove value ${index + 1}`}
+                        accessibilityRole="button"
+                        onPress={() => removeValue(index)}
+                        style={styles.removeValue}
+                      >
+                        <SymbolView
+                          name={{
+                            ios: 'minus.circle',
+                            android: 'remove_circle_outline',
+                            web: 'remove_circle_outline',
+                          }}
+                          size={18}
+                          tintColor={colors.textTertiary}
+                        />
+                      </MotionPressable>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+              <ListRow
+                leading={
+                  <SymbolView
+                    name={{ ios: 'plus', android: 'add', web: 'add' }}
+                    size={15}
+                    tintColor={colors.text}
+                    weight="semibold"
                   />
-                  <TextInput
-                    accessibilityLabel={`Score for value ${index + 1}`}
-                    keyboardType={numericKeyboard}
-                    onChangeText={(score) => updateValue(index, { score })}
-                    placeholder="Score"
-                    placeholderTextColor={colors.textSecondary}
-                    style={[
-                      styles.input,
-                      styles.valueScore,
-                      { borderColor: colors.border, color: colors.text },
-                    ]}
-                    value={value.score}
-                  />
-                  {values.length > 1 ? (
-                    <MotionPressable
-                      accessibilityLabel={`Remove value ${index + 1}`}
-                      accessibilityRole="button"
-                      onPress={() => removeValue(index)}
-                      style={styles.removeValue}
-                    >
-                      <Text style={[styles.removeGlyph, { color: colors.textSecondary }]}>✕</Text>
-                    </MotionPressable>
-                  ) : null}
-                </View>
-              ))}
-              <MotionPressable
-                accessibilityRole="button"
+                }
                 onPress={addValue}
-                style={[styles.secondaryButton, { borderColor: colors.border }]}
-              >
-                <Text style={[styles.secondaryLabel, { color: colors.text }]}>Add value</Text>
-              </MotionPressable>
-            </View>
+                title="Add value"
+                variant="flat"
+              />
+            </>
           ) : null}
 
           {type === 'CONTINUOUS' ? (
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Range</Text>
-              <View style={styles.valueRow}>
+            <>
+              <SectionHeader label="Range" />
+              <View style={[styles.inset, styles.valueRow]}>
                 <TextInput
                   accessibilityLabel="Minimum score"
                   keyboardType={numericKeyboard}
                   onChangeText={setLowerBound}
                   placeholder="Min (optional)"
-                  placeholderTextColor={colors.textSecondary}
-                  style={[
-                    styles.input,
-                    styles.valueLabel,
-                    { borderColor: colors.border, color: colors.text },
-                  ]}
+                  placeholderTextColor={colors.textTertiary}
+                  style={[styles.input, styles.numberInput, styles.valueLabel, inputColors]}
                   value={lowerBound}
                 />
                 <TextInput
@@ -325,76 +301,45 @@ export default function NewAnnotationConfigScreen() {
                   keyboardType={numericKeyboard}
                   onChangeText={setUpperBound}
                   placeholder="Max (optional)"
-                  placeholderTextColor={colors.textSecondary}
-                  style={[
-                    styles.input,
-                    styles.valueLabel,
-                    { borderColor: colors.border, color: colors.text },
-                  ]}
+                  placeholderTextColor={colors.textTertiary}
+                  style={[styles.input, styles.numberInput, styles.valueLabel, inputColors]}
                   value={upperBound}
                 />
               </View>
-            </View>
+            </>
           ) : null}
 
           {type !== 'FREEFORM' ? (
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Optimize</Text>
-              <View style={styles.chipRow}>
-                {DIRECTIONS.map((option) => {
-                  const selected = direction === option.value;
-
-                  return (
-                    <MotionPressable
-                      accessibilityLabel={`Optimization ${option.label}`}
-                      accessibilityRole="radio"
-                      accessibilityState={{ checked: selected }}
-                      haptic={selected ? 'none' : 'selection'}
-                      key={option.value}
-                      onPress={() => setDirection(option.value)}
-                      style={[
-                        styles.chip,
-                        {
-                          backgroundColor: selected ? colors.accent : 'transparent',
-                          borderColor: selected ? colors.accent : colors.border,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.chipLabel,
-                          { color: selected ? colors.accentForeground : colors.text },
-                        ]}
-                      >
-                        {option.label}
-                      </Text>
-                    </MotionPressable>
-                  );
-                })}
+            <>
+              <SectionHeader label="Optimize" />
+              <View style={styles.inset}>
+                <SegmentedControl onChange={setDirection} options={DIRECTIONS} value={direction} />
               </View>
-            </View>
+            </>
           ) : null}
 
-          {error ? (
-            <Text accessibilityRole="alert" style={[styles.error, { color: colors.danger }]}>
-              {error}
-            </Text>
-          ) : null}
-
-          <MotionPressable
-            accessibilityRole="button"
-            disabled={!canSubmit}
-            haptic="none"
-            onPress={() => void submit()}
-            style={[
-              styles.submitButton,
-              { backgroundColor: colors.accent, opacity: canSubmit ? 1 : 0.5 },
-            ]}
-          >
-            <Text style={[styles.submitLabel, { color: colors.accentForeground }]}>
-              {createConfig.isPending ? 'Creating...' : 'Create configuration'}
-            </Text>
-          </MotionPressable>
+          <View style={[styles.inset, styles.actions]}>
+            {error ? (
+              <Text accessibilityRole="alert" style={[Type.subhead, { color: colors.danger }]}>
+                {error}
+              </Text>
+            ) : null}
+            <MotionPressable
+              accessibilityRole="button"
+              accessibilityState={{ busy: createConfig.isPending, disabled: !canSubmit }}
+              disabled={!canSubmit}
+              haptic="none"
+              onPress={() => void submit()}
+              style={[
+                styles.submitButton,
+                { backgroundColor: colors.accent, opacity: canSubmit ? 1 : 0.4 },
+              ]}
+            >
+              <Text style={[styles.submitLabel, { color: colors.accentForeground }]}>
+                {createConfig.isPending ? 'Creating…' : 'Create configuration'}
+              </Text>
+            </MotionPressable>
+          </View>
         </>
       )}
     </ScrollView>
@@ -403,84 +348,30 @@ export default function NewAnnotationConfigScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  content: {
-    alignSelf: 'center',
-    gap: 18,
-    maxWidth: MaxContentWidth,
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    width: '100%',
-  },
-  centered: { padding: 28, textAlign: 'center' },
-  intro: { gap: 8 },
-  title: { fontFamily: AppFonts.semibold, fontSize: 28, letterSpacing: -0.7 },
-  copy: { fontFamily: AppFonts.regular, fontSize: 14, lineHeight: 21 },
-  loader: { paddingVertical: 48 },
-  optionList: { borderRadius: 18, borderWidth: 1, overflow: 'hidden' },
-  optionRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 14,
-    minHeight: 60,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  radio: {
-    alignItems: 'center',
-    borderRadius: 14,
-    borderWidth: 1.5,
-    height: 26,
-    justifyContent: 'center',
-    width: 26,
-  },
-  radioDot: { borderRadius: 7, height: 14, width: 14 },
-  optionCopy: { flex: 1, gap: 2 },
-  optionName: { fontFamily: AppFonts.semibold, fontSize: 15 },
-  optionDetail: { fontFamily: AppFonts.regular, fontSize: 12, lineHeight: 17 },
-  fields: { gap: 10 },
-  section: { gap: 10 },
-  sectionTitle: { fontFamily: AppFonts.semibold, fontSize: 15 },
+  fill: { flexGrow: 1 },
+  content: { alignSelf: 'center', gap: 4, paddingTop: 12, width: '100%' },
+  inset: { paddingHorizontal: RowInset },
+  group: { gap: 8, paddingVertical: 6 },
   input: {
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
     fontFamily: AppFonts.regular,
-    fontSize: 15,
-    minHeight: 50,
+    fontSize: 16,
+    minHeight: 48,
     paddingHorizontal: 14,
   },
+  numberInput: { fontFamily: Fonts.mono, fontSize: 15 },
   valueRow: { alignItems: 'center', flexDirection: 'row', gap: 8 },
   valueLabel: { flex: 1.6 },
   valueScore: { flex: 1 },
-  removeValue: { alignItems: 'center', height: 48, justifyContent: 'center', width: 48 },
-  removeGlyph: { fontFamily: AppFonts.semibold, fontSize: 16 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    alignItems: 'center',
-    borderRadius: 24,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 48,
-    paddingHorizontal: 18,
-  },
-  chipLabel: { fontFamily: AppFonts.semibold, fontSize: 14 },
-  error: { fontFamily: AppFonts.medium, fontSize: 13, lineHeight: 19 },
+  removeValue: { alignItems: 'center', height: 48, justifyContent: 'center', width: 40 },
+  actions: { gap: 10, paddingTop: 20 },
   submitButton: {
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: 24,
     justifyContent: 'center',
-    minHeight: 52,
+    minHeight: 50,
     paddingHorizontal: 22,
   },
   submitLabel: { fontFamily: AppFonts.semibold, fontSize: 15 },
-  stateCard: { alignItems: 'flex-start', borderRadius: 18, borderWidth: 1, gap: 8, padding: 18 },
-  stateTitle: { fontFamily: AppFonts.semibold, fontSize: 17 },
-  secondaryButton: {
-    alignItems: 'center',
-    borderRadius: 14,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 48,
-    paddingHorizontal: 16,
-  },
-  secondaryLabel: { fontFamily: AppFonts.semibold, fontSize: 14 },
 });

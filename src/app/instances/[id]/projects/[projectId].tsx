@@ -1,90 +1,75 @@
-import { Host, Slider, Switch } from '@expo/ui';
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useEffectEvent, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
   FlatList,
-  type LayoutChangeEvent,
   Platform,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+
+import type { NativeStackHeaderItemMenu } from 'expo-router/native-stack';
 
 import { DuoArrangement, useArrangementPane } from '@/components/duo/arrangement';
 import { ContentColumn } from '@/components/duo/content-column';
-import { MotionPressable } from '@/components/motion-pressable';
 import { usePxiHeaderOptions } from '@/components/pxi-header-button';
 import { TraceDetailView } from '@/components/traces/trace-detail';
-import { AppFonts, Spacing, useAppColors } from '@/constants/theme';
+import { InlineChoice, ProjectViewPicker } from '@/components/traces/project-list-header';
+import { TraceRow } from '@/components/traces/trace-row';
+import { EmptyState } from '@/components/ui/empty-state';
+import { SectionHeader } from '@/components/ui/section-header';
+import { StatStrip } from '@/components/ui/stat-strip';
+import { Type, useAppColors } from '@/constants/theme';
 import { nativeHeaderTitle, useDuoLayout } from '@/features/duo/layout';
+import { isSplitDetail, useSplitDetail } from '@/features/duo/split-detail';
+import { selectDetail } from '@/features/duo/split-routes';
+import {
+  createTraceRange,
+  DefaultTraceView,
+  traceFilterLabel,
+  TraceFilters,
+  traceRangePreset,
+  TraceRangePresets,
+  type TraceRangeSelection,
+} from '@/features/traces/range';
 import {
   type PhoenixTraceFilter,
-  type PhoenixTraceListItem,
-  type PhoenixTraceRange,
   type PhoenixTraceSummary,
   usePhoenixProjects,
   usePhoenixProjectTraceSummary,
   usePhoenixProjectTraces,
 } from '@/hooks/use-phoenix-data';
+import { formatCompactNumber, formatDuration } from '@/lib/format';
 import { haptics } from '@/lib/haptics';
 import { useInstanceStore } from '@/store/instances';
 import { type TraceRangePreset, useSettingsStore } from '@/store/settings';
 
-const FILTERS: { label: string; value: PhoenixTraceFilter }[] = [
-  { label: 'Recent', value: 'recent' },
-  { label: 'Errors', value: 'errors' },
-  { label: 'Slowest', value: 'slowest' },
-];
-
-type TraceRangeSelection = PhoenixTraceRange & {
-  preset: TraceRangePreset;
-};
-
-const RANGE_PRESETS: {
-  durationMs: number;
-  label: string;
-  shortLabel: string;
-  value: TraceRangePreset;
-}[] = [
-  { durationMs: 60 * 60 * 1000, label: 'Last hour', shortLabel: '1h', value: 'hour' },
-  { durationMs: 24 * 60 * 60 * 1000, label: 'Last 24 hours', shortLabel: '24h', value: 'day' },
-  { durationMs: 7 * 24 * 60 * 60 * 1000, label: 'Last 7 days', shortLabel: '7d', value: 'week' },
-  {
-    durationMs: 30 * 24 * 60 * 60 * 1000,
-    label: 'Last 30 days',
-    shortLabel: '30d',
-    value: 'month',
-  },
-];
-
 /** Primary share of the regular-width split: the feed leads, the trace detail takes the rest. */
 const SplitRatio = 0.44;
 
-/** The feed switches from stacked rows to a table once its own pane is at least this wide. */
-const WideFeedBreakpoint = 700;
+const StreamingOptions = [
+  { label: 'Paused', value: 'paused' },
+  { label: 'Streaming', value: 'streaming' },
+] as const;
 
+/**
+ * The project's Traces list. The time range, streaming, and the
+ * Recent/Errors/Slowest filter live in one bar menu on iOS and in a line of
+ * choices above the list elsewhere.
+ */
 export default function ProjectTracesScreen() {
   const { id, projectId } = useLocalSearchParams<{ id: string; projectId: string }>();
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
   const { isRegularWidth, systemBarEdge } = useDuoLayout();
-  const [feedWidth, setFeedWidth] = useState(0);
-  const isWide = feedWidth >= WideFeedBreakpoint;
+  const splitDetail = useSplitDetail();
+  const nativeBar = Platform.OS === 'ios';
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<PhoenixTraceFilter>('recent');
+  const [filter, setFilter] = useState<PhoenixTraceFilter>(DefaultTraceView.filter);
 
   const [range, setRange] = useState<TraceRangeSelection>(() =>
     createTraceRange(useSettingsStore.getState().traceRangePreset),
@@ -124,7 +109,7 @@ export default function ProjectTracesScreen() {
   // PXI takes the detail pane's place, so the trace it showed moves onto the
   // stack and the feed becomes a single screen again.
   const pxiHeader = usePxiHeaderOptions(instance, () => {
-    if (!instance || activeTraceId === null) return;
+    if (!isRegularWidth || !instance || activeTraceId === null) return;
 
     router.push({
       pathname: '/instances/[id]/projects/[projectId]/traces/[traceId]',
@@ -207,209 +192,231 @@ export default function ProjectTracesScreen() {
     }
   };
 
-  const handleFeedLayout = (event: LayoutChangeEvent) => {
-    const nextWidth = event.nativeEvent.layout.width;
-    setFeedWidth((current) => (current === nextWidth ? current : nextWidth));
+  const changeRange = (preset: TraceRangePreset) => {
+    if (preset === range.preset) return;
+    haptics.selection();
+    setTraceRangePreset(preset);
+    setRange(createTraceRange(preset));
   };
 
+  const changeFilter = (next: PhoenixTraceFilter) => {
+    if (next === filter) return;
+    haptics.selection();
+    setFilter(next);
+  };
+
+  const changeStreaming = (value: boolean) => {
+    haptics.selection();
+    setStreaming(value);
+  };
+
+  const rangeLabel = traceRangePreset(range.preset).label;
+  const filterLabel = traceFilterLabel(filter);
+
+  const viewChanged =
+    range.preset !== DefaultTraceView.preset ||
+    filter !== DefaultTraceView.filter ||
+    streaming !== DefaultTraceView.streaming;
+
+  const viewMenu: NativeStackHeaderItemMenu = {
+    type: 'menu',
+    identifier: 'trace-view',
+    label: 'Time range and filter',
+    accessibilityLabel: `Time range and filter, ${rangeLabel}, ${filterLabel}, ${streaming ? 'streaming' : 'paused'}`,
+    icon: {
+      type: 'sfSymbol',
+      name: viewChanged
+        ? 'line.3.horizontal.decrease.circle.fill'
+        : 'line.3.horizontal.decrease.circle',
+    },
+    menu: {
+      items: [
+        {
+          type: 'submenu',
+          inline: true,
+          label: 'Time range',
+          items: TraceRangePresets.map((option) => ({
+            type: 'action',
+            label: option.label,
+            state: option.value === range.preset ? 'on' : 'off',
+            onPress: () => changeRange(option.value),
+          })),
+        },
+        {
+          type: 'action',
+          label: 'Streaming',
+          description: 'Refreshes every 10 seconds',
+          icon: { type: 'sfSymbol', name: 'dot.radiowaves.left.and.right' },
+          state: streaming ? 'on' : 'off',
+          onPress: () => changeStreaming(!streaming),
+        },
+        {
+          type: 'submenu',
+          inline: true,
+          label: 'Show',
+          items: TraceFilters.map((option) => ({
+            type: 'action',
+            label: option.label,
+            state: option.value === filter ? 'on' : 'off',
+            onPress: () => changeFilter(option.value),
+          })),
+        },
+      ],
+    },
+  };
+
+  const sectionLabel = [
+    rangeLabel,
+    filter === 'recent' ? null : filterLabel,
+    streaming ? 'Live' : null,
+  ]
+    .filter((part) => part !== null)
+    .join(' · ');
+
   const feed = (
-    <View onLayout={handleFeedLayout} style={styles.feed}>
-      <ContentColumn padding={20}>
-        {(column) => (
-          <FlatList
-            extraData={activeTraceId}
-            contentContainerStyle={[styles.content, column, { paddingBottom: 24 + insets.bottom }]}
-            contentInsetAdjustmentBehavior="automatic"
-            data={traces}
-            initialNumToRender={12}
-            keyExtractor={(trace) => trace.id}
-            ListEmptyComponent={
-              <TraceListState
-                filter={filter}
-                isError={activeTraces.isError}
-                isPending={activeTraces.isPending}
-                message={activeTraces.error?.message}
-                retry={() => activeTraces.refetch()}
-              />
-            }
-            ListFooterComponent={
-              activeTraces.isFetchingNextPage ? (
-                <ActivityIndicator color={colors.accent} style={styles.footerLoader} />
-              ) : traces.length > 0 ? (
-                <Text style={[styles.listEnd, { color: colors.textSecondary }]}>
-                  All available traces loaded
-                </Text>
-              ) : undefined
-            }
-            ListHeaderComponent={
-              <View style={styles.headerContent}>
-                <View style={styles.projectIntro}>
-                  <Text numberOfLines={2} style={[styles.title, { color: colors.text }]}>
-                    {project?.name ?? 'Project traces'}
-                  </Text>
-                  {project?.description ? (
-                    <Text style={[styles.description, { color: colors.textSecondary }]}>
-                      {project.description}
-                    </Text>
-                  ) : (
-                    <Text style={[styles.description, { color: colors.textSecondary }]}>
-                      Recent activity and performance at a glance.
-                    </Text>
-                  )}
-                </View>
-
-                <MotionPressable
-                  accessibilityHint="Opens remote sessions and the human review queue"
-                  accessibilityRole="button"
-                  onPress={() =>
-                    router.push({
-                      pathname: '/instances/[id]/projects/[projectId]/sessions',
-                      params: { id: instance.id, projectId },
-                    })
-                  }
-                  style={[
-                    styles.sessionsEntry,
-                    { backgroundColor: colors.backgroundElement, borderColor: colors.border },
-                  ]}
-                >
-                  <View style={[styles.sessionsGlyph, { backgroundColor: colors.accentSoft }]}>
-                    <SymbolView
-                      name={{
-                        android: 'forum',
-                        ios: 'bubble.left.and.bubble.right.fill',
-                        web: 'forum',
-                      }}
-                      size={22}
-                      tintColor={colors.brand}
-                      weight="semibold"
-                    />
-                  </View>
-                  <View style={styles.sessionsEntryCopy}>
-                    <Text style={[styles.sessionsEntryTitle, { color: colors.text }]}>
-                      Sessions
-                    </Text>
-                    <Text
-                      style={[styles.sessionsEntryDescription, { color: colors.textSecondary }]}
-                    >
-                      Browse conversations and work the human review queue.
-                    </Text>
-                  </View>
-                  <Text style={[styles.sessionsEntryAction, { color: colors.text }]}>Open</Text>
-                </MotionPressable>
-
-                <TraceRangeSelector
-                  onChange={(preset) => {
-                    if (preset === range.preset) return;
-                    haptics.selection();
-                    setTraceRangePreset(preset);
-                    setRange(createTraceRange(preset));
-                  }}
-                  range={range}
-                  streaming={streaming}
-                  onStreamingChange={(value) => {
-                    haptics.selection();
-                    setStreaming(value);
-                  }}
-                />
-                <TraceSummary
-                  isLoading={summary.isPending}
-                  isWide={isWide}
-                  summary={summary.data}
-                />
-
-                <View style={styles.traceHeading}>
-                  <Text style={[styles.sectionTitle, { color: colors.text }]}>Traces</Text>
-                </View>
-                <ScrollView
-                  contentContainerStyle={styles.filters}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.filterScroller}
-                >
-                  {FILTERS.map((option) => {
-                    const selected = option.value === filter;
-
-                    return (
-                      <MotionPressable
-                        accessibilityRole="button"
-                        accessibilityState={{ selected }}
-                        haptic={selected ? 'none' : 'selection'}
-                        key={option.value}
-                        onPress={() => setFilter(option.value)}
-                        style={[
-                          styles.filter,
-                          {
-                            backgroundColor: selected ? colors.accent : colors.backgroundSelected,
-                            borderColor: selected ? colors.accent : colors.border,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.filterLabel,
-                            { color: selected ? colors.accentForeground : colors.text },
-                          ]}
-                        >
-                          {option.label}
-                        </Text>
-                      </MotionPressable>
-                    );
-                  })}
-                </ScrollView>
-                {isWide && traces.length > 0 ? <TraceTableHeader /> : null}
-              </View>
-            }
-            maxToRenderPerBatch={12}
-            onEndReached={() => {
-              if (activeTraces.hasNextPage && !activeTraces.isFetchingNextPage)
-                activeTraces.fetchNextPage();
-            }}
-            onEndReachedThreshold={0.35}
-            refreshControl={
-              <RefreshControl
-                colors={[colors.brand]}
-                onRefresh={refresh}
-                progressBackgroundColor={colors.backgroundElement}
-                refreshing={manualRefreshing}
-                tintColor={colors.brand}
-              />
-            }
-            removeClippedSubviews={Platform.OS === 'android'}
-            renderItem={({ item }) => (
-              <TraceRow
-                isWide={isWide}
-                onPress={() => {
-                  if (isRegularWidth) {
-                    setSelectedTraceId(item.traceId);
-
-                    return;
-                  }
-
-                  router.push({
-                    pathname: '/instances/[id]/projects/[projectId]/traces/[traceId]',
-                    params: { id: instance.id, projectId, traceId: item.traceId },
-                  });
+    <ContentColumn padding={0}>
+      {(column) => (
+        <FlatList
+          extraData={activeTraceId}
+          contentContainerStyle={[styles.content, column, { paddingBottom: 24 + insets.bottom }]}
+          contentInsetAdjustmentBehavior="automatic"
+          data={traces}
+          initialNumToRender={12}
+          keyExtractor={(trace) => trace.id}
+          ListEmptyComponent={
+            activeTraces.isPending ? (
+              <EmptyState loading title="Loading traces" />
+            ) : activeTraces.isError ? (
+              <EmptyState
+                action={{ label: 'Try again', onPress: () => void activeTraces.refetch() }}
+                message={activeTraces.error.message}
+                symbol={{
+                  android: 'error',
+                  ios: 'exclamationmark.triangle',
+                  web: 'error',
                 }}
-                selected={isRegularWidth && item.traceId === activeTraceId}
-                trace={item}
+                title="Couldn’t load traces"
               />
-            )}
-            style={styles.list}
-            windowSize={7}
-          />
-        )}
-      </ContentColumn>
-    </View>
+            ) : (
+              <EmptyState
+                message={
+                  filter === 'errors'
+                    ? 'No root spans with an error status in this range.'
+                    : 'New traces appear here as this project receives activity.'
+                }
+                symbol={{ android: 'inbox', ios: 'tray', web: 'inbox' }}
+                title={filter === 'errors' ? 'No error traces' : 'No traces yet'}
+              />
+            )
+          }
+          ListFooterComponent={
+            activeTraces.isFetchingNextPage ? (
+              <ActivityIndicator color={colors.textSecondary} style={styles.footer} />
+            ) : traces.length > 0 && !activeTraces.hasNextPage ? (
+              <Text style={[Type.subhead, styles.listEnd, { color: colors.textTertiary }]}>
+                All traces in range loaded
+              </Text>
+            ) : undefined
+          }
+          ListHeaderComponent={
+            <View>
+              <ProjectViewPicker
+                instanceId={instance.id}
+                projectId={projectId}
+                title={project?.name}
+                value="traces"
+              />
+              {nativeBar ? null : (
+                <View>
+                  <InlineChoice
+                    label="Range"
+                    onChange={changeRange}
+                    options={TraceRangePresets.map((option) => ({
+                      label: option.shortLabel,
+                      value: option.value,
+                    }))}
+                    value={range.preset}
+                  />
+                  <InlineChoice
+                    label="Show"
+                    onChange={changeFilter}
+                    options={TraceFilters}
+                    value={filter}
+                  />
+                  <InlineChoice
+                    label="Updates"
+                    onChange={(value) => changeStreaming(value === 'streaming')}
+                    options={StreamingOptions}
+                    value={streaming ? 'streaming' : 'paused'}
+                  />
+                </View>
+              )}
+              <TraceStats isLoading={summary.isPending} summary={summary.data} />
+              <SectionHeader label={sectionLabel} />
+            </View>
+          }
+          maxToRenderPerBatch={12}
+          onEndReached={() => {
+            if (activeTraces.hasNextPage && !activeTraces.isFetchingNextPage)
+              activeTraces.fetchNextPage();
+          }}
+          onEndReachedThreshold={0.35}
+          refreshControl={
+            <RefreshControl
+              colors={[colors.textSecondary]}
+              onRefresh={refresh}
+              progressBackgroundColor={colors.backgroundElement}
+              refreshing={manualRefreshing}
+              tintColor={colors.textSecondary}
+            />
+          }
+          removeClippedSubviews={Platform.OS === 'android'}
+          renderItem={({ item }) => (
+            <TraceRow
+              onPress={() => {
+                if (isRegularWidth) {
+                  setSelectedTraceId(item.traceId);
+
+                  return;
+                }
+
+                selectDetail({
+                  pathname: '/instances/[id]/projects/[projectId]/traces/[traceId]',
+                  params: { id: instance.id, projectId, traceId: item.traceId },
+                });
+              }}
+              selected={
+                isRegularWidth
+                  ? item.traceId === activeTraceId
+                  : isSplitDetail(
+                      splitDetail,
+                      'instances/[id]/projects/[projectId]/traces/[traceId]',
+                      'traceId',
+                      item.traceId,
+                    )
+              }
+              trace={item}
+            />
+          )}
+          style={styles.list}
+          windowSize={7}
+        />
+      )}
+    </ContentColumn>
   );
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <Stack.Screen
         options={{
-          headerBackTitle: instance?.name ?? 'Instance',
+          headerBackTitle: instance.name,
           scrollEdgeEffects: { bottom: 'soft' },
           title: nativeHeaderTitle(systemBarEdge, project?.name ?? 'Project'),
-          ...pxiHeader,
+          headerRight: nativeBar ? undefined : pxiHeader.headerRight,
+          // PXI comes last, which puts it at the top of a vertical bar.
+          unstable_headerRightItems: nativeBar
+            ? (props) => [viewMenu, ...(pxiHeader.unstable_headerRightItems?.(props) ?? [])]
+            : undefined,
         }}
       />
       {isRegularWidth ? (
@@ -432,6 +439,44 @@ export default function ProjectTracesScreen() {
   );
 }
 
+function TraceStats({
+  isLoading,
+  summary,
+}: {
+  isLoading: boolean;
+  summary: PhoenixTraceSummary | undefined;
+}) {
+  const ready = !isLoading && summary !== undefined;
+  const errors = ready ? summary.errorCount : 0;
+
+  return (
+    <StatStrip
+      stats={[
+        { label: 'Traces', value: ready ? formatCompactNumber(summary.traceCount) : '—' },
+        {
+          label: 'Errors',
+          value: ready ? formatCompactNumber(errors) : '—',
+          tone: errors > 0 ? 'danger' : 'default',
+        },
+        {
+          label: 'p50',
+          value:
+            ready && summary.medianLatencyMs !== null
+              ? formatDuration(summary.medianLatencyMs)
+              : '—',
+        },
+        {
+          label: 'Tokens',
+          value:
+            ready && summary.tokenCountTotal !== null
+              ? formatCompactNumber(summary.tokenCountTotal)
+              : '—',
+        },
+      ]}
+    />
+  );
+}
+
 function TraceDetailPane({
   instanceId,
   projectId,
@@ -450,20 +495,19 @@ function TraceDetailPane({
     pane === null || pane.isFolded
       ? null
       : pane.axis === 'horizontal'
-        ? { borderLeftColor: colors.border, borderLeftWidth: StyleSheet.hairlineWidth }
+        ? { borderLeftColor: colors.separator, borderLeftWidth: StyleSheet.hairlineWidth }
         : pane.axis === 'vertical'
-          ? { borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth }
+          ? { borderTopColor: colors.separator, borderTopWidth: StyleSheet.hairlineWidth }
           : null;
 
   return (
     <View style={[styles.detailPane, { backgroundColor: colors.background }, divider]}>
       {traceId === null ? (
-        <View style={styles.state}>
-          <Text style={[styles.stateTitle, { color: colors.text }]}>Select a trace</Text>
-          <Text style={[styles.stateCopy, { color: colors.textSecondary }]}>
-            Trace details appear here as you move through the feed.
-          </Text>
-        </View>
+        <EmptyState
+          message="Trace details appear here as you move through the list."
+          symbol={{ android: 'timeline', ios: 'list.bullet.indent', web: 'timeline' }}
+          title="Select a trace"
+        />
       ) : (
         <TraceDetailView
           embedded
@@ -481,660 +525,28 @@ function UnavailableState({ message, title }: { message: string; title: string }
   const colors = useAppColors();
 
   return (
-    <View style={[styles.unavailableScreen, { backgroundColor: colors.background }]}>
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <Stack.Screen options={{ title: 'Project' }} />
-      <Text style={[styles.stateTitle, { color: colors.text }]}>{title}</Text>
-      <Text style={[styles.stateCopy, { color: colors.textSecondary }]}>{message}</Text>
-      <MotionPressable
-        accessibilityRole="button"
-        onPress={() => {
-          if (router.canGoBack()) router.back();
-          else router.replace('/');
+      <EmptyState
+        action={{
+          label: 'Go back',
+          onPress: () => {
+            if (router.canGoBack()) router.back();
+            else router.replace('/');
+          },
         }}
-        style={[styles.retryButton, { backgroundColor: colors.accent }]}
-      >
-        <Text style={[styles.retryLabel, { color: colors.accentForeground }]}>Go back</Text>
-      </MotionPressable>
+        message={message}
+        title={title}
+      />
     </View>
   );
-}
-
-function TraceSummary({
-  isLoading,
-  isWide,
-  summary,
-}: {
-  isLoading: boolean;
-  isWide: boolean;
-  summary: PhoenixTraceSummary | undefined;
-}) {
-  const colors = useAppColors();
-
-  const metrics = [
-    { label: 'Traces', value: summary ? formatCompactNumber(summary.traceCount) : '—' },
-    {
-      label: 'Errors',
-      value:
-        summary && summary.traceCount > 0
-          ? `${Math.round((summary.errorCount / summary.traceCount) * 100)}%`
-          : '—',
-    },
-    {
-      label: 'Median',
-      value: summary?.medianLatencyMs == null ? '—' : formatDuration(summary.medianLatencyMs),
-    },
-    {
-      label: 'Tokens',
-      value: summary?.tokenCountTotal == null ? '—' : formatCompactNumber(summary.tokenCountTotal),
-    },
-  ];
-
-  // Explicit rows: percent flex-basis inside a wrapping row does not break lines
-  // reliably on iOS when the container sits in an absolutely positioned pane.
-  const rows = isWide ? [metrics] : [metrics.slice(0, 2), metrics.slice(2)];
-
-  return (
-    <View
-      style={[
-        styles.summary,
-        { backgroundColor: colors.backgroundElement, borderColor: colors.border },
-      ]}
-    >
-      {rows.map((row, rowIndex) => (
-        <View
-          key={rowIndex === 0 ? 'first' : 'second'}
-          style={[
-            styles.summaryRow,
-            rowIndex > 0 && { borderTopColor: colors.border, borderTopWidth: 1 },
-          ]}
-        >
-          {row.map((metric, index) => (
-            <View
-              key={metric.label}
-              style={[
-                styles.metric,
-                index > 0 && { borderLeftColor: colors.border, borderLeftWidth: 1 },
-              ]}
-            >
-              <Text numberOfLines={1} style={[styles.metricLabel, { color: colors.textSecondary }]}>
-                {metric.label}
-              </Text>
-              {isLoading ? (
-                <ActivityIndicator color={colors.accent} size="small" style={styles.metricLoader} />
-              ) : (
-                <Text numberOfLines={1} style={[styles.metricValue, { color: colors.text }]}>
-                  {metric.value}
-                </Text>
-              )}
-            </View>
-          ))}
-        </View>
-      ))}
-    </View>
-  );
-}
-
-function TraceRangeSelector({
-  onChange,
-  onStreamingChange,
-  range,
-  streaming,
-}: {
-  onChange: (preset: TraceRangePreset) => void;
-  onStreamingChange: (value: boolean) => void;
-  range: TraceRangeSelection;
-  streaming: boolean;
-}) {
-  const colors = useAppColors();
-  const reduceMotion = useReducedMotion();
-  const [expanded, setExpanded] = useState(false);
-  const [controlsHeight, setControlsHeight] = useState(220);
-  const expansion = useSharedValue(0);
-  const selectedIndex = RANGE_PRESETS.findIndex((option) => option.value === range.preset);
-  const selected = RANGE_PRESETS[selectedIndex];
-  const streamingLabel = streaming ? 'Streaming' : 'Paused';
-
-  const controlsStyle = useAnimatedStyle(() => ({
-    height: controlsHeight * expansion.get(),
-    opacity: expansion.get(),
-  }));
-
-  const chevronStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${expansion.get() * 90}deg` }],
-  }));
-
-  const toggleExpanded = () => {
-    const nextExpanded = !expanded;
-    setExpanded(nextExpanded);
-    expansion.set(
-      withTiming(nextExpanded ? 1 : 0, {
-        duration: reduceMotion ? 0 : 220,
-        easing: Easing.out(Easing.cubic),
-      }),
-    );
-  };
-
-  return (
-    <View
-      style={[
-        styles.rangeDisclosure,
-        { backgroundColor: colors.backgroundElement, borderColor: colors.border },
-      ]}
-    >
-      <MotionPressable
-        accessibilityLabel={`Time range, ${selected.label}, ${streamingLabel}`}
-        accessibilityRole="button"
-        accessibilityState={{ expanded }}
-        haptic="selection"
-        onPress={toggleExpanded}
-        style={styles.rangeSummaryRow}
-      >
-        <View style={styles.rangeSummaryCopy}>
-          <Text style={[styles.eyebrow, { color: colors.textSecondary }]}>Time range</Text>
-          <View style={styles.rangeSummaryState}>
-            <View
-              style={[
-                styles.streamingDot,
-                { backgroundColor: streaming ? colors.brandSecondary : colors.textSecondary },
-              ]}
-            />
-            <Text numberOfLines={1} style={[styles.rangeSummaryValue, { color: colors.text }]}>
-              {selected.label} · {streamingLabel}
-            </Text>
-          </View>
-        </View>
-        <Animated.View style={chevronStyle}>
-          <SymbolView
-            accessibilityElementsHidden
-            name={{ android: 'chevron_right', ios: 'chevron.right', web: 'chevron_right' }}
-            size={17}
-            tintColor={colors.textSecondary}
-            weight="semibold"
-          />
-        </Animated.View>
-      </MotionPressable>
-
-      <Animated.View
-        accessibilityElementsHidden={!expanded}
-        importantForAccessibility={expanded ? 'auto' : 'no-hide-descendants'}
-        pointerEvents={expanded ? 'auto' : 'none'}
-        style={[styles.rangeControlsClip, controlsStyle]}
-      >
-        <View
-          onLayout={({ nativeEvent }) => {
-            if (nativeEvent.layout.height > 0) setControlsHeight(nativeEvent.layout.height);
-          }}
-          style={[styles.rangeControls, { borderTopColor: colors.border }]}
-        >
-          <View style={styles.rangeControl}>
-            <Host ignoreSafeArea="all" seedColor={colors.brand} style={styles.sliderHost}>
-              <Slider
-                max={RANGE_PRESETS.length - 1}
-                min={0}
-                onValueChange={(value) => onChange(RANGE_PRESETS[Math.round(value)].value)}
-                step={1}
-                value={selectedIndex}
-              />
-            </Host>
-            <View style={styles.rangeLabels}>
-              {RANGE_PRESETS.map((option) => {
-                const isSelected = option.value === range.preset;
-
-                return (
-                  <MotionPressable
-                    accessibilityLabel={option.label}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isSelected }}
-                    haptic="none"
-                    key={option.value}
-                    onPress={() => onChange(option.value)}
-                    style={styles.rangeLabelButton}
-                  >
-                    <Text
-                      style={[
-                        styles.rangeLabel,
-                        { color: isSelected ? colors.text : colors.textSecondary },
-                      ]}
-                    >
-                      {option.shortLabel}
-                    </Text>
-                  </MotionPressable>
-                );
-              })}
-            </View>
-            <Text style={[styles.rangeDates, { color: colors.textSecondary }]}>
-              {formatRange(range)}
-            </Text>
-          </View>
-          <View style={[styles.streamingRow, { borderTopColor: colors.border }]}>
-            <Text style={[styles.streamingLabel, { color: colors.text }]}>Streaming</Text>
-            <Host ignoreSafeArea="all" matchContents seedColor={colors.brand}>
-              <Switch onValueChange={onStreamingChange} value={streaming} />
-            </Host>
-          </View>
-        </View>
-      </Animated.View>
-    </View>
-  );
-}
-
-function TraceTableHeader() {
-  const colors = useAppColors();
-
-  return (
-    <View style={[styles.tableHeader, { borderBottomColor: colors.border }]}>
-      <Text style={[styles.tableHeading, styles.operationColumn, { color: colors.textSecondary }]}>
-        Operation
-      </Text>
-      <Text style={[styles.tableHeading, styles.statusColumn, { color: colors.textSecondary }]}>
-        Status
-      </Text>
-      <Text style={[styles.tableHeading, styles.startedColumn, { color: colors.textSecondary }]}>
-        Started
-      </Text>
-      <Text style={[styles.tableHeading, styles.latencyColumn, { color: colors.textSecondary }]}>
-        Latency
-      </Text>
-      <Text style={[styles.tableHeading, styles.tokensColumn, { color: colors.textSecondary }]}>
-        Tokens
-      </Text>
-    </View>
-  );
-}
-
-function TraceRow({
-  isWide,
-  onPress,
-  selected,
-  trace,
-}: {
-  isWide: boolean;
-  onPress: () => void;
-  selected: boolean;
-  trace: PhoenixTraceListItem;
-}) {
-  const colors = useAppColors();
-  const isError = trace.statusCode === 'ERROR';
-
-  const statusColor = isError
-    ? colors.danger
-    : trace.statusCode === 'OK'
-      ? colors.success
-      : colors.textSecondary;
-
-  const statusLabel = isError ? 'Error' : trace.statusCode === 'OK' ? 'OK' : 'Unset';
-
-  if (isWide) {
-    return (
-      <MotionPressable
-        accessibilityLabel={`${trace.name}, ${statusLabel}, ${formatDuration(trace.latencyMs)}`}
-        accessibilityHint="Opens trace details"
-        accessibilityRole="button"
-        accessibilityState={{ selected }}
-        onPress={onPress}
-        style={[
-          styles.tableRow,
-          { borderBottomColor: colors.border },
-          selected && styles.selectedTableRow,
-          selected && { backgroundColor: colors.backgroundSelected },
-        ]}
-      >
-        <View style={styles.operationColumn}>
-          <Text numberOfLines={1} style={[styles.traceName, { color: colors.text }]}>
-            {trace.name}
-          </Text>
-          <Text numberOfLines={1} style={[styles.traceKind, { color: colors.textSecondary }]}>
-            {formatKind(trace.spanKind)}
-          </Text>
-        </View>
-        <View style={styles.statusColumn}>
-          <View style={[styles.statusBadge, { backgroundColor: colors.backgroundSelected }]}>
-            <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-            <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
-          </View>
-        </View>
-        <Text style={[styles.tableCell, styles.startedColumn, { color: colors.textSecondary }]}>
-          {formatStartTime(trace.startTime)}
-        </Text>
-        <Text style={[styles.tableCell, styles.latencyColumn, { color: colors.text }]}>
-          {formatDuration(trace.latencyMs)}
-        </Text>
-        <Text style={[styles.tableCell, styles.tokensColumn, { color: colors.text }]}>
-          {formatTokens(trace.tokenCountTotal)}
-        </Text>
-      </MotionPressable>
-    );
-  }
-
-  return (
-    <MotionPressable
-      accessibilityLabel={`${trace.name}, ${statusLabel}, ${formatDuration(trace.latencyMs)}`}
-      accessibilityHint="Opens trace details"
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={[
-        styles.mobileRow,
-        { borderBottomColor: colors.border },
-        selected && styles.selectedMobileRow,
-        selected && { backgroundColor: colors.backgroundSelected },
-      ]}
-    >
-      <View style={styles.mobilePrimaryRow}>
-        <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-        <Text
-          numberOfLines={1}
-          style={[styles.traceName, styles.mobileTraceName, { color: colors.text }]}
-        >
-          {trace.name}
-        </Text>
-        <Text style={[styles.mobileTime, { color: colors.textSecondary }]}>
-          {formatStartTime(trace.startTime)}
-        </Text>
-      </View>
-      <View style={styles.mobileMetadata}>
-        <Text numberOfLines={1} style={[styles.mobileMetaText, { color: colors.textSecondary }]}>
-          {formatKind(trace.spanKind)}
-        </Text>
-        <View style={[styles.metaDivider, { backgroundColor: colors.border }]} />
-        <Text
-          style={[styles.mobileMetaText, { color: isError ? colors.danger : colors.textSecondary }]}
-        >
-          {statusLabel}
-        </Text>
-        <View style={[styles.metaDivider, { backgroundColor: colors.border }]} />
-        <Text style={[styles.mobileMetaText, { color: colors.textSecondary }]}>
-          {formatDuration(trace.latencyMs)}
-        </Text>
-        {trace.tokenCountTotal != null ? (
-          <>
-            <View style={[styles.metaDivider, { backgroundColor: colors.border }]} />
-            <Text style={[styles.mobileMetaText, { color: colors.textSecondary }]}>
-              {formatTokens(trace.tokenCountTotal)} tokens
-            </Text>
-          </>
-        ) : null}
-      </View>
-    </MotionPressable>
-  );
-}
-
-function TraceListState({
-  filter,
-  isError,
-  isPending,
-  message,
-  retry,
-}: {
-  filter: PhoenixTraceFilter;
-  isError: boolean;
-  isPending: boolean;
-  message?: string;
-  retry: () => void;
-}) {
-  const colors = useAppColors();
-
-  if (isPending) return <ActivityIndicator color={colors.accent} style={styles.stateLoader} />;
-
-  if (isError) {
-    return (
-      <View style={styles.state}>
-        <Text style={[styles.stateTitle, { color: colors.text }]}>Couldn’t load traces</Text>
-        <Text style={[styles.stateCopy, { color: colors.textSecondary }]}>
-          {message ?? 'Try refreshing this project.'}
-        </Text>
-        <MotionPressable
-          accessibilityRole="button"
-          onPress={retry}
-          style={[styles.retryButton, { backgroundColor: colors.accent }]}
-        >
-          <Text style={[styles.retryLabel, { color: colors.accentForeground }]}>Try again</Text>
-        </MotionPressable>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.state}>
-      <Text style={[styles.stateTitle, { color: colors.text }]}>
-        {filter === 'errors' ? 'No error traces' : 'No traces yet'}
-      </Text>
-      <Text style={[styles.stateCopy, { color: colors.textSecondary }]}>
-        {filter === 'errors'
-          ? 'No root spans with an error status were found.'
-          : 'New traces will appear here as this project receives activity.'}
-      </Text>
-    </View>
-  );
-}
-
-function formatDuration(milliseconds: number) {
-  if (milliseconds < 1) return '<1 ms';
-
-  if (milliseconds < 1000) return `${Math.round(milliseconds)} ms`;
-
-  if (milliseconds < 10_000) return `${(milliseconds / 1000).toFixed(1)} s`;
-
-  return `${Math.round(milliseconds / 1000)} s`;
-}
-
-function formatCompactNumber(value: number) {
-  if (value < 1000) return String(value);
-
-  if (value < 1_000_000) return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)}k`;
-
-  return `${(value / 1_000_000).toFixed(value < 10_000_000 ? 1 : 0)}m`;
-}
-
-function formatTokens(value: number | null) {
-  return value == null ? '—' : formatCompactNumber(value);
-}
-
-function formatKind(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
-}
-
-function formatStartTime(value: string) {
-  const date = new Date(value);
-  const now = new Date();
-
-  if (date.toDateString() === now.toDateString()) {
-    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  }
-
-  return date.toLocaleDateString([], { day: 'numeric', month: 'short' });
-}
-
-function createTraceRange(preset: TraceRangePreset, cacheKey?: string): TraceRangeSelection {
-  const selected = RANGE_PRESETS.find((option) => option.value === preset) ?? RANGE_PRESETS[1];
-  const endTime = new Date();
-
-  return {
-    cacheKey: cacheKey ?? `${preset}:${endTime.toISOString()}`,
-    endTime: endTime.toISOString(),
-    preset,
-    startTime: new Date(endTime.getTime() - selected.durationMs).toISOString(),
-  };
-}
-
-function formatRange(range: PhoenixTraceRange) {
-  const start = new Date(range.startTime);
-  const end = new Date(range.endTime);
-  const spansMultipleDays = start.toDateString() !== end.toDateString();
-
-  const options: Intl.DateTimeFormatOptions = spansMultipleDays
-    ? { day: 'numeric', month: 'short' }
-    : { hour: 'numeric', minute: '2-digit' };
-
-  return `${start.toLocaleString([], options)} – ${end.toLocaleString([], options)}`;
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  unavailableScreen: {
-    alignItems: 'center',
-    flex: 1,
-    gap: 8,
-    justifyContent: 'center',
-    padding: 24,
-  },
   list: { flex: 1 },
-  feed: { flex: 1 },
   detailPane: { flex: 1, justifyContent: 'center' },
-  content: { alignSelf: 'center', width: '100%' },
-  headerContent: { paddingTop: 18 },
-  projectIntro: { gap: 7, paddingBottom: 28 },
-  title: { fontFamily: AppFonts.semibold, fontSize: 32, letterSpacing: -1, lineHeight: 38 },
-  description: { fontFamily: AppFonts.regular, fontSize: 16, lineHeight: 23, maxWidth: 620 },
-  sessionsEntry: {
-    alignItems: 'center',
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 13,
-    marginBottom: 16,
-    minHeight: 88,
-    padding: 14,
-  },
-  sessionsGlyph: {
-    alignItems: 'center',
-    borderRadius: 15,
-    height: 48,
-    justifyContent: 'center',
-    width: 48,
-  },
-  sessionsEntryCopy: { flex: 1, gap: 3 },
-  sessionsEntryTitle: { fontFamily: AppFonts.semibold, fontSize: 17 },
-  sessionsEntryDescription: { fontFamily: AppFonts.regular, fontSize: 13, lineHeight: 18 },
-  sessionsEntryAction: { fontFamily: AppFonts.semibold, fontSize: 13 },
-  eyebrow: { fontFamily: AppFonts.semibold, fontSize: 13 },
-  rangeDisclosure: { borderRadius: 16, borderWidth: 1, marginBottom: 16, overflow: 'hidden' },
-  rangeSummaryRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
-    minHeight: 64,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  rangeSummaryCopy: { flex: 1, gap: 5, minWidth: 0 },
-  rangeSummaryState: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  rangeSummaryValue: { flex: 1, fontFamily: AppFonts.medium, fontSize: 14 },
-  streamingDot: { borderRadius: 4, height: 8, width: 8 },
-  rangeControlsClip: { overflow: 'hidden' },
-  rangeControls: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingBottom: 16,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-  },
-  rangeControl: { paddingHorizontal: 6 },
-  sliderHost: { height: 32, width: '100%' },
-  rangeLabels: { flexDirection: 'row', justifyContent: 'space-between' },
-  rangeLabelButton: { alignItems: 'center', justifyContent: 'center', minHeight: 48, width: 52 },
-  rangeLabel: { fontFamily: AppFonts.medium, fontSize: 12 },
-  rangeDates: { fontFamily: AppFonts.regular, fontSize: 12, paddingTop: 6, textAlign: 'center' },
-  streamingRow: {
-    alignItems: 'center',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    marginTop: 22,
-    minHeight: 64,
-    paddingTop: 12,
-  },
-  streamingLabel: { flex: 1, fontFamily: AppFonts.medium, fontSize: 14 },
-  summary: { borderRadius: 18, borderWidth: 1, overflow: 'hidden' },
-  summaryRow: { flexDirection: 'row' },
-  metric: { flex: 1, gap: 6, minHeight: 86, paddingHorizontal: 16, paddingVertical: 14 },
-  metricLabel: { fontFamily: AppFonts.regular, fontSize: 12 },
-  metricValue: { fontFamily: AppFonts.semibold, fontSize: 23, letterSpacing: -0.5 },
-  metricLoader: { alignSelf: 'flex-start', height: 28 },
-  traceHeading: {
-    alignItems: 'baseline',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingTop: 30,
-  },
-  sectionTitle: { fontFamily: AppFonts.semibold, fontSize: 20, letterSpacing: -0.3 },
-  filterScroller: { marginHorizontal: -20 },
-  filters: { gap: 8, paddingHorizontal: 20, paddingVertical: 14 },
-  filter: {
-    alignItems: 'center',
-    borderRadius: 24,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 48,
-    paddingHorizontal: 18,
-  },
-  filterLabel: { fontFamily: AppFonts.medium, fontSize: 13 },
-  tableHeader: {
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  tableHeading: { fontFamily: AppFonts.medium, fontSize: 11 },
-  tableRow: {
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    minHeight: 72,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-  },
-  selectedTableRow: { borderRadius: 14 },
-  tableCell: { fontFamily: AppFonts.regular, fontSize: 13 },
-  operationColumn: { flex: 1, minWidth: 0, paddingRight: 12 },
-  statusColumn: { width: 90 },
-  startedColumn: { width: 100 },
-  latencyColumn: { width: 88 },
-  tokensColumn: { textAlign: 'right', width: 72 },
-  traceName: { fontFamily: AppFonts.medium, fontSize: 14 },
-  traceKind: { fontFamily: AppFonts.regular, fontSize: 11, marginTop: 4 },
-  statusBadge: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    borderRadius: 12,
-    flexDirection: 'row',
-    gap: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-  },
-  statusDot: { borderRadius: 4, height: 8, width: 8 },
-  statusText: { fontFamily: AppFonts.medium, fontSize: 11 },
-  mobileRow: {
-    borderBottomWidth: 1,
-    gap: 9,
-    minHeight: 78,
-    paddingHorizontal: 2,
-    paddingVertical: 15,
-  },
-  // Net horizontal inset matches mobileRow, so selecting a row does not shift its content.
-  selectedMobileRow: { borderRadius: 14, marginHorizontal: -10, paddingHorizontal: 12 },
-  mobilePrimaryRow: { alignItems: 'center', flexDirection: 'row', gap: 9 },
-  mobileTraceName: { flex: 1, fontSize: 15 },
-  mobileTime: { fontFamily: AppFonts.regular, fontSize: 12 },
-  mobileMetadata: { alignItems: 'center', flexDirection: 'row', gap: 8, paddingLeft: 17 },
-  mobileMetaText: { flexShrink: 1, fontFamily: AppFonts.regular, fontSize: 12 },
-  metaDivider: { borderRadius: 2, height: 3, width: 3 },
-  stateLoader: { paddingVertical: Spacing.six },
-  state: { alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingVertical: 54 },
-  stateTitle: { fontFamily: AppFonts.semibold, fontSize: 17, textAlign: 'center' },
-  stateCopy: {
-    fontFamily: AppFonts.regular,
-    fontSize: 14,
-    lineHeight: 21,
-    maxWidth: 360,
-    textAlign: 'center',
-  },
-  retryButton: {
-    borderRadius: 16,
-    justifyContent: 'center',
-    marginTop: 8,
-    minHeight: 48,
-    paddingHorizontal: 20,
-  },
-  retryLabel: { fontFamily: AppFonts.semibold, fontSize: 14 },
-  footerLoader: { paddingVertical: 24 },
-  listEnd: { fontFamily: AppFonts.regular, fontSize: 12, paddingVertical: 24, textAlign: 'center' },
+  content: { alignSelf: 'center', flexGrow: 1, width: '100%' },
+  footer: { paddingVertical: 24 },
+  listEnd: { paddingVertical: 24, textAlign: 'center' },
 });

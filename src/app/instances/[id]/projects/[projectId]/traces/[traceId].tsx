@@ -1,9 +1,12 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
+import { Platform } from 'react-native';
 
 import { usePxiHeaderOptions } from '@/components/pxi-header-button';
-import { findRootSpan, TraceDetailView } from '@/components/traces/trace-detail';
+import { TraceDetailView } from '@/components/traces/trace-detail';
+import { traceMoreMenu } from '@/components/traces/trace-detail-actions';
 import { nativeHeaderTitle, useDuoLayout } from '@/features/duo/layout';
-import { usePhoenixProjects, usePhoenixTrace } from '@/hooks/use-phoenix-data';
+import { usePhoenixProjects } from '@/hooks/use-phoenix-data';
 import { useInstanceStore } from '@/store/instances';
 
 export default function TraceDetailScreen() {
@@ -14,28 +17,46 @@ export default function TraceDetailScreen() {
   }>();
 
   const { systemBarEdge } = useDuoLayout();
+  const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
 
   const instance = useInstanceStore((state) =>
     state.instances.find((candidate) => candidate.id === id),
   );
 
-  // The header shares query keys with TraceDetailView, so these read the same cache entries.
+  // Shares its query key with TraceDetailView, so this reads the same cache entry.
   const projects = usePhoenixProjects(instance);
   const project = projects.data?.find((candidate) => candidate.id === projectId);
-  const trace = usePhoenixTrace(instance, projectId, traceId);
-  const root = findRootSpan(trace.data ?? []);
   const pxiHeader = usePxiHeaderOptions(instance);
+
+  // The page opens with the root span's name, so the bar says only what this is.
+  const title = nativeHeaderTitle(systemBarEdge, 'Trace');
+  const barActions = Platform.OS === 'ios' && instance !== undefined;
 
   return (
     <>
       <Stack.Screen
-        options={{
-          headerBackTitle: project?.name ?? 'Traces',
-          title: nativeHeaderTitle(systemBarEdge, root?.name ?? 'Trace'),
-          ...pxiHeader,
-        }}
+        options={
+          barActions
+            ? {
+                headerBackTitle: project?.name ?? 'Traces',
+                title,
+                // Trailing items stack from the far end: PXI last sits at the top of a vertical bar.
+                unstable_headerRightItems: (props) => [
+                  traceMoreMenu({ baseUrl: instance.baseUrl, spanId: selectedSpanId, traceId }),
+                  ...(pxiHeader.unstable_headerRightItems?.(props) ?? []),
+                ],
+              }
+            : { headerBackTitle: project?.name ?? 'Traces', title, ...pxiHeader }
+        }
       />
-      <TraceDetailView instanceId={id} projectId={projectId} traceId={traceId} />
+      <TraceDetailView
+        actionsInBar={barActions}
+        instanceId={id}
+        onSelectSpan={setSelectedSpanId}
+        projectId={projectId}
+        selectedSpanId={selectedSpanId}
+        traceId={traceId}
+      />
     </>
   );
 }

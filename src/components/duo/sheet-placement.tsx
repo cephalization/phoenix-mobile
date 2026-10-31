@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 
 import { useDuoLayout } from '@/features/duo/layout';
 
-import { setSheetPlacement } from '../../../modules/duo-sheets';
+import { setSheetPlacement } from '../../../modules/duo-native';
 
 /**
  * Keeps native form sheets beside the vertical system bar on a regular-width

@@ -1,15 +1,19 @@
+import * as Clipboard from 'expo-clipboard';
 import { Highlight } from 'prism-react-renderer';
 import type { ComponentProps, ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { MotionPressable } from '@/components/motion-pressable';
 import { codeColors, createPrismTheme } from '@/constants/code-theme';
-import { Colors, Fonts, useAppColors } from '@/constants/theme';
+import { Colors, Fonts, Type, useAppColors } from '@/constants/theme';
+import { haptics } from '@/lib/haptics';
 
 const MAX_CODE_LENGTH = 40_000;
 
 /**
- * Fenced code with Phoenix's Pierre syntax colors and Geist Mono. Mirrors the
- * `JsonBlock` chrome so mixed replies read as one surface.
+ * Fenced code with Phoenix's Pierre syntax colors and Geist Mono. Code is
+ * content, so it keeps its code background; the chrome is a hairline and a
+ * quiet header with the language and Copy.
  */
 export function CodeBlock({
   code,
@@ -21,11 +25,11 @@ export function CodeBlock({
   onInteraction?: () => void;
 }) {
   const colors = useAppColors();
-  const dark = colors.background === Colors.dark.background;
+  const dark = colors.text === Colors.dark.text;
   const theme = createPrismTheme(codeColors(dark), colors.text);
   const truncated = code.length > MAX_CODE_LENGTH;
   const source = truncated ? `${code.slice(0, MAX_CODE_LENGTH)}\n…` : code;
-  const label = language.length > 0 ? language.toUpperCase() : 'CODE';
+  const label = language.length > 0 ? language.toLowerCase() : 'code';
 
   return (
     <View
@@ -35,16 +39,23 @@ export function CodeBlock({
         { backgroundColor: colors.backgroundElement, borderColor: colors.border },
       ]}
     >
-      <View
-        style={[
-          styles.header,
-          { backgroundColor: colors.backgroundSelected, borderBottomColor: colors.border },
-        ]}
-      >
-        <Text style={[styles.language, { color: colors.textSecondary }]}>{label}</Text>
-        {truncated ? (
-          <Text style={[styles.truncated, { color: colors.textSecondary }]}>Truncated</Text>
-        ) : null}
+      <View style={[styles.header, { borderBottomColor: colors.separator }]}>
+        <Text style={[Type.mono, styles.language, { color: colors.textTertiary }]}>
+          {truncated ? `${label} · truncated` : label}
+        </Text>
+        <MotionPressable
+          accessibilityLabel={`Copy ${label} code`}
+          accessibilityRole="button"
+          haptic="selection"
+          hitSlop={8}
+          onPress={() => {
+            onInteraction?.();
+            void Clipboard.setStringAsync(code).then(haptics.success);
+          }}
+          style={styles.copy}
+        >
+          <Text style={[Type.label, { color: colors.textSecondary }]}>Copy</Text>
+        </MotionPressable>
       </View>
       <ScrollView
         contentContainerStyle={styles.content}
@@ -122,17 +133,22 @@ function renderLines(
 }
 
 const styles = StyleSheet.create({
-  block: { borderRadius: 11, borderWidth: 1, marginBottom: 12, overflow: 'hidden' },
+  block: {
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
   header: {
     alignItems: 'center',
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    minHeight: 32,
-    paddingHorizontal: 11,
+    minHeight: 34,
+    paddingLeft: 12,
   },
-  language: { fontFamily: Fonts.mono, fontSize: 10, letterSpacing: 0.7 },
-  truncated: { fontFamily: Fonts.mono, fontSize: 10 },
+  language: { flexShrink: 1, fontSize: 11 },
+  copy: { justifyContent: 'center', minHeight: 34, paddingHorizontal: 12 },
   content: { minWidth: '100%', padding: 12 },
   line: { fontFamily: Fonts.mono, fontSize: 13, lineHeight: 20 },
   italic: { fontStyle: 'italic' },

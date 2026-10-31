@@ -1,8 +1,8 @@
 Pod::Spec.new do |s|
-  s.name           = 'DuoSheets'
+  s.name           = 'DuoNative'
   s.version        = '1.0.0'
-  s.summary        = 'Places form sheets on the trailing side of iPhone Duo'
-  s.description    = 'Sets UISheetPresentationController.preferredPlacement for form sheets presented by react-native-screens.'
+  s.summary        = 'iPhone Duo layout metrics and trailing form sheets'
+  s.description    = 'Reports reserved regions, size class, and the vertical bar edge to JavaScript, and sets UISheetPresentationController.preferredPlacement for form sheets presented by react-native-screens.'
   s.author         = 'Phoenix Mobile'
   s.homepage       = 'https://docs.expo.dev/modules/get-started/'
   s.license        = { :type => 'MIT' }

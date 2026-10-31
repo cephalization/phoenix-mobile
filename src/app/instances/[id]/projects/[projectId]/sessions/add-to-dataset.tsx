@@ -1,11 +1,15 @@
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MotionPressable } from '@/components/motion-pressable';
-import { AppFonts, MaxContentWidth, useAppColors } from '@/constants/theme';
-import type { DatasetSummary } from '@/features/session-review/types';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ListRow, RowInset, RowSeparator } from '@/components/ui/list-row';
+import { SectionHeader } from '@/components/ui/section-header';
+import { AppFonts, Type, useAppColors } from '@/constants/theme';
+import { formatRelativeTime } from '@/lib/format';
 import { usePhoenixViewer } from '@/hooks/use-phoenix-data';
 import {
   useAddPhoenixSessionToDataset,
@@ -15,6 +19,7 @@ import {
 } from '@/hooks/use-phoenix-sessions';
 import { haptics } from '@/lib/haptics';
 import { useInstanceStore } from '@/store/instances';
+import { useContentColumnStyle } from '@/features/duo/layout';
 
 const NEW_DATASET = 'new';
 
@@ -27,6 +32,8 @@ export default function AddSessionToDatasetScreen() {
 
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
+  // Pads clear of iPhone Duo's vertical bar, which runs down a sheet's trailing edge.
+  const column = useContentColumnStyle(0);
   const instance = useInstanceStore((state) => state.instances.find((item) => item.id === id));
   const session = usePhoenixSession(instance, projectId, sessionId);
   const turns = usePhoenixSessionTurns(instance, projectId, session.data);
@@ -62,12 +69,17 @@ export default function AddSessionToDatasetScreen() {
 
   if (!instance) {
     return (
-      <View style={[styles.screen, { backgroundColor: colors.background }]}>
-        <Stack.Screen options={{ title: 'Add to dataset' }} />
-        <Text style={[styles.copy, styles.centered, { color: colors.textSecondary }]}>
-          This Phoenix connection is no longer on this device.
-        </Text>
-      </View>
+      <ScrollView
+        contentContainerStyle={styles.fill}
+        contentInsetAdjustmentBehavior="automatic"
+        style={[styles.screen, { backgroundColor: colors.background }]}
+      >
+        <EmptyState
+          message="This Phoenix connection is no longer on this device."
+          symbol={{ ios: 'questionmark.circle', android: 'help', web: 'help' }}
+          title="Instance not found"
+        />
+      </ScrollView>
     );
   }
 
@@ -100,24 +112,20 @@ export default function AddSessionToDatasetScreen() {
   return (
     <ScrollView
       automaticallyAdjustKeyboardInsets
-      contentContainerStyle={[styles.content, { paddingBottom: 28 + insets.bottom }]}
+      contentContainerStyle={[styles.content, column, { paddingBottom: 28 + insets.bottom }]}
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
       style={[styles.screen, { backgroundColor: colors.background }]}
     >
-      <Stack.Screen options={{ title: 'Add to dataset' }} />
       <View style={styles.intro}>
-        <Text style={[styles.title, { color: colors.text }]}>Save as examples</Text>
-        <Text style={[styles.copy, { color: colors.textSecondary }]}>
-          Add{' '}
+        <Text style={[Type.subhead, { color: colors.textSecondary }]}>
           {eligibleTurns.length > 0
-            ? `${eligibleTurns.length} turn${eligibleTurns.length === 1 ? '' : 's'} from this session`
-            : 'this session'}{' '}
-          to a Phoenix dataset for evals and experiments. Each example keeps a link back to its
-          source span.
+            ? `Adds ${eligibleTurns.length} turn${eligibleTurns.length === 1 ? '' : 's'} from this session as examples.`
+            : 'Adds this session’s turns as examples.'}{' '}
+          Each example links back to its source span.
         </Text>
         {skippedCount > 0 ? (
-          <Text style={[styles.skipNote, { color: colors.textSecondary }]}>
+          <Text style={[Type.subhead, { color: colors.textTertiary }]}>
             {skippedCount} turn{skippedCount === 1 ? ' has' : 's have'} no root span and will be
             skipped.
           </Text>
@@ -125,251 +133,177 @@ export default function AddSessionToDatasetScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator color={colors.accent} style={styles.loader} />
+        <EmptyState fill={false} loading title="Preparing this session" />
       ) : loadError ? (
-        <StateCard
-          action="Try again"
-          message={loadError.message}
-          onPress={() => {
-            void session.refetch();
-            void turns.refetch();
-            void datasets.refetch();
-            void viewer.refetch();
+        <EmptyState
+          action={{
+            label: 'Try again',
+            onPress: () => {
+              void session.refetch();
+              void turns.refetch();
+              void datasets.refetch();
+              void viewer.refetch();
+            },
           }}
+          fill={false}
+          message={loadError.message}
+          symbol={{ ios: 'exclamationmark.triangle', android: 'warning', web: 'warning' }}
           title="Couldn’t prepare this session"
         />
       ) : readOnly ? (
-        <StateCard
+        <EmptyState
+          fill={false}
           message="Your Phoenix Viewer role can browse datasets but cannot create them or add examples."
+          symbol={{ ios: 'lock', android: 'lock', web: 'lock' }}
           title="Read-only access"
         />
       ) : eligibleTurns.length === 0 ? (
-        <StateCard
+        <EmptyState
+          fill={false}
           message="None of this session’s turns have a root span, so there is nothing to save as an example."
+          symbol={{ ios: 'tray', android: 'inbox', web: 'inbox' }}
           title="No turns to add"
         />
       ) : (
         <>
-          <View style={[styles.optionList, { borderColor: colors.border }]}>
-            <DatasetOption
-              detail="Start a dataset with this session’s turns"
-              divider={false}
-              name="New dataset"
+          <View>
+            <SectionHeader label="Dataset" />
+            <ListRow
+              accessibilityLabel={`New dataset${creating ? ', selected' : ''}`}
+              leading={
+                <SymbolView
+                  name={{ ios: 'plus', android: 'add', web: 'add' }}
+                  size={15}
+                  tintColor={colors.text}
+                  weight="semibold"
+                />
+              }
               onPress={() => setSelection(NEW_DATASET)}
-              selected={creating}
+              title="New dataset"
+              trailing={creating ? <SelectedMark /> : null}
+              variant="flat"
             />
-            {sortedDatasets.map((dataset) => (
-              <DatasetOption
-                dataset={dataset}
-                divider
-                key={dataset.id}
-                name={dataset.name}
-                onPress={() => setSelection(dataset.name)}
-                selected={!creating && selection === dataset.name}
-              />
-            ))}
+            {creating ? (
+              <View style={styles.newFields}>
+                <TextInput
+                  accessibilityLabel="New dataset name"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onChangeText={setNewName}
+                  placeholder="Name"
+                  placeholderTextColor={colors.textTertiary}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: colors.backgroundElement,
+                      borderColor: colors.border,
+                      color: colors.text,
+                    },
+                  ]}
+                  value={newName}
+                />
+                <TextInput
+                  accessibilityLabel="New dataset description"
+                  onChangeText={setNewDescription}
+                  placeholder="Description (optional)"
+                  placeholderTextColor={colors.textTertiary}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: colors.backgroundElement,
+                      borderColor: colors.border,
+                      color: colors.text,
+                    },
+                  ]}
+                  value={newDescription}
+                />
+              </View>
+            ) : null}
+            {sortedDatasets.map((dataset) => {
+              const selected = !creating && selection === dataset.name;
+              const count = `${dataset.example_count} example${dataset.example_count === 1 ? '' : 's'}`;
+
+              return (
+                <View key={dataset.id}>
+                  <RowSeparator />
+                  <ListRow
+                    accessibilityLabel={`${dataset.name}, ${count}${selected ? ', selected' : ''}`}
+                    meta={formatRelativeTime(dataset.updated_at)}
+                    onPress={() => setSelection(dataset.name)}
+                    subtitle={dataset.description ? `${count} · ${dataset.description}` : count}
+                    title={dataset.name}
+                    trailing={selected ? <SelectedMark /> : null}
+                    variant="flat"
+                  />
+                </View>
+              );
+            })}
           </View>
 
-          {creating ? (
-            <View style={styles.newFields}>
-              <TextInput
-                accessibilityLabel="New dataset name"
-                autoCapitalize="none"
-                autoCorrect={false}
-                onChangeText={setNewName}
-                placeholder="Dataset name"
-                placeholderTextColor={colors.textSecondary}
-                style={[styles.input, { borderColor: colors.border, color: colors.text }]}
-                value={newName}
-              />
-              <TextInput
-                accessibilityLabel="New dataset description"
-                onChangeText={setNewDescription}
-                placeholder="Description (optional)"
-                placeholderTextColor={colors.textSecondary}
-                style={[styles.input, { borderColor: colors.border, color: colors.text }]}
-                value={newDescription}
-              />
-            </View>
-          ) : null}
-
-          {error ? (
-            <Text accessibilityRole="alert" style={[styles.error, { color: colors.danger }]}>
-              {error}
-            </Text>
-          ) : null}
-
-          <MotionPressable
-            accessibilityRole="button"
-            disabled={!canSubmit}
-            haptic="none"
-            onPress={() => void submit()}
-            style={[
-              styles.submitButton,
-              { backgroundColor: colors.accent, opacity: canSubmit ? 1 : 0.5 },
-            ]}
-          >
-            <Text style={[styles.submitLabel, { color: colors.accentForeground }]}>
-              {addToDataset.isPending
-                ? 'Adding...'
-                : `Add ${eligibleTurns.length} example${eligibleTurns.length === 1 ? '' : 's'}`}
-            </Text>
-          </MotionPressable>
+          <View style={styles.actions}>
+            {error ? (
+              <Text accessibilityRole="alert" style={[Type.subhead, { color: colors.danger }]}>
+                {error}
+              </Text>
+            ) : null}
+            <MotionPressable
+              accessibilityRole="button"
+              accessibilityState={{ busy: addToDataset.isPending, disabled: !canSubmit }}
+              disabled={!canSubmit}
+              haptic="none"
+              onPress={() => void submit()}
+              style={[
+                styles.submitButton,
+                { backgroundColor: colors.accent, opacity: canSubmit ? 1 : 0.4 },
+              ]}
+            >
+              <Text style={[styles.submitLabel, { color: colors.accentForeground }]}>
+                {addToDataset.isPending
+                  ? 'Adding…'
+                  : `Add ${eligibleTurns.length} example${eligibleTurns.length === 1 ? '' : 's'}`}
+              </Text>
+            </MotionPressable>
+          </View>
         </>
       )}
     </ScrollView>
   );
 }
 
-function DatasetOption({
-  dataset,
-  detail,
-  divider,
-  name,
-  onPress,
-  selected,
-}: {
-  dataset?: DatasetSummary;
-  detail?: string;
-  divider: boolean;
-  name: string;
-  onPress: () => void;
-  selected: boolean;
-}) {
-  const colors = useAppColors();
-
-  const description = dataset
-    ? `${dataset.example_count} example${dataset.example_count === 1 ? '' : 's'}${dataset.description ? ` · ${dataset.description}` : ''}`
-    : detail;
-
-  return (
-    <MotionPressable
-      accessibilityLabel={dataset ? `${name}, ${dataset.example_count} examples` : name}
-      accessibilityRole="radio"
-      accessibilityState={{ checked: selected }}
-      haptic={selected ? 'none' : 'selection'}
-      onPress={onPress}
-      style={[
-        styles.optionRow,
-        divider && { borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth },
-      ]}
-    >
-      <View style={[styles.radio, { borderColor: selected ? colors.accent : colors.border }]}>
-        {selected ? <View style={[styles.radioDot, { backgroundColor: colors.accent }]} /> : null}
-      </View>
-      <View style={styles.optionCopy}>
-        <Text numberOfLines={1} style={[styles.optionName, { color: colors.text }]}>
-          {name}
-        </Text>
-        {description ? (
-          <Text numberOfLines={2} style={[styles.optionDetail, { color: colors.textSecondary }]}>
-            {description}
-          </Text>
-        ) : null}
-      </View>
-    </MotionPressable>
-  );
-}
-
-function StateCard({
-  action,
-  message,
-  onPress,
-  title,
-}: {
-  action?: string;
-  message: string;
-  onPress?: () => void;
-  title: string;
-}) {
+function SelectedMark() {
   const colors = useAppColors();
 
   return (
-    <View
-      style={[
-        styles.stateCard,
-        { backgroundColor: colors.backgroundElement, borderColor: colors.border },
-      ]}
-    >
-      <Text style={[styles.stateTitle, { color: colors.text }]}>{title}</Text>
-      <Text style={[styles.copy, { color: colors.textSecondary }]}>{message}</Text>
-      {action && onPress ? (
-        <MotionPressable
-          accessibilityRole="button"
-          onPress={onPress}
-          style={[styles.secondaryButton, { borderColor: colors.border }]}
-        >
-          <Text style={[styles.secondaryLabel, { color: colors.text }]}>{action}</Text>
-        </MotionPressable>
-      ) : null}
-    </View>
+    <SymbolView
+      name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+      size={15}
+      tintColor={colors.text}
+      weight="semibold"
+    />
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  content: {
-    alignSelf: 'center',
-    gap: 18,
-    maxWidth: MaxContentWidth,
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    width: '100%',
-  },
-  centered: { padding: 28, textAlign: 'center' },
-  intro: { gap: 8 },
-  title: { fontFamily: AppFonts.semibold, fontSize: 28, letterSpacing: -0.7 },
-  copy: { fontFamily: AppFonts.regular, fontSize: 14, lineHeight: 21 },
-  skipNote: { fontFamily: AppFonts.medium, fontSize: 12, lineHeight: 17 },
-  loader: { paddingVertical: 48 },
-  optionList: { borderRadius: 18, borderWidth: 1, overflow: 'hidden' },
-  optionRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 14,
-    minHeight: 64,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  radio: {
-    alignItems: 'center',
-    borderRadius: 14,
-    borderWidth: 1.5,
-    height: 26,
-    justifyContent: 'center',
-    width: 26,
-  },
-  radioDot: { borderRadius: 7, height: 14, width: 14 },
-  optionCopy: { flex: 1, gap: 3 },
-  optionName: { fontFamily: AppFonts.semibold, fontSize: 15 },
-  optionDetail: { fontFamily: AppFonts.regular, fontSize: 12, lineHeight: 17 },
-  newFields: { gap: 10 },
+  fill: { flexGrow: 1 },
+  content: { alignSelf: 'center', gap: 8, paddingTop: 12, width: '100%' },
+  intro: { gap: 4, paddingHorizontal: RowInset },
+  newFields: { gap: 8, paddingBottom: 12, paddingHorizontal: RowInset },
   input: {
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
     fontFamily: AppFonts.regular,
-    fontSize: 15,
-    minHeight: 50,
+    fontSize: 16,
+    minHeight: 48,
     paddingHorizontal: 14,
   },
-  error: { fontFamily: AppFonts.medium, fontSize: 13, lineHeight: 19 },
+  actions: { gap: 10, paddingHorizontal: RowInset, paddingTop: 16 },
   submitButton: {
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: 24,
     justifyContent: 'center',
-    minHeight: 52,
+    minHeight: 50,
     paddingHorizontal: 22,
   },
   submitLabel: { fontFamily: AppFonts.semibold, fontSize: 15 },
-  stateCard: { alignItems: 'flex-start', borderRadius: 18, borderWidth: 1, gap: 8, padding: 18 },
-  stateTitle: { fontFamily: AppFonts.semibold, fontSize: 17 },
-  secondaryButton: {
-    borderRadius: 14,
-    borderWidth: 1,
-    justifyContent: 'center',
-    marginTop: 5,
-    minHeight: 48,
-    paddingHorizontal: 16,
-  },
-  secondaryLabel: { fontFamily: AppFonts.semibold, fontSize: 14 },
 });

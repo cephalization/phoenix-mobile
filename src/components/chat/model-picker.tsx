@@ -1,9 +1,9 @@
 import { SymbolView } from 'expo-symbols';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { FlatList, StyleSheet } from 'react-native';
 
 import { ChatBottomSheet } from '@/components/chat/chat-bottom-sheet';
-import { MotionPressable } from '@/components/motion-pressable';
-import { AppFonts, useAppColors } from '@/constants/theme';
+import { ListRow, RowSeparator } from '@/components/ui/list-row';
+import { useAppColors } from '@/constants/theme';
 import { isSameModel } from '@/features/pxi/model-catalog';
 import type { ModelSelection, PxiModelOption } from '@/features/pxi/types';
 
@@ -22,80 +22,41 @@ export function ModelPicker({
 }) {
   const colors = useAppColors();
 
-  const subtitle =
-    options.length === 1
-      ? '1 recommended model available'
-      : `${options.length} recommended models available`;
-
-  const separator = <View style={[styles.separator, { backgroundColor: colors.border }]} />;
-
   return (
-    <ChatBottomSheet onClose={onClose} subtitle={subtitle} title="Choose a model" visible={visible}>
+    <ChatBottomSheet flush onClose={onClose} title="Model" visible={visible}>
       <FlatList
         contentContainerStyle={styles.listContent}
         data={options}
-        ItemSeparatorComponent={separator}
+        ItemSeparatorComponent={RowSeparator}
         keyExtractor={(option) => option.id}
         renderItem={({ item }) => {
           const isSelected = isSameModel(item.selection, selected);
 
           return (
-            <MotionPressable
-              accessibilityLabel={`${item.label}, ${item.providerLabel}`}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isSelected }}
-              haptic="selection"
+            <ListRow
+              accessibilityLabel={`${item.label}, ${item.providerLabel}${isSelected ? ', selected' : ''}`}
               onPress={() => onSelect(item.selection)}
-              scaleTo={0.99}
-              style={[styles.option, isSelected && { backgroundColor: colors.backgroundSelected }]}
-            >
-              <View style={styles.optionCopy}>
-                <Text numberOfLines={1} style={[styles.modelName, { color: colors.text }]}>
-                  {item.label}
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  style={[styles.providerName, { color: colors.textSecondary }]}
-                >
-                  {item.providerLabel}
-                </Text>
-              </View>
-              <View style={styles.selectionSlot}>
-                {isSelected ? (
+              subtitle={item.providerLabel}
+              title={item.label}
+              trailing={
+                isSelected ? (
                   <SymbolView
                     name={{ ios: 'checkmark', android: 'check', web: 'check' }}
-                    size={18}
-                    tintColor={colors.brand}
+                    size={16}
+                    tintColor={colors.text}
                     weight="semibold"
                   />
-                ) : null}
-              </View>
-            </MotionPressable>
+                ) : null
+              }
+              variant="flat"
+            />
           );
         }}
-        style={[
-          styles.list,
-          { backgroundColor: colors.backgroundElement, borderColor: colors.border },
-        ]}
       />
     </ChatBottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  list: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
   listContent: { paddingBottom: 20 },
-  separator: { height: StyleSheet.hairlineWidth, marginLeft: 14 },
-  option: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 11,
-    minHeight: 62,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  optionCopy: { flex: 1, gap: 2, minWidth: 0 },
-  modelName: { fontFamily: AppFonts.medium, fontSize: 15 },
-  providerName: { fontFamily: AppFonts.regular, fontSize: 12 },
-  selectionSlot: { alignItems: 'center', height: 28, justifyContent: 'center', width: 28 },
 });

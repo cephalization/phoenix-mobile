@@ -1,7 +1,9 @@
 import type { Types } from '@arizeai/phoenix-client';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import { compareVersions, getCachedServerVersion } from '@/features/session-review/api';
+import { inputExcerpt } from '@/features/traces/excerpt';
+import { isJsonObject } from '@/lib/json';
 import { createPhoenixClient } from '@/lib/phoenix';
 import type { PhoenixInstance } from '@/types/instance';
 
@@ -24,11 +26,14 @@ export type PhoenixTraceRange = {
 export type PhoenixTraceListItem = {
   endTime: string;
   id: string;
+  /** The root span's input on one line, when it has readable text. */
+  inputExcerpt: string | null;
   latencyMs: number;
   name: string;
   spanKind: string;
   startTime: string;
   statusCode: string;
+  statusMessage: string | null;
   tokenCountTotal: number | null;
   traceId: string;
 };
@@ -393,11 +398,13 @@ function traceItemFromSummary(
   return {
     endTime: trace.end_time,
     id: trace.id,
+    inputExcerpt: rootSpan ? rootInputExcerpt(rootSpan) : null,
     latencyMs: durationMs(trace.start_time, trace.end_time),
     name: rootSpan?.name ?? `Trace ${trace.trace_id.slice(-8)}`,
     spanKind: rootSpan?.span_kind ?? 'TRACE',
     startTime: trace.start_time,
     statusCode: rootSpan?.status_code ?? 'UNSET',
+    statusMessage: rootSpan?.status_message || null,
     tokenCountTotal: trace.token_count_total ?? null,
     traceId: trace.trace_id,
   };
@@ -407,16 +414,72 @@ function traceItemFromRootSpan(span: PhoenixSpan): PhoenixTraceListItem {
   return {
     endTime: span.end_time,
     id: span.id ?? span.context.trace_id,
+    inputExcerpt: rootInputExcerpt(span),
     latencyMs: durationMs(span.start_time, span.end_time),
     name: span.name,
     spanKind: span.span_kind,
     startTime: span.start_time,
     statusCode: span.status_code,
+    statusMessage: span.status_message || null,
     tokenCountTotal: null,
     traceId: span.context.trace_id,
   };
 }
 
+function rootInputExcerpt(span: PhoenixSpan) {
+  return inputExcerpt(isJsonObject(span.attributes) ? span.attributes['input.value'] : undefined);
+}
+
 function durationMs(startTime: string, endTime: string) {
   return Math.max(0, new Date(endTime).getTime() - new Date(startTime).getTime());
+}
+
+// Root-span lookups go out in chunks so the trace ID list stays a sane URL length.
+const OPENER_CHUNK_SIZE = 40;
+
+/**
+ * The opening input of each trace, keyed by trace ID, for titling list rows
+ * with what was asked. One root-span request per chunk of traces; the result
+ * never changes for a trace, so it is not refetched.
+ */
+export function usePhoenixTraceOpeners(
+  instance: PhoenixInstance | undefined,
+  projectId: string | undefined,
+  traceIds: string[],
+) {
+  return useQuery({
+    queryKey: [
+      ...phoenixQueryKeys.instance(instance?.id ?? 'missing'),
+      'trace-openers',
+      projectId ?? 'missing',
+      traceIds,
+    ],
+    queryFn: async (): Promise<Record<string, string>> => {
+      if (!instance || !projectId) throw new Error('Phoenix project not found.');
+      const client = await createPhoenixClient(instance);
+      const openers: Record<string, string> = {};
+
+      for (let start = 0; start < traceIds.length; start += OPENER_CHUNK_SIZE) {
+        const chunk = traceIds.slice(start, start + OPENER_CHUNK_SIZE);
+
+        const response = await client.GET('/v1/projects/{project_identifier}/spans', {
+          params: {
+            path: { project_identifier: projectId },
+            query: { limit: chunk.length * 2, parent_id: 'null', trace_id: chunk },
+          },
+        });
+
+        for (const span of response.data?.data ?? []) {
+          const excerpt = rootInputExcerpt(span);
+
+          if (excerpt !== null) openers[span.context.trace_id] = excerpt;
+        }
+      }
+
+      return openers;
+    },
+    enabled: Boolean(instance && projectId) && traceIds.length > 0,
+    placeholderData: keepPreviousData,
+    staleTime: Infinity,
+  });
 }

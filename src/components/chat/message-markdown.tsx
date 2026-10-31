@@ -8,7 +8,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { CodeBlock } from '@/components/chat/code-block';
 import { JsonBlock } from '@/components/json-block';
-import { AppFonts, Colors, Fonts, useAppColors } from '@/constants/theme';
+import { AppFonts, Colors, Fonts, Type, useAppColors } from '@/constants/theme';
 import { isJsonString } from '@/lib/json';
 
 export function MessageMarkdown({
@@ -21,7 +21,7 @@ export function MessageMarkdown({
   text: string;
 }) {
   const colors = useAppColors();
-  const dark = colors.background === Colors.dark.background;
+  const dark = colors.text === Colors.dark.text;
 
   // Blocks take the full column explicitly, and heading text may shrink inside
   // its row, so long headings and inline code wrap instead of running off screen.
@@ -30,86 +30,78 @@ export function MessageMarkdown({
       color: colors.text,
       fontFamily: AppFonts.regular,
       fontSize: 16,
-      lineHeight: 26,
+      lineHeight: 25,
       width: '100%',
     },
     textgroup: { flexShrink: 1 },
     paragraph: { marginBottom: 12, marginTop: 0 },
-    heading1: {
-      color: colors.text,
-      fontFamily: AppFonts.semibold,
-      fontSize: 24,
-      lineHeight: 31,
-      marginBottom: 10,
-      marginTop: 8,
-    },
+    heading1: { ...Type.title, color: colors.text, marginBottom: 8, marginTop: 10 },
     heading2: {
       color: colors.text,
       fontFamily: AppFonts.semibold,
-      fontSize: 21,
-      lineHeight: 28,
-      marginBottom: 9,
-      marginTop: 8,
+      fontSize: 19,
+      letterSpacing: -0.3,
+      lineHeight: 25,
+      marginBottom: 8,
+      marginTop: 10,
     },
     heading3: {
       color: colors.text,
       fontFamily: AppFonts.semibold,
-      fontSize: 18,
-      lineHeight: 25,
-      marginBottom: 8,
-      marginTop: 6,
+      fontSize: 17,
+      lineHeight: 23,
+      marginBottom: 6,
+      marginTop: 8,
     },
-    heading4: {
-      color: colors.text,
-      fontFamily: AppFonts.semibold,
-      fontSize: 16,
-      lineHeight: 24,
-      marginBottom: 7,
-      marginTop: 6,
-    },
-    heading5: { color: colors.text, fontFamily: AppFonts.semibold, fontSize: 15, lineHeight: 22 },
-    heading6: {
-      color: colors.textSecondary,
-      fontFamily: AppFonts.semibold,
-      fontSize: 14,
-      lineHeight: 21,
-    },
+    heading4: { ...Type.headline, color: colors.text, marginBottom: 6, marginTop: 8 },
+    heading5: { ...Type.headline, color: colors.text, marginBottom: 4, marginTop: 6 },
+    heading6: { ...Type.label, color: colors.textSecondary, marginBottom: 4, marginTop: 6 },
     strong: { fontFamily: AppFonts.semibold },
     em: { fontStyle: 'italic' },
-    link: { color: colors.brand, textDecorationLine: 'underline' },
-    blocklink: { borderColor: colors.border },
+    // Links stay monochrome; the underline is what marks them.
+    link: {
+      color: colors.text,
+      textDecorationColor: colors.textTertiary,
+      textDecorationLine: 'underline',
+    },
+    blocklink: { borderColor: colors.separator },
     bullet_list: { marginBottom: 10, marginTop: 2, width: '100%' },
     ordered_list: { marginBottom: 10, marginTop: 2, width: '100%' },
-    bullet_list_icon: { color: colors.textSecondary, marginLeft: 3, marginRight: 10 },
-    ordered_list_icon: { color: colors.textSecondary, marginLeft: 3, marginRight: 10 },
+    bullet_list_icon: { color: colors.textTertiary, marginLeft: 2, marginRight: 10 },
+    ordered_list_icon: {
+      color: colors.textTertiary,
+      fontFamily: Fonts.mono,
+      fontVariant: ['tabular-nums'],
+      marginLeft: 2,
+      marginRight: 10,
+    },
     list_item: { marginBottom: 4, width: '100%' },
     blockquote: {
-      backgroundColor: colors.backgroundSelected,
-      borderColor: colors.brandSecondary,
-      borderLeftWidth: 3,
-      borderRadius: 8,
+      backgroundColor: 'transparent',
+      borderColor: colors.border,
+      borderLeftWidth: 2,
       marginBottom: 12,
       marginLeft: 0,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+      paddingLeft: 12,
+      paddingVertical: 2,
       width: '100%',
     },
     code_inline: {
       backgroundColor: colors.backgroundSelected,
       borderColor: colors.border,
       borderRadius: 5,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       color: colors.text,
       fontFamily: Fonts.mono,
       fontSize: 14,
-      paddingHorizontal: 5,
-      paddingVertical: 2,
+      paddingHorizontal: 4,
+      paddingVertical: 1,
     },
     code_block: {
       backgroundColor: colors.backgroundElement,
       borderColor: colors.border,
-      borderRadius: 10,
-      borderWidth: 1,
+      borderRadius: 12,
+      borderWidth: StyleSheet.hairlineWidth,
       color: colors.text,
       fontFamily: Fonts.mono,
       fontSize: 13,
@@ -118,27 +110,26 @@ export function MessageMarkdown({
     },
     fence: {
       borderColor: colors.border,
-      borderRadius: 10,
-      borderWidth: 1,
+      borderRadius: 12,
+      borderWidth: StyleSheet.hairlineWidth,
       marginBottom: 12,
       width: '100%',
     },
     fence_header: {
-      backgroundColor: colors.backgroundSelected,
-      borderBottomColor: colors.border,
+      borderBottomColor: colors.separator,
       paddingHorizontal: 12,
       paddingVertical: 7,
     },
-    fence_language_label: { color: colors.textSecondary, fontFamily: Fonts.mono, fontSize: 11 },
+    fence_language_label: { color: colors.textTertiary, fontFamily: Fonts.mono, fontSize: 11 },
     fence_code: { backgroundColor: colors.backgroundElement, padding: 12 },
     fence_token: { fontFamily: Fonts.mono, fontSize: 13, lineHeight: 20 },
-    table: { borderColor: colors.border, borderRadius: 8, borderWidth: 1 },
-    tr: { borderBottomColor: colors.border, borderBottomWidth: 1 },
+    table: { borderColor: colors.border, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth },
+    tr: { borderBottomColor: colors.separator, borderBottomWidth: StyleSheet.hairlineWidth },
     // Columns share the width and wrap; the minimum keeps many-column tables
     // legible by letting the table scroll sideways instead of crushing cells.
-    th: { backgroundColor: colors.backgroundSelected, minWidth: 112, padding: 8 },
+    th: { minWidth: 112, padding: 8 },
     td: { minWidth: 112, padding: 8 },
-    hr: { backgroundColor: colors.border, height: 1, marginVertical: 14 },
+    hr: { backgroundColor: colors.separator, height: StyleSheet.hairlineWidth, marginVertical: 16 },
   };
 
   const rules = createRules(onInteraction);

@@ -4,29 +4,18 @@ import { useSafeAreaInsets, type EdgeInsets } from 'react-native-safe-area-conte
 
 import { MaxContentWidth } from '@/constants/theme';
 
-import { type DuoDisplay, type DuoPose, useDuoPreviewStore } from './preview-store';
+import { useNativeMetrics, type NativeLayoutMetrics } from './native-metrics';
 
 /**
- * iPhone Duo layout model for Expo SDK 57, which has no fold, hinge, or
- * reserved-region binding. Size classes follow Apple's rule that the outer
- * display is compact width and the inner display is regular width in every
- * orientation; the fold is modeled as a division region that is active only
- * while partially folded, matching `reservedRegions(kind: .division)`.
- * On a real Duo built with the 27.1 SDK the hinge comes from `expo-hinge`
- * (SDK 58); until then the division region is supplied by the preview harness.
+ * Layout model for iPhone Duo and other resizable windows. On iOS the size
+ * class, the vertical system bar, and the fold come from UIKit through the
+ * `duo-native` metrics view, measured for the native split column the reader
+ * sits in. Where that view is unavailable (Android, web, Expo Go) the width
+ * decides the size class and there is no fold.
  */
 
-/** Point sizes at 3x, portrait, from Apple's screenshot specifications. */
-export const DuoPoints = {
-  outer: { width: 466, height: 678 },
-  inner: { width: 669, height: 951 },
-} as const;
-
-/** Community breakpoint between the outer (466 pt) and inner (669 pt) widths. */
+/** Fallback breakpoint between compact and regular width where UIKit traits are unavailable. */
 export const RegularWidthBreakpoint = 600;
-
-/** Clearance Apple asks for around the fold for interactive content; the exact value is unpublished. */
-export const FoldMargin = 22;
 
 export type SizeClass = 'compact' | 'regular';
 
@@ -37,35 +26,23 @@ export type DivisionRegion = {
   axis: 'vertical' | 'horizontal';
   /** Frame including margins, in the viewport's coordinate space. */
   frame: Rect;
-  margins: number;
   isActive: boolean;
 };
 
 /**
  * Where the system keeps the status bar and navigation controls. iPhone Duo
  * stacks them in a vertical bar on the trailing edge (leading in a left Split
- * View app) everywhere except the inner display in portrait, which keeps the
- * horizontal bars every other iPhone has.
+ * View app) everywhere except the inner display in portrait.
  */
 export type SystemBarEdge = 'top' | 'leading' | 'trailing';
 
 /** Narrowest vertical bar the Duo reports; iPhones in landscape stay below it on at least one side. */
 const VerticalBarMinimumInset = 60;
 
-export type HingeState = {
-  status: 'closed' | 'partiallyOpen' | 'fullyOpen';
-  /** Degrees, 0 closed to 180 flat. */
-  angle: number;
-};
-
+/** A viewport narrower than the window, such as the stack beside a JavaScript PXI pane. */
 export type DuoViewport = {
   width: number;
   height: number;
-  /** `preview` when the harness frames the app at Duo point sizes. */
-  source: 'window' | 'preview';
-  display: DuoDisplay | 'unknown';
-  pose: DuoPose;
-  hinge: HingeState | null;
   systemBarEdge: SystemBarEdge;
 };
 
@@ -73,50 +50,11 @@ export const DuoViewportContext = createContext<DuoViewport | null>(null);
 
 export type DuoLayout = DuoViewport & {
   horizontalSizeClass: SizeClass;
-  verticalSizeClass: SizeClass;
   isRegularWidth: boolean;
   isLandscape: boolean;
-  /** The fold, whether or not it is active; null on devices without one. */
+  /** The active fold, or null when the device is flat, closed, or has no hinge. */
   division: DivisionRegion | null;
-  /** Usable regions either side of an active fold; a single region otherwise. */
-  regions: Rect[];
 };
-
-export function divisionFor(viewport: DuoViewport): DivisionRegion | null {
-  if (viewport.display !== 'inner') return null;
-  const isActive = viewport.pose !== 'flat';
-  const axis = viewport.pose === 'tabletop' ? 'horizontal' : 'vertical';
-  const thickness = isActive ? FoldMargin * 2 : 0;
-
-  const frame: Rect =
-    axis === 'vertical'
-      ? { x: viewport.width / 2 - thickness / 2, y: 0, width: thickness, height: viewport.height }
-      : { x: 0, y: viewport.height / 2 - thickness / 2, width: viewport.width, height: thickness };
-
-  return { axis, frame, margins: isActive ? FoldMargin : 0, isActive };
-}
-
-export function regionsFor(viewport: DuoViewport, division: DivisionRegion | null): Rect[] {
-  const whole: Rect = { x: 0, y: 0, width: viewport.width, height: viewport.height };
-
-  if (!division?.isActive) return [whole];
-
-  if (division.axis === 'vertical') {
-    const right = division.frame.x + division.frame.width;
-
-    return [
-      { x: 0, y: 0, width: division.frame.x, height: viewport.height },
-      { x: right, y: 0, width: viewport.width - right, height: viewport.height },
-    ];
-  }
-
-  const bottom = division.frame.y + division.frame.height;
-
-  return [
-    { x: 0, y: 0, width: viewport.width, height: division.frame.y },
-    { x: 0, y: bottom, width: viewport.width, height: viewport.height - bottom },
-  ];
-}
 
 /**
  * A vertical system bar shows up as a wide inset on one side only with no
@@ -151,76 +89,73 @@ export function insetsForPane(
 
 /**
  * The native title of a screen whose content already carries its own title.
- * With a vertical system bar an empty title lets the horizontal navigation bar
- * collapse, so the content starts at the top edge of the display.
+ * Beside a vertical system bar an empty title lets the horizontal navigation
+ * bar collapse, so the content starts at the top edge of the display.
  */
 export function nativeHeaderTitle(edge: SystemBarEdge, title: string): string {
   return edge === 'top' ? title : '';
 }
 
-export function sizeClassesFor(width: number, height: number): [SizeClass, SizeClass] {
-  const horizontal: SizeClass = width >= RegularWidthBreakpoint ? 'regular' : 'compact';
+function barEdgeFrom(metrics: NativeLayoutMetrics): SystemBarEdge {
+  switch (metrics.verticalBarEdge) {
+    case 'right':
+      return 'trailing';
+    case 'left':
+      return 'leading';
+    default:
+      return 'top';
+  }
+}
 
-  // Apple: the inner display is regular/regular in both orientations; the outer
-  // display is compact/compact in landscape, like other iPhones.
-  const vertical: SizeClass =
-    horizontal === 'regular' || height >= RegularWidthBreakpoint ? 'regular' : 'compact';
+function divisionFrom(metrics: NativeLayoutMetrics): DivisionRegion | null {
+  const region = metrics.reservedRegions.find((candidate) => candidate.kind === 'division');
 
-  return [horizontal, vertical];
+  if (!region) return null;
+
+  return {
+    axis: region.height >= region.width ? 'vertical' : 'horizontal',
+    frame: { x: region.x, y: region.y, width: region.width, height: region.height },
+    isActive: true,
+  };
 }
 
 export function useDuoLayout(): DuoLayout {
   const framed = useContext(DuoViewportContext);
+  const native = useNativeMetrics();
   const window = useWindowDimensions();
   const insets = useSafeAreaInsets();
+
+  if (framed === null && native !== null) {
+    const horizontalSizeClass = native.horizontalSizeClass;
+
+    // The usable width: a split's inspector overlays the detail column and
+    // shows up as a wide trailing safe-area inset, as does the vertical bar.
+    return {
+      width: native.width - native.safeArea.left - native.safeArea.right,
+      height: native.height,
+      systemBarEdge: barEdgeFrom(native),
+      horizontalSizeClass,
+      isRegularWidth: horizontalSizeClass === 'regular',
+      isLandscape: native.width > native.height,
+      division: divisionFrom(native),
+    };
+  }
 
   const viewport: DuoViewport = framed ?? {
     width: window.width,
     height: window.height,
-    source: 'window',
-    display: 'unknown',
-    pose: 'flat',
-    hinge: null,
     systemBarEdge: systemBarEdgeFor(insets),
   };
 
-  const [horizontalSizeClass, verticalSizeClass] = sizeClassesFor(viewport.width, viewport.height);
-  const division = divisionFor(viewport);
+  const horizontalSizeClass: SizeClass =
+    viewport.width >= RegularWidthBreakpoint ? 'regular' : 'compact';
 
   return {
     ...viewport,
     horizontalSizeClass,
-    verticalSizeClass,
     isRegularWidth: horizontalSizeClass === 'regular',
     isLandscape: viewport.width > viewport.height,
-    division,
-    regions: regionsFor(viewport, division),
-  };
-}
-
-/** The preview harness reads the store; the layout hook reads only the context it provides. */
-export function usePreviewViewport(): DuoViewport | null {
-  const enabled = useDuoPreviewStore((state) => state.enabled);
-  const display = useDuoPreviewStore((state) => state.display);
-  const orientation = useDuoPreviewStore((state) => state.orientation);
-  const pose = useDuoPreviewStore((state) => state.pose);
-  const hingeAngle = useDuoPreviewStore((state) => state.hingeAngle);
-
-  if (!enabled) return null;
-  const points = DuoPoints[display];
-  const portrait = orientation === 'portrait';
-
-  return {
-    width: portrait ? points.width : points.height,
-    height: portrait ? points.height : points.width,
-    source: 'preview',
-    display,
-    pose: display === 'outer' ? 'flat' : pose,
-    hinge: {
-      status: hingeAngle <= 5 ? 'closed' : hingeAngle >= 170 ? 'fullyOpen' : 'partiallyOpen',
-      angle: hingeAngle,
-    },
-    systemBarEdge: display === 'inner' && portrait ? 'top' : 'trailing',
+    division: null,
   };
 }
 

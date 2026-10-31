@@ -160,3 +160,12 @@ export const useInstanceStore = create<InstanceState>()(
     },
   ),
 );
+
+/** The instance the app is showing: the one last chosen, else the first stored. */
+export function useActiveInstance(): PhoenixInstance | undefined {
+  return useInstanceStore(
+    (state) =>
+      state.instances.find((instance) => instance.id === state.activeInstanceId) ??
+      state.instances[0],
+  );
+}

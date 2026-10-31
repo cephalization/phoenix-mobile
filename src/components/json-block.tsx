@@ -109,7 +109,7 @@ function serializeJson(value: JsonValue) {
 // Same scopes Phoenix's JSON editor colors through the Pierre theme: property
 // names, strings, and numbers/literals.
 function highlightJson(text: string, colors: ReturnType<typeof useAppColors>) {
-  const palette = codeColors(colors.background === Colors.dark.background);
+  const palette = codeColors(colors.text === Colors.dark.text);
   const children: ReactNode[] = [];
   let cursor = 0;
 

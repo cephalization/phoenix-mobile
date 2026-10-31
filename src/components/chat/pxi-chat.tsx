@@ -1,6 +1,6 @@
 import { useChat } from '@ai-sdk/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { SymbolView } from 'expo-symbols';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -24,7 +24,9 @@ import { SessionHistory, SessionHistoryRail } from '@/components/chat/session-hi
 import { DuoArrangement, useArrangementPane } from '@/components/duo/arrangement';
 import { MotionPressable } from '@/components/motion-pressable';
 import { PxiGlyph } from '@/components/pxi-glyph';
-import { AppFonts, MaxContentWidth, useAppColors } from '@/constants/theme';
+import { EmptyState } from '@/components/ui/empty-state';
+import { RowInset } from '@/components/ui/list-row';
+import { AppFonts, MaxContentWidth, Type, useAppColors } from '@/constants/theme';
 import { useDuoLayout } from '@/features/duo/layout';
 import { parseServerVersion } from '@/features/pxi/actions';
 import {
@@ -217,75 +219,61 @@ export function PxiChat({
   };
 
   const body = version.isPending ? (
-    <View style={styles.center}>
-      <ActivityIndicator color={colors.brand} />
-      <Text style={[styles.stateCopy, { color: colors.textSecondary }]}>Checking this server…</Text>
-    </View>
+    <EmptyState loading title="Checking this server…" />
   ) : version.isError ? (
-    <StateMessage
+    <EmptyState
+      action={{ label: 'Try again', onPress: () => void version.refetch() }}
+      message={version.error.message}
+      symbol={WarningSymbol}
       title="Couldn’t check this server"
-      copy={version.error.message}
-      action="Try again"
-      onAction={() => version.refetch()}
     />
   ) : versionSupported === false ? (
-    <StateMessage
+    <EmptyState
+      action={{ label: 'Check again', onPress: () => void version.refetch() }}
+      message={`PXI chat requires Phoenix ${PXI_AGENT_SESSIONS_MINIMUM_VERSION.join('.')} or newer; this server is ${version.data}.`}
+      symbol={{ ios: 'arrow.up.circle', android: 'upgrade', web: 'upgrade' }}
       title="Phoenix upgrade required"
-      copy={`PXI chat requires Phoenix ${PXI_AGENT_SESSIONS_MINIMUM_VERSION.join('.')} or newer; this server is ${version.data}.`}
-      action="Check again"
-      onAction={() => version.refetch()}
     />
   ) : sessions.isPending || sessionId === null ? (
-    <View style={styles.center}>
-      <ActivityIndicator color={colors.brand} />
-      <Text style={[styles.stateCopy, { color: colors.textSecondary }]}>Opening chats…</Text>
-    </View>
+    <EmptyState loading title="Opening chats…" />
   ) : sessions.isError ? (
-    <StateMessage
+    <EmptyState
+      action={{ label: 'Try again', onPress: () => void sessions.refetch() }}
+      message={formatPxiError(sessions.error)}
+      symbol={WarningSymbol}
       title="Couldn’t load chats"
-      copy={formatPxiError(sessions.error)}
-      action="Try again"
-      onAction={() => sessions.refetch()}
     />
   ) : catalog.isPending ? (
-    <View style={styles.center}>
-      <ActivityIndicator color={colors.brand} />
-      <Text style={[styles.stateCopy, { color: colors.textSecondary }]}>
-        Checking available models…
-      </Text>
-    </View>
+    <EmptyState loading title="Checking available models…" />
   ) : catalog.isError ? (
-    <StateMessage
+    <EmptyState
+      action={{ label: 'Try again', onPress: () => void catalog.refetch() }}
+      message={formatPxiError(catalog.error)}
+      symbol={WarningSymbol}
       title="PXI isn’t ready"
-      copy={formatPxiError(catalog.error)}
-      action="Try again"
-      onAction={() => catalog.refetch()}
     />
   ) : shouldRestoreSession && savedSession.isPending ? (
-    <View style={styles.center}>
-      <ActivityIndicator color={colors.brand} />
-      <Text style={[styles.stateCopy, { color: colors.textSecondary }]}>Restoring chat…</Text>
-    </View>
+    <EmptyState loading title="Restoring chat…" />
   ) : savedSession.isError ? (
-    <StateMessage
+    <EmptyState
+      action={{ label: 'Start new chat', onPress: startNewChat }}
+      message={formatPxiError(savedSession.error)}
+      symbol={WarningSymbol}
       title="Couldn’t restore this chat"
-      copy={formatPxiError(savedSession.error)}
-      action="Start new chat"
-      onAction={startNewChat}
     />
   ) : !selectedModel || catalog.data.options.length === 0 ? (
-    <StateMessage
+    <EmptyState
+      action={{ label: 'Check again', onPress: () => void catalog.refetch() }}
+      message="Configure a Phoenix-recommended agent model, then try again."
+      symbol={ModelSymbol}
       title="No recommended model is configured"
-      copy="Configure a Phoenix-recommended agent model, then try again."
-      action="Check again"
-      onAction={() => catalog.refetch()}
     />
   ) : requiresModelReplacement ? (
-    <StateMessage
+    <EmptyState
+      action={{ label: 'Use available model', onPress: () => void approveModelReplacement() }}
+      message={`This chat used ${savedModel?.modelName}. Continuing will switch it to ${selectedModel.modelName}.`}
+      symbol={ModelSymbol}
       title="Saved model is unavailable"
-      copy={`This chat used ${savedModel?.modelName}. Continuing will switch it to ${selectedModel.modelName}.`}
-      action="Use available model"
-      onAction={() => void approveModelReplacement()}
     />
   ) : (
     <ChatSession
@@ -316,9 +304,9 @@ export function PxiChat({
   const paneDivider =
     presentation === 'pane' && pane !== null && !pane.isFolded
       ? pane.axis === 'horizontal'
-        ? { borderLeftColor: colors.border, borderLeftWidth: StyleSheet.hairlineWidth }
+        ? { borderLeftColor: colors.separator, borderLeftWidth: StyleSheet.hairlineWidth }
         : pane.axis === 'vertical'
-          ? { borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth }
+          ? { borderTopColor: colors.separator, borderTopWidth: StyleSheet.hairlineWidth }
           : null
       : null;
 
@@ -330,81 +318,63 @@ export function PxiChat({
             style={[
               styles.header,
               {
-                borderBottomColor: colors.border,
+                borderBottomColor: colors.separator,
                 marginTop: insets.top,
-                paddingLeft: 12 + insets.left,
-                paddingRight: 12 + insets.right,
+                paddingLeft: 4 + insets.left,
+                paddingRight: 4 + insets.right,
               },
             ]}
           >
             {presentation === 'screen' && (
-              <MotionPressable
+              <HeaderIcon
                 accessibilityLabel="Close PXI"
-                accessibilityRole="button"
                 onPress={onClose}
-                style={styles.headerIcon}
-              >
-                <SymbolView
-                  name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
-                  size={23}
-                  tintColor={colors.text}
-                />
-              </MotionPressable>
+                symbol={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+              />
             )}
             {!showRail && (
-              <MotionPressable
+              <HeaderIcon
                 accessibilityLabel="Open chat history"
-                accessibilityRole="button"
                 onPress={() => setHistoryVisible(true)}
-                style={styles.headerIcon}
-              >
-                <SymbolView
-                  name={{ ios: 'clock.arrow.circlepath', android: 'history', web: 'history' }}
-                  size={21}
-                  tintColor={colors.text}
-                />
-              </MotionPressable>
+                symbol={{ ios: 'clock.arrow.circlepath', android: 'history', web: 'history' }}
+              />
             )}
             <View
               pointerEvents="none"
               style={[
                 styles.headerTitleGroup,
-                { left: 108 + insets.left, right: 108 + insets.right },
+                { left: 100 + insets.left, right: 100 + insets.right },
               ]}
             >
               <View style={styles.headerTitleRow}>
-                <PxiGlyph color={colors.brand} size={15} />
-                <Text numberOfLines={1} style={[styles.headerTitle, { color: colors.text }]}>
+                <PxiGlyph color={colors.brand} size={14} />
+                <Text
+                  accessibilityRole="header"
+                  numberOfLines={1}
+                  style={[styles.headerTitle, { color: colors.text }]}
+                >
                   PXI
                 </Text>
               </View>
-              <Text
-                numberOfLines={1}
-                style={[styles.instanceName, { color: colors.textSecondary }]}
-              >
+              <Text numberOfLines={1} style={[Type.label, { color: colors.textSecondary }]}>
                 {instance.name}
               </Text>
             </View>
-            <MotionPressable
-              accessibilityLabel="Start new chat"
-              accessibilityRole="button"
-              haptic="selection"
-              onPress={startNewChat}
-              style={styles.newButton}
-            >
-              <Text style={[styles.newText, { color: colors.text }]}>New</Text>
-            </MotionPressable>
-            {presentation === 'pane' && (
-              <MotionPressable
-                accessibilityLabel="Close PXI"
-                accessibilityRole="button"
-                haptic="selection"
-                onPress={onClose}
-                style={styles.doneButton}
-              >
-                <Text style={[styles.doneText, { color: colors.text }]}>Done</Text>
-              </MotionPressable>
-            )}
+            <View style={styles.headerTrailing}>
+              <HeaderIcon
+                accessibilityLabel="Start new chat"
+                onPress={startNewChat}
+                symbol={{ ios: 'square.and.pencil', android: 'edit_square', web: 'edit_square' }}
+              />
+              {presentation === 'pane' && (
+                <HeaderIcon
+                  accessibilityLabel="Close PXI"
+                  onPress={onClose}
+                  symbol={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                  weight="semibold"
+                />
+              )}
+            </View>
           </View>
 
           {showRail ? (
@@ -487,6 +457,7 @@ function ChatSession({
 
   const initialAnchorOpened = useRef(initialMessages.length === 0);
   const [showJump, setShowJump] = useState(false);
+  const [composerHeight, setComposerHeight] = useState(0);
   const [input, setInput] = useState('');
   const [wasStopped, setWasStopped] = useState(false);
   const submitting = useRef(false);
@@ -628,47 +599,17 @@ function ChatSession({
     else retry();
   };
 
+  const canSend = input.trim().length > 0;
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.chat}
     >
-      <View
-        style={[
-          styles.modelBar,
-          {
-            borderBottomColor: colors.border,
-            paddingLeft: 16 + insets.left,
-            paddingRight: 16 + insets.right,
-          },
-        ]}
-      >
-        <MotionPressable
-          accessibilityLabel={`Change model, currently ${modelLabel}`}
-          accessibilityRole="button"
-          onPress={onChooseModel}
-          style={[styles.modelButton, { backgroundColor: colors.backgroundSelected }]}
-        >
-          <View style={[styles.modelStatus, { backgroundColor: colors.success }]} />
-          <Text numberOfLines={1} style={[styles.modelLabel, { color: colors.text }]}>
-            {modelLabel}
-          </Text>
-          <View style={styles.modelChevron}>
-            <SymbolView
-              name={{ ios: 'chevron.up.chevron.down', android: 'unfold_more', web: 'unfold_more' }}
-              size={14}
-              tintColor={colors.textSecondary}
-              weight="medium"
-            />
-          </View>
-        </MotionPressable>
-        <Text style={[styles.readOnly, { color: colors.textSecondary }]}>Read-only</Text>
-      </View>
-
       <FlatList
         contentContainerStyle={[
           styles.transcript,
-          { paddingLeft: 18 + insets.left, paddingRight: 18 + insets.right },
+          { paddingLeft: RowInset + insets.left, paddingRight: RowInset + insets.right },
           messages.length === 0 && styles.emptyTranscript,
         ]}
         data={messages}
@@ -726,51 +667,66 @@ function ChatSession({
         <MotionPressable
           accessibilityLabel="Jump to latest response"
           accessibilityRole="button"
+          haptic="selection"
+          hitSlop={8}
           onPress={scrollToLatest}
-          style={[styles.jumpButton, { backgroundColor: colors.text, bottom: 116 + insets.bottom }]}
-        >
-          <Text style={[styles.jumpText, { color: colors.background }]}>Latest ↓</Text>
-        </MotionPressable>
-      )}
-
-      {(error || wasStopped) && (
-        <View
           style={[
-            styles.errorBar,
+            styles.jumpButton,
             {
-              backgroundColor: colors.backgroundSelected,
+              backgroundColor: colors.backgroundElement,
               borderColor: colors.border,
-              marginLeft: 16 + insets.left,
-              marginRight: 16 + insets.right,
+              bottom: composerHeight + 8,
             },
           ]}
         >
-          <Text style={[styles.errorText, { color: colors.text }]}>
-            {error ? formatPxiError(error) : 'Response stopped before it finished.'}
-          </Text>
-          {conflictError ? (
-            <MotionPressable accessibilityRole="button" haptic="selection" onPress={reload}>
-              <Text style={[styles.retryText, { color: colors.brand }]}>Reload chat</Text>
-            </MotionPressable>
-          ) : (
-            <MotionPressable accessibilityRole="button" haptic="selection" onPress={retry}>
-              <Text style={[styles.retryText, { color: colors.brand }]}>Retry</Text>
-            </MotionPressable>
-          )}
-        </View>
+          <SymbolView
+            name={{ ios: 'arrow.down', android: 'arrow_downward', web: 'arrow_downward' }}
+            size={11}
+            tintColor={colors.text}
+            weight="semibold"
+          />
+          <Text style={[Type.label, { color: colors.text }]}>Latest</Text>
+        </MotionPressable>
       )}
 
       <View
+        onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}
         style={[
-          styles.composerWrap,
+          styles.composerArea,
           {
-            borderTopColor: colors.border,
-            paddingBottom: insets.bottom,
+            paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
             paddingLeft: 12 + insets.left,
             paddingRight: 12 + insets.right,
           },
         ]}
       >
+        {(error || wasStopped) && (
+          <View accessibilityLiveRegion="polite" style={styles.notice}>
+            <SymbolView
+              name={
+                error
+                  ? WarningSymbol
+                  : { ios: 'stop.circle', android: 'stop_circle', web: 'stop_circle' }
+              }
+              size={13}
+              tintColor={error ? colors.danger : colors.textSecondary}
+            />
+            <Text style={[Type.subhead, styles.noticeText, { color: colors.textSecondary }]}>
+              {error ? formatPxiError(error) : 'Response stopped before it finished.'}
+            </Text>
+            <MotionPressable
+              accessibilityRole="button"
+              haptic="selection"
+              hitSlop={12}
+              onPress={conflictError ? reload : retry}
+            >
+              <Text style={[styles.noticeAction, { color: colors.text }]}>
+                {conflictError ? 'Reload chat' : 'Retry'}
+              </Text>
+            </MotionPressable>
+          </View>
+        )}
+
         <View
           style={[
             styles.composer,
@@ -783,36 +739,67 @@ function ChatSession({
             maxLength={12_000}
             multiline
             onChangeText={setInput}
-            placeholder="Ask about this Phoenix instance"
-            placeholderTextColor={colors.textSecondary}
+            placeholder="Ask PXI"
+            placeholderTextColor={colors.textTertiary}
             style={[styles.input, { color: colors.text }]}
             value={input}
           />
           <MotionPressable
             accessibilityLabel={isStreaming ? 'Stop response' : 'Send message'}
             accessibilityRole="button"
-            disabled={!isStreaming && input.trim().length === 0}
+            accessibilityState={{ disabled: !isStreaming && !canSend }}
+            disabled={!isStreaming && !canSend}
             haptic={isStreaming ? 'selection' : 'none'}
+            hitSlop={5}
             onPress={() =>
               isStreaming ? void stop().then(() => setWasStopped(true)) : void submit()
             }
             scaleTo={0.9}
             style={[
               styles.sendButton,
-              { backgroundColor: colors.accent },
-              !isStreaming && input.trim().length === 0 && styles.disabled,
+              {
+                backgroundColor: isStreaming || canSend ? colors.accent : colors.backgroundSelected,
+              },
             ]}
           >
-            {isStreaming ? (
-              <View style={[styles.stopIcon, { backgroundColor: colors.accentForeground }]} />
-            ) : (
-              <Text style={[styles.sendIcon, { color: colors.accentForeground }]}>↑</Text>
-            )}
+            <SymbolView
+              name={
+                isStreaming
+                  ? { ios: 'stop.fill', android: 'stop', web: 'stop' }
+                  : { ios: 'arrow.up', android: 'arrow_upward', web: 'arrow_upward' }
+              }
+              size={isStreaming ? 12 : 16}
+              tintColor={isStreaming || canSend ? colors.accentForeground : colors.textTertiary}
+              weight="bold"
+            />
           </MotionPressable>
         </View>
-        <Text style={[styles.disclaimer, { color: colors.textSecondary }]}>
-          PXI can make mistakes. Changes are disabled.
-        </Text>
+
+        <View style={styles.composerMeta}>
+          <MotionPressable
+            accessibilityHint="Changing the model starts a new chat"
+            accessibilityLabel={`Change model, currently ${modelLabel}`}
+            accessibilityRole="button"
+            haptic="selection"
+            hitSlop={8}
+            onPress={onChooseModel}
+            style={styles.modelChip}
+          >
+            <Text
+              numberOfLines={1}
+              style={[Type.label, styles.modelLabel, { color: colors.textSecondary }]}
+            >
+              {modelLabel}
+            </Text>
+            <SymbolView
+              name={{ ios: 'chevron.down', android: 'expand_more', web: 'expand_more' }}
+              size={9}
+              tintColor={colors.textTertiary}
+              weight="bold"
+            />
+          </MotionPressable>
+          <Text style={[Type.label, { color: colors.textTertiary }]}>Read-only</Text>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
@@ -824,19 +811,50 @@ function modelIdentity(model: ModelSelection): string {
     : `${model.provider}/${model.modelName}`;
 }
 
+const WarningSymbol: SymbolViewProps['name'] = {
+  ios: 'exclamationmark.triangle',
+  android: 'warning',
+  web: 'warning',
+};
+
+const ModelSymbol: SymbolViewProps['name'] = { ios: 'cpu', android: 'memory', web: 'memory' };
+
+function HeaderIcon({
+  accessibilityLabel,
+  onPress,
+  symbol,
+  weight = 'regular',
+}: {
+  accessibilityLabel: string;
+  onPress: () => void;
+  symbol: SymbolViewProps['name'];
+  weight?: SymbolViewProps['weight'];
+}) {
+  const colors = useAppColors();
+
+  return (
+    <MotionPressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      haptic="selection"
+      onPress={onPress}
+      scaleTo={0.92}
+      style={styles.headerIcon}
+    >
+      <SymbolView name={symbol} size={19} tintColor={colors.text} weight={weight} />
+    </MotionPressable>
+  );
+}
+
 function EmptyChat({ instanceName }: { instanceName: string }) {
   const colors = useAppColors();
 
   return (
-    <View style={styles.emptyChat}>
-      <View style={[styles.emptyGlyph, { backgroundColor: colors.accentSoft }]}>
-        <PxiGlyph color={colors.brand} size={30} />
-      </View>
-      <Text style={[styles.emptyTitle, { color: colors.text }]}>What should we investigate?</Text>
-      <Text style={[styles.emptyCopy, { color: colors.textSecondary }]}>
-        PXI can inspect projects, traces, sessions, and configuration on {instanceName}.
-      </Text>
-    </View>
+    <EmptyState
+      art={<PxiGlyph color={colors.brand} size={30} />}
+      message={`PXI can look through projects, traces, sessions, and configuration on ${instanceName}. It’s read-only and can make mistakes.`}
+      title="What should we investigate?"
+    />
   );
 }
 
@@ -847,49 +865,10 @@ function PendingAssistant() {
     <View
       accessibilityLabel="PXI is thinking"
       accessibilityRole="progressbar"
-      style={styles.pendingAssistant}
+      style={styles.pending}
     >
-      <View style={styles.pendingAssistantLabel}>
-        <PxiGlyph color={colors.brand} size={15} />
-        <Text style={[styles.pendingAssistantName, { color: colors.textSecondary }]}>PXI</Text>
-      </View>
-      <View style={styles.pendingAssistantState}>
-        <ActivityIndicator
-          color={colors.brand}
-          size="small"
-          style={styles.pendingAssistantSpinner}
-        />
-        <Text style={[styles.thinking, { color: colors.textSecondary }]}>Thinking…</Text>
-      </View>
-    </View>
-  );
-}
-
-function StateMessage({
-  action,
-  copy,
-  onAction,
-  title,
-}: {
-  action: string;
-  copy: string;
-  onAction: () => void;
-  title: string;
-}) {
-  const colors = useAppColors();
-
-  return (
-    <View style={styles.center}>
-      <PxiGlyph color={colors.brand} size={30} />
-      <Text style={[styles.stateTitle, { color: colors.text }]}>{title}</Text>
-      <Text style={[styles.stateCopy, { color: colors.textSecondary }]}>{copy}</Text>
-      <MotionPressable
-        accessibilityRole="button"
-        onPress={onAction}
-        style={[styles.stateButton, { backgroundColor: colors.accent }]}
-      >
-        <Text style={[styles.stateButtonText, { color: colors.accentForeground }]}>{action}</Text>
-      </MotionPressable>
+      <ActivityIndicator color={colors.textTertiary} size="small" style={styles.pendingSpinner} />
+      <Text style={[Type.subhead, { color: colors.textSecondary }]}>Thinking…</Text>
     </View>
   );
 }
@@ -899,152 +878,57 @@ const styles = StyleSheet.create({
   chat: { alignSelf: 'center', flex: 1, maxWidth: MaxContentWidth, width: '100%' },
   header: {
     alignItems: 'center',
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
-    minHeight: 58,
+    minHeight: 52,
   },
   headerIcon: { alignItems: 'center', height: 48, justifyContent: 'center', width: 48 },
-  headerTitleGroup: { alignItems: 'center', gap: 1, position: 'absolute' },
-  headerTitleRow: { alignItems: 'center', flexDirection: 'row', gap: 7 },
-  headerTitle: { fontFamily: AppFonts.semibold, fontSize: 16 },
-  instanceName: { fontFamily: AppFonts.regular, fontSize: 11, maxWidth: 220 },
-  newButton: {
-    alignItems: 'center',
-    height: 48,
-    justifyContent: 'center',
-    marginLeft: 'auto',
-    minWidth: 48,
-  },
-  newText: { fontFamily: AppFonts.medium, fontSize: 14 },
-  doneButton: {
-    alignItems: 'center',
-    height: 48,
-    justifyContent: 'center',
-    minWidth: 48,
-  },
-  doneText: { fontFamily: AppFonts.semibold, fontSize: 14 },
-  modelBar: {
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 48,
-    paddingHorizontal: 16,
-  },
-  modelButton: {
-    alignItems: 'center',
-    borderRadius: 12,
-    flexDirection: 'row',
-    gap: 7,
-    maxWidth: '72%',
-    minHeight: 34,
-    paddingHorizontal: 10,
-  },
-  modelStatus: { borderRadius: 4, height: 7, width: 7 },
-  modelLabel: { flexShrink: 1, fontFamily: AppFonts.medium, fontSize: 12 },
-  modelChevron: { alignItems: 'center', height: 24, justifyContent: 'center', width: 20 },
-  readOnly: {
-    fontFamily: AppFonts.medium,
-    fontSize: 11,
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
-  transcript: { gap: 28, paddingHorizontal: 18, paddingVertical: 24 },
+  headerTrailing: { flexDirection: 'row', marginLeft: 'auto' },
+  headerTitleGroup: { alignItems: 'center', position: 'absolute' },
+  headerTitleRow: { alignItems: 'center', flexDirection: 'row', gap: 6 },
+  headerTitle: { fontFamily: AppFonts.semibold, fontSize: 16, lineHeight: 20 },
+  transcript: { gap: 24, paddingBottom: 16, paddingTop: 20 },
   emptyTranscript: { flexGrow: 1 },
-  emptyChat: {
-    alignItems: 'center',
-    flex: 1,
-    gap: 12,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  emptyGlyph: {
-    alignItems: 'center',
-    borderRadius: 24,
-    height: 66,
-    justifyContent: 'center',
-    marginBottom: 5,
-    width: 66,
-  },
-  emptyTitle: {
-    fontFamily: AppFonts.semibold,
-    fontSize: 24,
-    letterSpacing: -0.5,
-    textAlign: 'center',
-  },
-  emptyCopy: {
-    fontFamily: AppFonts.regular,
-    fontSize: 15,
-    lineHeight: 22,
-    maxWidth: 380,
-    textAlign: 'center',
-  },
-  pendingAssistant: { gap: 11, paddingRight: 8 },
-  pendingAssistantLabel: { alignItems: 'center', flexDirection: 'row', gap: 7 },
-  pendingAssistantName: { fontFamily: AppFonts.semibold, fontSize: 12, letterSpacing: 0.5 },
-  pendingAssistantSpinner: { transform: [{ translateX: -1.5 }] },
-  pendingAssistantState: { alignItems: 'center', flexDirection: 'row', gap: 8, minHeight: 22 },
-  thinking: { fontFamily: AppFonts.regular, fontSize: 12, fontStyle: 'italic' },
-  center: { alignItems: 'center', flex: 1, gap: 12, justifyContent: 'center', padding: 28 },
-  stateTitle: {
-    fontFamily: AppFonts.semibold,
-    fontSize: 22,
-    letterSpacing: -0.4,
-    textAlign: 'center',
-  },
-  stateCopy: {
-    fontFamily: AppFonts.regular,
-    fontSize: 15,
-    lineHeight: 22,
-    maxWidth: 360,
-    textAlign: 'center',
-  },
-  stateButton: {
-    borderRadius: 14,
-    justifyContent: 'center',
-    marginTop: 4,
-    minHeight: 48,
-    paddingHorizontal: 17,
-  },
-  stateButtonText: { fontFamily: AppFonts.semibold, fontSize: 14 },
+  pending: { alignItems: 'center', flexDirection: 'row', gap: 6, minHeight: 24 },
+  pendingSpinner: { marginLeft: -4, transform: [{ scale: 0.8 }] },
   jumpButton: {
-    alignSelf: 'center',
-    borderRadius: 18,
-    bottom: 116,
-    minHeight: 38,
-    paddingHorizontal: 14,
-    position: 'absolute',
-    justifyContent: 'center',
-  },
-  jumpText: { fontFamily: AppFonts.medium, fontSize: 12 },
-  errorBar: {
     alignItems: 'center',
-    borderRadius: 14,
-    borderWidth: 1,
+    alignSelf: 'center',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 8,
-    padding: 11,
+    gap: 5,
+    justifyContent: 'center',
+    minHeight: 32,
+    paddingHorizontal: 12,
+    position: 'absolute',
   },
-  errorText: { flex: 1, fontFamily: AppFonts.regular, fontSize: 12, lineHeight: 17 },
-  retryText: { fontFamily: AppFonts.semibold, fontSize: 13 },
-  composerWrap: { borderTopWidth: 1, gap: 6, paddingTop: 10 },
-  composer: {
-    alignItems: 'flex-end',
-    borderRadius: 22,
-    borderWidth: 1,
+  composerArea: { gap: 4, paddingTop: 6 },
+  notice: {
+    alignItems: 'center',
     flexDirection: 'row',
     gap: 8,
-    minHeight: 54,
+    paddingBottom: 6,
+    paddingHorizontal: 8,
+  },
+  noticeText: { flex: 1 },
+  noticeAction: { fontFamily: AppFonts.semibold, fontSize: 13 },
+  composer: {
+    alignItems: 'flex-end',
+    borderRadius: 26,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: 8,
+    minHeight: 52,
     padding: 6,
-    paddingLeft: 15,
+    paddingLeft: 16,
   },
   input: {
     flex: 1,
     fontFamily: AppFonts.regular,
     fontSize: 16,
     lineHeight: 22,
-    maxHeight: 128,
+    maxHeight: 132,
     minHeight: 40,
     paddingBottom: 9,
     paddingTop: 9,
@@ -1052,13 +936,25 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     alignItems: 'center',
-    borderRadius: 18,
+    borderRadius: 20,
     height: 40,
     justifyContent: 'center',
     width: 40,
   },
-  disabled: { opacity: 0.28 },
-  sendIcon: { fontFamily: AppFonts.semibold, fontSize: 24, lineHeight: 27 },
-  stopIcon: { borderRadius: 2, height: 12, width: 12 },
-  disclaimer: { fontFamily: AppFonts.regular, fontSize: 10, paddingBottom: 3, textAlign: 'center' },
+  composerMeta: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 30,
+    paddingHorizontal: 12,
+  },
+  modelChip: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexShrink: 1,
+    gap: 4,
+    minHeight: 30,
+    paddingRight: 12,
+  },
+  modelLabel: { flexShrink: 1 },
 });

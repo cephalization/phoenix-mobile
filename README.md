@@ -38,7 +38,7 @@ macOS may ask whether Node can accept incoming connections the first time Metro 
 
 Everything the app uses is bundled in Expo Go except two things that need a [development build](#development-builds):
 
-- **Trailing sheets on iPhone Duo.** The local `modules/duo-sheets` module docks form sheets beside the vertical system bar on the open inner display. It is a no-op in Expo Go, so sheets dock to the leading edge there.
+- **iPhone Duo and iPad columns.** The native split columns and the trailing sheets need the vendored react-native-screens fork and the local `modules/duo-native` module, so Expo Go shows the single-stack layout and sheets dock to the leading edge on the open Duo.
 - **OAuth sign-in.** Authenticated Phoenix servers return to the app through the private `phoenixmobile://oauth/callback` redirect, which Expo Go does not own. Use unauthenticated instances in Expo Go.
 
 ## Run Phoenix locally
@@ -66,11 +66,11 @@ Send some traces to the server so the app has projects to show; the [Phoenix tra
 
 - Save multiple Phoenix server connections on-device
 - Verify a server before saving it
-- Display the Phoenix server version and projects through `@arizeai/phoenix-client`
+- Browse a server's projects, traces, and sessions in a flat, native layout (see [docs/design.md](./docs/design.md)), with the server version and status in Connections
 - Refresh server data through TanStack Query
 - Stream PXI conversations against persisted server-side agent sessions, with chat history shared across every PXI client (Phoenix 20.0.0+)
 - Run contextual PXI actions, like open coding a session into PXI notes that reviewers read before annotating (Phoenix 20.11.0+)
-- Support light, dark, mobile, tablet, and web layouts, with two-pane iPhone Duo layouts, trailing sheets, and a PXI companion column on the inner display (see [docs/iphone-duo-preview.md](./docs/iphone-duo-preview.md))
+- Support light, dark, mobile, tablet, and web layouts, with native split columns on iPhone Duo and iPad, trailing sheets, and PXI as the split's inspector (see [docs/iphone-duo.md](./docs/iphone-duo.md))
 - Connect to unauthenticated servers or Phoenix 19+ instances through native OAuth 2; web currently supports unauthenticated connections only
 
 ## Stack

@@ -64,7 +64,8 @@
       ],
       "expo-image",
       "expo-status-bar",
-      "expo-web-browser"
+      "expo-web-browser",
+      "./plugins/with-pxi-glyph"
     ],
     "experiments": {
       "typedRoutes": true,

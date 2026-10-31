@@ -9,16 +9,12 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import {
-  FoldMargin,
-  insetsForPane,
-  useDuoLayout,
-  type DivisionRegion,
-} from '@/features/duo/layout';
+import { insetsForPane, useDuoLayout, type DivisionRegion } from '@/features/duo/layout';
 
 /**
- * A JavaScript rendition of Apple's `ArrangementView` (iOS 27.1) for Expo SDK
- * 57. It holds a primary and a secondary pane and lays them out from the
+ * A JavaScript rendition of Apple's `ArrangementView` for screens that are not
+ * in native split columns (Android, web, and wide windows without the native
+ * split). It holds a primary and a secondary pane and lays them out from the
  * container size and the fold:
  *
  * - `split` places the panes side by side when the container is wider than
@@ -143,7 +139,13 @@ function planLayout({
   }
 
   // Folded splits snap to 50/50 around the fold; flat splits honor the ratio.
-  const gutter = folded ? FoldMargin * 2 : 0;
+  const gutter =
+    folded && division
+      ? division.axis === 'vertical'
+        ? division.frame.width
+        : division.frame.height
+      : 0;
+
   const share = folded ? 0.5 : ratio;
   const primaryTrailing = arrangement === 'overlay';
 

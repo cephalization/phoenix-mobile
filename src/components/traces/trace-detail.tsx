@@ -1,69 +1,69 @@
-import * as Clipboard from 'expo-clipboard';
-import * as WebBrowser from 'expo-web-browser';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { MotionPressable } from '@/components/motion-pressable';
-import { isJsonBlockValue, JsonBlock } from '@/components/json-block';
-import { AppFonts, Spacing, useAppColors } from '@/constants/theme';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ListRow, RowInset, RowSeparator } from '@/components/ui/list-row';
+import { SectionHeader } from '@/components/ui/section-header';
+import { StatusLabel, type StatusTone } from '@/components/ui/status-label';
+import { Type, useAppColors } from '@/constants/theme';
 import { useContentColumnStyle } from '@/features/duo/layout';
 import { type PhoenixSpan, usePhoenixProjects, usePhoenixTrace } from '@/hooks/use-phoenix-data';
-import { haptics } from '@/lib/haptics';
-import { isJsonNumber, isJsonObject, isJsonString, type JsonValue } from '@/lib/json';
+import { formatCompactNumber, formatDuration, formatRelativeTime } from '@/lib/format';
 import { useInstanceStore } from '@/store/instances';
 
-type TimelineItem = {
-  depth: number;
-  span: PhoenixSpan;
-};
+import { SpanTree } from './span-tree';
+import { copyId, openTraceInPhoenix } from './trace-detail-actions';
+import {
+  buildTimeline,
+  errorSummary,
+  findRootSpan,
+  primaryError,
+  shortId,
+  spanAttributes,
+  stringAttribute,
+  sumTokens,
+  traceWindow,
+} from './trace-detail-model';
+import { ContentValue, type KeyValue, KeyValueList } from './trace-detail-rows';
 
-type TokenCounts = {
-  completion: number;
-  prompt: number;
-  total: number;
-};
-
-const IMPORTANT_ATTRIBUTES: { key: string; label: string }[] = [
-  { key: 'llm.model_name', label: 'Model' },
-  { key: 'gen_ai.request.model', label: 'Requested model' },
-  { key: 'gen_ai.response.model', label: 'Response model' },
-  { key: 'tool.name', label: 'Tool' },
-  { key: 'session.id', label: 'Session' },
-  { key: 'llm.token_count.prompt', label: 'Prompt tokens' },
-  { key: 'llm.token_count.completion', label: 'Completion tokens' },
-  { key: 'llm.token_count.total', label: 'Total tokens' },
-  { key: 'input.value', label: 'Input' },
-  { key: 'output.value', label: 'Output' },
-];
+export { findRootSpan } from './trace-detail-model';
 
 /**
- * The trace detail body: hero, metrics, attention signals, span tree, and
- * actions. The trace route renders it full screen; the project feed renders it
- * `embedded` as the secondary pane of a regular-width split, where the hero
- * title is compacted because no navigation header names the trace.
+ * The trace detail body: the root span's name and one line of figures, the
+ * error if there is one, the trace's input and output, the span waterfall,
+ * and the trace's identifiers. The trace route renders it in its own column;
+ * the project feed renders it `embedded` as the secondary pane of a split.
+ *
+ * The selected span can be owned by the caller (`selectedSpanId` and
+ * `onSelectSpan`), so a route can offer "Copy span ID" in its bar. Set
+ * `actionsInBar` when the caller shows the trace actions as bar items; the
+ * page then drops its own action rows.
  */
 export function TraceDetailView({
-  embedded = false,
+  actionsInBar = false,
   instanceId,
+  onSelectSpan,
   projectId,
+  selectedSpanId,
   traceId,
 }: {
+  /** Accepted for the project feed's split pane; the page reads the same either way. */
   embedded?: boolean;
   instanceId: string;
   projectId: string;
   traceId: string;
+  selectedSpanId?: string | null;
+  onSelectSpan?: (spanId: string | null) => void;
+  actionsInBar?: boolean;
 }) {
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
-  const column = useContentColumnStyle(20);
+  const column = useContentColumnStyle(0);
+  const [localSelection, setLocalSelection] = useState<string | null>(null);
+  const selection = selectedSpanId === undefined ? localSelection : selectedSpanId;
+  const select = onSelectSpan ?? setLocalSelection;
 
   const instance = useInstanceStore((state) =>
     state.instances.find((candidate) => candidate.id === instanceId),
@@ -77,8 +77,9 @@ export function TraceDetailView({
 
   if (!instance) {
     return (
-      <UnavailableState
+      <EmptyState
         message="This Phoenix connection is no longer on this device."
+        symbol={{ android: 'cloud_off', ios: 'externaldrive.badge.xmark', web: 'cloud_off' }}
         title="Instance not found"
       />
     );
@@ -86,390 +87,207 @@ export function TraceDetailView({
 
   if (projects.isSuccess && !project) {
     return (
-      <UnavailableState
+      <EmptyState
         message="This project is no longer available on the connected instance."
+        symbol={{ android: 'folder_off', ios: 'folder.badge.questionmark', web: 'folder_off' }}
         title="Project not found"
       />
     );
   }
 
+  if (trace.isPending) return <EmptyState loading title="Loading trace" />;
+
+  if (trace.isError) {
+    return (
+      <EmptyState
+        action={{ label: 'Try again', onPress: () => void trace.refetch() }}
+        message={trace.error.message}
+        symbol={{ android: 'wifi_off', ios: 'wifi.exclamationmark', web: 'wifi_off' }}
+        title="Couldn’t load this trace"
+      />
+    );
+  }
+
+  if (!root) {
+    return (
+      <EmptyState
+        action={{ label: 'Refresh', onPress: () => void trace.refetch() }}
+        message="Phoenix returned no spans for this trace. Recent traces can take a moment to arrive."
+        symbol={{ android: 'search_off', ios: 'magnifyingglass', web: 'search_off' }}
+        title="Trace not found"
+      />
+    );
+  }
+
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      <ScrollView
-        contentContainerStyle={[styles.content, column, { paddingBottom: 28 + insets.bottom }]}
-        contentInsetAdjustmentBehavior="automatic"
-        refreshControl={
-          <RefreshControl
-            colors={[colors.brand]}
-            onRefresh={() => void trace.refetch()}
-            progressBackgroundColor={colors.backgroundElement}
-            refreshing={trace.isRefetching}
-            tintColor={colors.brand}
-          />
-        }
-      >
-        {trace.isPending ? (
-          <View style={styles.centerState}>
-            <ActivityIndicator color={colors.accent} />
-            <Text style={[styles.stateCopy, { color: colors.textSecondary }]}>
-              Loading trace details...
-            </Text>
-          </View>
-        ) : trace.isError ? (
-          <View style={styles.centerState}>
-            <Text style={[styles.stateTitle, { color: colors.text }]}>
-              Couldn&apos;t load this trace
-            </Text>
-            <Text style={[styles.stateCopy, { color: colors.textSecondary }]}>
-              {trace.error.message}
-            </Text>
-            <MotionPressable
-              accessibilityRole="button"
-              onPress={() => trace.refetch()}
-              style={[styles.primaryButton, { backgroundColor: colors.accent }]}
-            >
-              <Text style={[styles.primaryButtonLabel, { color: colors.accentForeground }]}>
-                Try again
-              </Text>
-            </MotionPressable>
-          </View>
-        ) : spans.length === 0 || !root ? (
-          <View style={styles.centerState}>
-            <Text style={[styles.stateTitle, { color: colors.text }]}>Trace not found</Text>
-            <Text style={[styles.stateCopy, { color: colors.textSecondary }]}>
-              Phoenix returned no spans for this trace.
-            </Text>
-          </View>
-        ) : (
-          <TraceContent
-            embedded={embedded}
-            instanceBaseUrl={instance.baseUrl}
-            root={root}
-            spans={spans}
-            traceId={traceId}
-          />
-        )}
-      </ScrollView>
-    </View>
+    <ScrollView
+      contentContainerStyle={[styles.content, column, { paddingBottom: 28 + insets.bottom }]}
+      contentInsetAdjustmentBehavior="automatic"
+      refreshControl={
+        <RefreshControl
+          colors={[colors.textSecondary]}
+          onRefresh={() => void trace.refetch()}
+          progressBackgroundColor={colors.backgroundElement}
+          refreshing={trace.isRefetching}
+          tintColor={colors.textSecondary}
+        />
+      }
+      style={[styles.screen, { backgroundColor: colors.background }]}
+    >
+      <TraceContent
+        actionsInBar={actionsInBar}
+        baseUrl={instance.baseUrl}
+        onSelectSpan={select}
+        root={root}
+        selectedSpanId={selection}
+        spans={spans}
+        traceId={traceId}
+      />
+    </ScrollView>
   );
 }
 
 function TraceContent({
-  embedded,
-  instanceBaseUrl,
+  actionsInBar,
+  baseUrl,
+  onSelectSpan,
   root,
+  selectedSpanId,
   spans,
   traceId,
 }: {
-  embedded: boolean;
-  instanceBaseUrl: string;
+  actionsInBar: boolean;
+  baseUrl: string;
   root: PhoenixSpan;
   spans: PhoenixSpan[];
   traceId: string;
+  selectedSpanId: string | null;
+  onSelectSpan: (spanId: string | null) => void;
 }) {
-  const colors = useAppColors();
-  const timeline = buildTimeline(spans);
-  const traceStart = Math.min(...spans.map((span) => new Date(span.start_time).getTime()));
-  const traceEnd = Math.max(...spans.map((span) => new Date(span.end_time).getTime()));
-  const duration = Math.max(0, traceEnd - traceStart);
+  const window = traceWindow(spans);
+  const timeline = buildTimeline(spans, window);
   const tokens = sumTokens(spans);
-  const errors = spans.filter((span) => span.status_code === 'ERROR');
+  const error = primaryError(spans, root);
+  const errorCount = spans.filter((span) => span.status_code === 'ERROR').length;
+  const input = spanAttributes(root)?.['input.value'];
+  const output = spanAttributes(root)?.['output.value'];
 
-  const slowest = [...spans]
-    .filter((span) => span.context.span_id !== root.context.span_id)
-    .sort((left, right) => spanDuration(right) - spanDuration(left))[0];
-
-  const largestTokenSpan = [...spans]
-    .filter((span) => tokenCounts(span).total > 0)
-    .sort((left, right) => tokenCounts(right).total - tokenCounts(left).total)[0];
-
-  const status = errors.length > 0 || root.status_code === 'ERROR' ? 'ERROR' : root.status_code;
+  const status: StatusTone =
+    errorCount > 0 ? 'error' : root.status_code === 'OK' ? 'ok' : 'neutral';
 
   return (
     <>
-      <View style={styles.hero}>
-        <View style={[styles.statusBadge, { backgroundColor: colors.backgroundSelected }]}>
-          <View style={[styles.statusDot, { backgroundColor: statusColor(status, colors) }]} />
-          <Text style={[styles.statusLabel, { color: statusColor(status, colors) }]}>
-            {formatStatus(status)}
-          </Text>
-        </View>
-        <Text style={[embedded ? styles.embeddedTitle : styles.title, { color: colors.text }]}>
-          {root.name}
-        </Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Started {formatDate(root.start_time)}
-        </Text>
-      </View>
+      <TraceHeader
+        duration={window.duration}
+        error={error}
+        errorCount={errorCount}
+        root={root}
+        status={status}
+        tokens={tokens.total}
+        traceId={traceId}
+      />
 
-      <View
-        style={[
-          styles.metrics,
-          { backgroundColor: colors.backgroundElement, borderColor: colors.border },
-        ]}
-      >
-        <Metric label="Duration" value={formatDuration(duration)} />
-        <Metric label="Spans" value={String(spans.length)} />
-        <Metric label="Prompt" value={formatCount(tokens.prompt)} />
-        <Metric label="Completion" value={formatCount(tokens.completion)} />
-      </View>
-
-      {errors.length > 0 || slowest || largestTokenSpan ? (
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Needs attention</Text>
-          <View style={[styles.attentionList, { borderColor: colors.border }]}>
-            {errors[0] ? (
-              <AttentionRow
-                label={errors.length === 1 ? 'Error' : `${errors.length} errors`}
-                span={errors[0]}
-                value={errorSummary(errors[0])}
-              />
-            ) : null}
-            {slowest ? (
-              <AttentionRow
-                label="Slowest span"
-                span={slowest}
-                value={formatDuration(spanDuration(slowest))}
-              />
-            ) : null}
-            {largestTokenSpan ? (
-              <AttentionRow
-                label="Largest token use"
-                span={largestTokenSpan}
-                value={`${formatCount(tokenCounts(largestTokenSpan).total)} tokens`}
-              />
-            ) : null}
+      {input != null ? (
+        <>
+          <SectionHeader label="Input" />
+          <View style={styles.payload}>
+            <ContentValue value={input} />
           </View>
-        </View>
+        </>
       ) : null}
 
-      <View style={styles.section}>
-        <View style={styles.sectionHeading}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Execution</Text>
-          <Text style={[styles.sectionMeta, { color: colors.textSecondary }]}>
-            {spans.length} spans
-          </Text>
-        </View>
-        <View style={[styles.timeline, { borderColor: colors.border }]}>
-          {timeline.map((item) => (
-            <SpanRow
-              item={item}
-              key={item.span.context.span_id}
-              traceDuration={duration}
-              traceStart={traceStart}
-            />
-          ))}
-        </View>
-      </View>
+      {output != null ? (
+        <>
+          <SectionHeader label="Output" />
+          <View style={styles.payload}>
+            <ContentValue value={output} />
+          </View>
+        </>
+      ) : null}
 
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Trace actions</Text>
-        <View style={styles.actions}>
-          <MotionPressable
-            accessibilityLabel="Copy trace ID"
-            accessibilityRole="button"
-            haptic="selection"
-            onPress={() => void Clipboard.setStringAsync(traceId).then(haptics.success)}
-            style={[
-              styles.actionButton,
-              { backgroundColor: colors.backgroundSelected, borderColor: colors.border },
-            ]}
-          >
-            <Text style={[styles.actionLabel, { color: colors.text }]}>Copy trace ID</Text>
-          </MotionPressable>
-          <MotionPressable
-            accessibilityLabel="Open trace in Phoenix"
-            accessibilityRole="button"
-            onPress={() =>
-              void WebBrowser.openBrowserAsync(
-                `${instanceBaseUrl.replace(/\/+$/, '')}/redirects/traces/${encodeURIComponent(traceId)}`,
-              )
-            }
-            style={[
-              styles.actionButton,
-              { backgroundColor: colors.backgroundSelected, borderColor: colors.border },
-            ]}
-          >
-            <Text style={[styles.actionLabel, { color: colors.text }]}>Open in Phoenix</Text>
-          </MotionPressable>
-        </View>
-        <Text selectable style={[styles.traceId, { color: colors.textSecondary }]}>
-          {traceId}
-        </Text>
-      </View>
+      <SectionHeader label={`Spans (${spans.length})`} />
+      <SpanTree
+        items={timeline}
+        onSelect={onSelectSpan}
+        selectedSpanId={selectedSpanId}
+        window={window}
+      />
+
+      <SectionHeader label="Details" />
+      <KeyValueList rows={detailRows(root, traceId, spans.length, tokens)} />
+
+      {actionsInBar ? null : (
+        <TraceActions baseUrl={baseUrl} selectedSpanId={selectedSpanId} traceId={traceId} />
+      )}
     </>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  const colors = useAppColors();
-
-  return (
-    <View style={styles.metric}>
-      <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>{label}</Text>
-      <Text numberOfLines={1} style={[styles.metricValue, { color: colors.text }]}>
-        {value}
-      </Text>
-    </View>
-  );
-}
-
-function AttentionRow({ label, span, value }: { label: string; span: PhoenixSpan; value: string }) {
-  const colors = useAppColors();
-
-  return (
-    <View style={[styles.attentionRow, { borderBottomColor: colors.border }]}>
-      <View style={styles.attentionCopy}>
-        <Text style={[styles.attentionLabel, { color: colors.textSecondary }]}>{label}</Text>
-        <Text numberOfLines={1} style={[styles.attentionName, { color: colors.text }]}>
-          {span.name}
-        </Text>
-      </View>
-      <Text
-        numberOfLines={2}
-        style={[
-          styles.attentionValue,
-          { color: span.status_code === 'ERROR' ? colors.danger : colors.textSecondary },
-        ]}
-      >
-        {value}
-      </Text>
-    </View>
-  );
-}
-
-function SpanRow({
-  item,
-  traceDuration,
-  traceStart,
+function TraceHeader({
+  duration,
+  error,
+  errorCount,
+  root,
+  status,
+  tokens,
+  traceId,
 }: {
-  item: TimelineItem;
-  traceDuration: number;
-  traceStart: number;
+  root: PhoenixSpan;
+  status: StatusTone;
+  duration: number;
+  tokens: number;
+  traceId: string;
+  error: PhoenixSpan | undefined;
+  errorCount: number;
 }) {
   const colors = useAppColors();
-  const [expanded, setExpanded] = useState(false);
-  const [rawExpanded, setRawExpanded] = useState(false);
-  const { depth, span } = item;
-  const duration = spanDuration(span);
-  const relativeStart = new Date(span.start_time).getTime() - traceStart;
+  const started = formatRelativeTime(root.start_time);
+  const startedLabel = /^\d+[mhd]$/.test(started) ? `${started} ago` : started;
+  const statusWord = status === 'error' ? 'Error' : status === 'ok' ? 'OK' : 'Unset';
+  const meta = [{ key: 'duration', text: formatDuration(duration) }];
 
-  const left =
-    traceDuration > 0 ? Math.min(96, Math.max(0, (relativeStart / traceDuration) * 100)) : 0;
+  if (tokens > 0) meta.push({ key: 'tokens', text: `${formatCompactNumber(tokens)} tok` });
+  meta.push({ key: 'id', text: shortId(traceId) }, { key: 'started', text: startedLabel });
 
-  const width =
-    traceDuration > 0 ? Math.min(100 - left, Math.max(4, (duration / traceDuration) * 100)) : 100;
+  const errorSource =
+    error && error.context.span_id !== root.context.span_id ? `in ${error.name}` : null;
 
-  // Span and event attributes are JSON objects parsed from the Phoenix response body.
-  const attributes = isJsonObject(span.attributes) ? span.attributes : null;
-  const events = eventEntries(span.events ?? []);
-
-  const importantAttributes = IMPORTANT_ATTRIBUTES.flatMap(({ key, label }) => {
-    const value = attributes?.[key];
-
-    return value == null ? [] : [{ key, label, value }];
-  });
-
-  const hasDetails = Boolean(
-    span.status_message || importantAttributes.length > 0 || span.events?.length || span.attributes,
-  );
+  const moreErrors = errorCount > 1 ? `${errorCount} spans failed` : null;
+  const errorContext = [errorSource, moreErrors].filter((part) => part !== null).join(' · ');
 
   return (
-    <View style={[styles.spanRow, { borderBottomColor: colors.border }]}>
-      <MotionPressable
-        accessibilityHint={hasDetails ? 'Shows span details' : undefined}
-        accessibilityLabel={`${span.name}, ${formatKind(span.span_kind)}, ${formatStatus(span.status_code)}, ${formatDuration(duration)}`}
-        accessibilityRole="button"
-        accessibilityState={{ expanded }}
-        disabled={!hasDetails}
-        onPress={() => setExpanded((current) => !current)}
-        style={styles.spanPressable}
+    <View style={styles.header}>
+      <Text selectable style={[Type.title, { color: colors.text }]}>
+        {root.name}
+      </Text>
+      <View
+        accessible
+        accessibilityLabel={`${statusWord}, ${formatDuration(duration)}${
+          tokens > 0 ? `, ${formatCompactNumber(tokens)} tokens` : ''
+        }, started ${startedLabel}`}
+        style={styles.meta}
       >
-        <View style={[styles.spanMain, { paddingLeft: Math.min(depth, 5) * 13 }]}>
-          <View style={[styles.kindRail, { backgroundColor: kindColor(span.span_kind, colors) }]} />
-          <View style={styles.spanCopy}>
-            <View style={styles.spanTitleRow}>
-              <Text numberOfLines={1} style={[styles.spanName, { color: colors.text }]}>
-                {span.name}
-              </Text>
-              <Text
-                style={[
-                  styles.spanDuration,
-                  { color: span.status_code === 'ERROR' ? colors.danger : colors.textSecondary },
-                ]}
-              >
-                {formatDuration(duration)}
-              </Text>
-              {hasDetails ? (
-                <Text style={[styles.disclosure, { color: colors.textSecondary }]}>
-                  {expanded ? '-' : '+'}
-                </Text>
-              ) : null}
-            </View>
-            <View style={styles.spanMetaRow}>
-              <Text style={[styles.spanKind, { color: colors.textSecondary }]}>
-                {formatKind(span.span_kind)}
-              </Text>
-              <Text style={[styles.spanStatus, { color: statusColor(span.status_code, colors) }]}>
-                {formatStatus(span.status_code)}
-              </Text>
-              {tokenCounts(span).total > 0 ? (
-                <Text style={[styles.spanKind, { color: colors.textSecondary }]}>
-                  {formatCount(tokenCounts(span).total)} tokens
-                </Text>
-              ) : null}
-            </View>
-            <View style={[styles.durationTrack, { backgroundColor: colors.backgroundSelected }]}>
-              <View
-                style={[
-                  styles.durationBar,
-                  {
-                    backgroundColor:
-                      span.status_code === 'ERROR'
-                        ? colors.danger
-                        : kindColor(span.span_kind, colors),
-                    left: `${left}%`,
-                    width: `${width}%`,
-                  },
-                ]}
-              />
-            </View>
-          </View>
-        </View>
-      </MotionPressable>
-
-      {expanded ? (
-        <View style={[styles.spanDetails, { backgroundColor: colors.backgroundSelected }]}>
-          {span.status_message ? (
-            <DetailValue label="Status message" value={span.status_message} />
-          ) : null}
-          {importantAttributes.map((attribute) => (
-            <DetailValue key={attribute.key} label={attribute.label} value={attribute.value} />
-          ))}
-          {events.map(({ event, key }) => (
-            <DetailValue
-              key={key}
-              label={`${event.name} at ${formatTime(event.timestamp)}`}
-              value={isJsonObject(event.attributes) ? event.attributes : {}}
-            />
-          ))}
-          {attributes && Object.keys(attributes).length > 0 ? (
-            <>
-              <MotionPressable
-                accessibilityRole="button"
-                accessibilityState={{ expanded: rawExpanded }}
-                onPress={() => setRawExpanded((current) => !current)}
-                style={styles.rawButton}
-              >
-                <Text style={[styles.rawButtonLabel, { color: colors.text }]}>
-                  {rawExpanded ? 'Hide all attributes' : 'All attributes'}
-                </Text>
-                <Text style={[styles.disclosure, { color: colors.textSecondary }]}>
-                  {rawExpanded ? '-' : '+'}
-                </Text>
-              </MotionPressable>
-              {rawExpanded ? <JsonBlock value={attributes} /> : null}
-            </>
+        {/* Unset is the usual state of a root span; only OK and Error say something. */}
+        {status === 'ok' || status === 'error' ? (
+          <StatusLabel label={statusWord} tone={status} />
+        ) : null}
+        {meta.map((part) => (
+          <Text
+            key={part.key}
+            numberOfLines={1}
+            style={[Type.mono, { color: colors.textSecondary }]}
+          >
+            {part.text}
+          </Text>
+        ))}
+      </View>
+      {error ? (
+        <View style={styles.error}>
+          <Text selectable style={[Type.body, { color: colors.danger }]}>
+            {errorSummary(error)}
+          </Text>
+          {errorContext ? (
+            <Text style={[Type.mono, { color: colors.textSecondary }]}>{errorContext}</Text>
           ) : null}
         </View>
       ) : null}
@@ -477,336 +295,113 @@ function SpanRow({
   );
 }
 
-function DetailValue({ label, value }: { label: string; value: JsonValue }) {
-  const colors = useAppColors();
-
-  return (
-    <View style={styles.detailValue}>
-      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>{label}</Text>
-      {isJsonBlockValue(value) ? (
-        <JsonBlock value={value} />
-      ) : (
-        <Text selectable style={[styles.detailCopy, { color: colors.text }]}>
-          {formatValue(value)}
-        </Text>
-      )}
-    </View>
-  );
-}
-
-function UnavailableState({ message, title }: { message: string; title: string }) {
-  const colors = useAppColors();
-
-  return (
-    <View style={[styles.centerState, styles.screen, { backgroundColor: colors.background }]}>
-      <Text style={[styles.stateTitle, { color: colors.text }]}>{title}</Text>
-      <Text style={[styles.stateCopy, { color: colors.textSecondary }]}>{message}</Text>
-    </View>
-  );
-}
-
-export function findRootSpan(spans: PhoenixSpan[]) {
-  return spans.find((span) => span.parent_id == null) ?? [...spans].sort(compareStart)[0];
-}
-
-function buildTimeline(spans: PhoenixSpan[]): TimelineItem[] {
-  const children = new Map<string | null, PhoenixSpan[]>();
-
-  for (const span of spans) {
-    const parentId = span.parent_id ?? null;
-    children.set(parentId, [...(children.get(parentId) ?? []), span]);
-  }
-
-  for (const siblings of children.values()) siblings.sort(compareStart);
-
-  const result: TimelineItem[] = [];
-  const visited = new Set<string>();
-
-  const visit = (span: PhoenixSpan, depth: number) => {
-    if (visited.has(span.context.span_id)) return;
-    visited.add(span.context.span_id);
-    result.push({ depth, span });
-
-    for (const child of children.get(span.context.span_id) ?? []) visit(child, depth + 1);
-  };
-
-  for (const root of children.get(null) ?? []) visit(root, 0);
-
-  for (const span of [...spans].sort(compareStart)) visit(span, 0);
-
-  return result;
-}
-
-function compareStart(left: PhoenixSpan, right: PhoenixSpan) {
-  return new Date(left.start_time).getTime() - new Date(right.start_time).getTime();
-}
-
-function spanDuration(span: PhoenixSpan) {
-  return Math.max(0, new Date(span.end_time).getTime() - new Date(span.start_time).getTime());
-}
-
-type SpanEvent = NonNullable<PhoenixSpan['events']>[number];
-
-/** Keys events by timestamp and name, disambiguating repeats without relying on list position. */
-function eventEntries(events: SpanEvent[]): { event: SpanEvent; key: string }[] {
-  const seen = new Map<string, number>();
-
-  return events.map((event) => {
-    const base = `${event.timestamp}:${event.name}`;
-    const occurrence = seen.get(base) ?? 0;
-    seen.set(base, occurrence + 1);
-
-    return { event, key: occurrence === 0 ? base : `${base}#${occurrence}` };
-  });
-}
-
-function numericAttribute(span: PhoenixSpan, key: string) {
-  const value = span.attributes?.[key];
-
-  if (isJsonNumber(value)) return value;
-
-  if (isJsonString(value)) {
-    const parsed = Number(value);
-
-    if (Number.isFinite(parsed)) return parsed;
-  }
-
-  return 0;
-}
-
-function tokenCounts(span: PhoenixSpan): TokenCounts {
-  const prompt =
-    numericAttribute(span, 'llm.token_count.prompt') ||
-    numericAttribute(span, 'gen_ai.usage.input_tokens');
-
-  const completion =
-    numericAttribute(span, 'llm.token_count.completion') ||
-    numericAttribute(span, 'gen_ai.usage.output_tokens');
-
-  const total = numericAttribute(span, 'llm.token_count.total') || prompt + completion;
-
-  return { completion, prompt, total };
-}
-
-function sumTokens(spans: PhoenixSpan[]): TokenCounts {
-  const tokenSpans = spans.filter((span) => span.span_kind.toUpperCase() === 'LLM');
-
-  return (tokenSpans.length > 0 ? tokenSpans : spans).reduce<TokenCounts>(
-    (total, span) => {
-      const counts = tokenCounts(span);
-
-      return {
-        completion: total.completion + counts.completion,
-        prompt: total.prompt + counts.prompt,
-        total: total.total + counts.total,
-      };
+function detailRows(
+  root: PhoenixSpan,
+  traceId: string,
+  spanCount: number,
+  tokens: ReturnType<typeof sumTokens>,
+): KeyValue[] {
+  const rows: KeyValue[] = [
+    { key: 'trace-id', label: 'Trace ID', mono: true, value: traceId },
+    { key: 'root-span-id', label: 'Root span ID', mono: true, value: root.context.span_id },
+    {
+      key: 'started',
+      label: 'Started',
+      mono: true,
+      value: new Date(root.start_time).toLocaleString([], {
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        month: 'short',
+        second: '2-digit',
+      }),
     },
-    { completion: 0, prompt: 0, total: 0 },
+    { key: 'spans', label: 'Spans', mono: true, value: String(spanCount) },
+  ];
+
+  if (tokens.total > 0) {
+    rows.push(
+      { key: 'prompt', label: 'Prompt tokens', mono: true, value: tokens.prompt.toLocaleString() },
+      {
+        key: 'completion',
+        label: 'Completion tokens',
+        mono: true,
+        value: tokens.completion.toLocaleString(),
+      },
+    );
+  }
+
+  const model = stringAttribute(root, 'llm.model_name');
+
+  if (model) rows.push({ key: 'model', label: 'Model', value: model });
+  const session = stringAttribute(root, 'session.id');
+
+  if (session) rows.push({ key: 'session', label: 'Session', mono: true, value: session });
+
+  return rows;
+}
+
+/** Android, web, and the project feed's split pane keep the bar's actions as rows. */
+function TraceActions({
+  baseUrl,
+  selectedSpanId,
+  traceId,
+}: {
+  baseUrl: string;
+  traceId: string;
+  selectedSpanId: string | null;
+}) {
+  const colors = useAppColors();
+
+  const glyph = (name: SymbolViewProps['name']) => (
+    <SymbolView name={name} size={16} tintColor={colors.text} />
   );
-}
 
-function errorSummary(span: PhoenixSpan) {
-  const exception = span.events?.find((event) => event.name.toLowerCase() === 'exception');
-  const message = exception?.attributes?.['exception.message'];
-
-  if (isJsonString(message) && message) return message;
-
-  return span.status_message || 'Error status';
-}
-
-function formatValue(value: JsonValue) {
-  if (isJsonString(value)) return value;
-
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
-
-function formatDuration(milliseconds: number) {
-  if (milliseconds < 1) return '<1 ms';
-
-  if (milliseconds < 1000) return `${Math.round(milliseconds)} ms`;
-
-  if (milliseconds < 10_000) return `${(milliseconds / 1000).toFixed(1)} s`;
-
-  return `${Math.round(milliseconds / 1000)} s`;
-}
-
-function formatCount(value: number) {
-  if (value < 1000) return String(Math.round(value));
-
-  if (value < 1_000_000) return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)}k`;
-
-  return `${(value / 1_000_000).toFixed(value < 10_000_000 ? 1 : 0)}m`;
-}
-
-function formatKind(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
-}
-
-function formatStatus(value: string) {
-  if (value === 'ERROR') return 'Error';
-
-  if (value === 'OK') return 'OK';
-
-  return 'Unset';
-}
-
-function formatDate(value: string) {
-  return new Date(value).toLocaleString([], {
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    month: 'short',
-    second: '2-digit',
-  });
-}
-
-function formatTime(value: string) {
-  return new Date(value).toLocaleTimeString([], {
-    hour: 'numeric',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-}
-
-function statusColor(status: string, colors: ReturnType<typeof useAppColors>) {
-  if (status === 'ERROR') return colors.danger;
-
-  if (status === 'OK') return colors.success;
-
-  return colors.textSecondary;
-}
-
-function kindColor(kind: string, colors: ReturnType<typeof useAppColors>) {
-  const normalized = kind.toUpperCase();
-
-  // DECISION (Phoenix 20.19+) sits in the LLM color family in the Phoenix UI.
-  if (normalized === 'LLM' || normalized === 'AGENT' || normalized === 'DECISION') {
-    return colors.brand;
-  }
-
-  if (normalized === 'TOOL' || normalized === 'RETRIEVER') return colors.brandSecondary;
-
-  return colors.textSecondary;
+  return (
+    <>
+      <SectionHeader label="Actions" />
+      <ListRow
+        leading={glyph({ android: 'content_copy', ios: 'doc.on.doc', web: 'content_copy' })}
+        meta={shortId(traceId)}
+        onPress={() => copyId(traceId)}
+        title="Copy trace ID"
+        variant="flat"
+      />
+      {selectedSpanId ? (
+        <>
+          <RowSeparator inset={RowInset + 30} />
+          <ListRow
+            leading={glyph({ android: 'tag', ios: 'number', web: 'tag' })}
+            meta={shortId(selectedSpanId)}
+            onPress={() => copyId(selectedSpanId)}
+            title="Copy span ID"
+            variant="flat"
+          />
+        </>
+      ) : null}
+      <RowSeparator inset={RowInset + 30} />
+      <ListRow
+        accessibilityLabel="Open trace in Phoenix"
+        leading={glyph({ android: 'open_in_new', ios: 'safari', web: 'open_in_new' })}
+        onPress={() => openTraceInPhoenix(baseUrl, traceId)}
+        title="Open in Phoenix"
+        variant="flat"
+      />
+    </>
+  );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  content: { alignSelf: 'center', paddingTop: 18, width: '100%' },
-  centerState: {
+  content: { alignSelf: 'center', width: '100%' },
+  header: { gap: 8, paddingBottom: 6, paddingHorizontal: RowInset, paddingTop: 12 },
+  meta: {
     alignItems: 'center',
-    gap: 10,
-    justifyContent: 'center',
-    minHeight: 360,
-    padding: 28,
-  },
-  stateTitle: { fontFamily: AppFonts.semibold, fontSize: 20 },
-  stateCopy: { fontFamily: AppFonts.regular, fontSize: 15, lineHeight: 22, textAlign: 'center' },
-  primaryButton: {
-    borderRadius: 16,
-    minHeight: 48,
-    justifyContent: 'center',
-    marginTop: 8,
-    paddingHorizontal: 20,
-  },
-  primaryButtonLabel: { fontFamily: AppFonts.semibold, fontSize: 15 },
-  hero: { alignItems: 'flex-start', gap: 8, paddingBottom: 24 },
-  statusBadge: {
-    alignItems: 'center',
-    borderRadius: 999,
-    flexDirection: 'row',
-    gap: 7,
-    minHeight: 30,
-    paddingHorizontal: 11,
-  },
-  statusDot: { borderRadius: 5, height: 8, width: 8 },
-  statusLabel: { fontFamily: AppFonts.semibold, fontSize: 13 },
-  title: { fontFamily: AppFonts.semibold, fontSize: 32, letterSpacing: -1, lineHeight: 38 },
-  embeddedTitle: {
-    fontFamily: AppFonts.semibold,
-    fontSize: 24,
-    letterSpacing: -0.6,
-    lineHeight: 30,
-  },
-  subtitle: { fontFamily: AppFonts.regular, fontSize: 14 },
-  metrics: {
-    borderRadius: 22,
-    borderWidth: 1,
+    columnGap: 12,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    overflow: 'hidden',
-    paddingVertical: 4,
+    rowGap: 4,
   },
-  metric: { flexBasis: '50%', gap: 4, maxWidth: '50%', paddingHorizontal: 18, paddingVertical: 14 },
-  metricLabel: { fontFamily: AppFonts.medium, fontSize: 12, textTransform: 'uppercase' },
-  metricValue: { fontFamily: AppFonts.semibold, fontSize: 20 },
-  section: { gap: 12, paddingTop: 30 },
-  sectionHeading: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  sectionTitle: { fontFamily: AppFonts.semibold, fontSize: 20, letterSpacing: -0.3 },
-  sectionMeta: { fontFamily: AppFonts.medium, fontSize: 13 },
-  attentionList: { borderRadius: 20, borderWidth: 1, overflow: 'hidden' },
-  attentionRow: {
-    alignItems: 'center',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: 14,
-    minHeight: 70,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  attentionCopy: { flex: 1, gap: 3 },
-  attentionLabel: { fontFamily: AppFonts.medium, fontSize: 12, textTransform: 'uppercase' },
-  attentionName: { fontFamily: AppFonts.semibold, fontSize: 15 },
-  attentionValue: {
-    fontFamily: AppFonts.medium,
-    fontSize: 13,
-    maxWidth: '42%',
-    textAlign: 'right',
-  },
-  timeline: { borderRadius: 20, borderWidth: 1, overflow: 'hidden' },
-  spanRow: { borderBottomWidth: StyleSheet.hairlineWidth },
-  spanPressable: {
-    minHeight: 82,
-    justifyContent: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  spanMain: { flexDirection: 'row', gap: 10 },
-  kindRail: { borderRadius: 2, width: 3 },
-  spanCopy: { flex: 1, gap: 7 },
-  spanTitleRow: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  spanName: { flex: 1, fontFamily: AppFonts.semibold, fontSize: 15 },
-  spanDuration: { fontFamily: AppFonts.medium, fontSize: 12 },
-  disclosure: { fontFamily: AppFonts.medium, fontSize: 20, textAlign: 'center', width: 18 },
-  spanMetaRow: { alignItems: 'center', flexDirection: 'row', gap: 10 },
-  spanKind: { fontFamily: AppFonts.medium, fontSize: 11, textTransform: 'uppercase' },
-  spanStatus: { fontFamily: AppFonts.semibold, fontSize: 11, textTransform: 'uppercase' },
-  durationTrack: { borderRadius: 3, height: 5, overflow: 'hidden', position: 'relative' },
-  durationBar: { borderRadius: 3, bottom: 0, position: 'absolute', top: 0 },
-  spanDetails: { gap: 16, paddingBottom: 18, paddingHorizontal: 18, paddingTop: 16 },
-  detailValue: { gap: 5 },
-  detailLabel: { fontFamily: AppFonts.medium, fontSize: 12, textTransform: 'uppercase' },
-  detailCopy: { fontFamily: AppFonts.regular, fontSize: 14, lineHeight: 20 },
-  rawButton: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 48,
-  },
-  rawButtonLabel: { fontFamily: AppFonts.semibold, fontSize: 14 },
-  actions: { flexDirection: 'row', gap: Spacing.two },
-  actionButton: {
-    alignItems: 'center',
-    borderRadius: 16,
-    borderWidth: 1,
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 50,
-    paddingHorizontal: 10,
-  },
-  actionLabel: { fontFamily: AppFonts.semibold, fontSize: 14 },
-  traceId: { fontFamily: 'monospace', fontSize: 11, lineHeight: 16, paddingHorizontal: 4 },
+  error: { gap: 2, paddingTop: 4 },
+  payload: { paddingBottom: 6, paddingHorizontal: RowInset, paddingTop: 4 },
 });

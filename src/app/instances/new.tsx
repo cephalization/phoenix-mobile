@@ -3,11 +3,14 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
+import { SymbolView } from 'expo-symbols';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -17,8 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
 import { MotionPressable } from '@/components/motion-pressable';
-import { PhoenixLogo } from '@/components/phoenix-logo';
-import { AppFonts, MaxContentWidth, useAppColors } from '@/constants/theme';
+import { AppFonts, Fonts, Type, useAppColors } from '@/constants/theme';
 import { runOAuthLogin } from '@/features/auth/login';
 import {
   assertPhoenix19,
@@ -38,6 +40,7 @@ import {
 } from '@/lib/phoenix';
 import { useInstanceStore } from '@/store/instances';
 import type { PhoenixInstance } from '@/types/instance';
+import { useContentColumnStyle } from '@/features/duo/layout';
 
 const connectionSchema = z.object({
   allowInsecureOAuth: z.boolean(),
@@ -58,6 +61,8 @@ type ConnectionLinkParams = { host?: string; name?: string };
 export default function NewInstanceScreen() {
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
+  // Pads clear of iPhone Duo's vertical bar, which runs down a sheet's trailing edge.
+  const column = useContentColumnStyle(20);
   const queryClient = useQueryClient();
   const reduceMotion = useReducedMotion();
   const linkParams = useLocalSearchParams<ConnectionLinkParams>();
@@ -202,7 +207,8 @@ export default function NewInstanceScreen() {
         queryClient.removeQueries({ queryKey: phoenixQueryKeys.instance(id) });
 
       if (!reduceMotion) await new Promise((resolve) => setTimeout(resolve, 480));
-      router.replace({ pathname: '/instances/[id]', params: { id: instance.id } });
+      useInstanceStore.getState().setActiveInstanceId(instance.id);
+      router.dismissTo('/');
     },
     onError: (error) => {
       setConnectionStatus('idle');
@@ -210,6 +216,8 @@ export default function NewInstanceScreen() {
       setError('root', { message: getConnectionError(error) });
     },
   });
+
+  const busy = connectionStatus === 'verifying' || connectionStatus === 'authorizing';
 
   const content = (
     <ScrollView
@@ -219,193 +227,149 @@ export default function NewInstanceScreen() {
       keyboardShouldPersistTaps="handled"
       style={[styles.screen, { backgroundColor: colors.background }]}
     >
-      <View style={[styles.content, { paddingBottom: 20 + insets.bottom }]}>
-        <View style={styles.heading}>
-          <View style={styles.connectionType}>
-            <PhoenixLogo size={25} />
-            <Text style={[styles.connectionTypeText, { color: colors.brand }]}>
-              Automatic authentication
-            </Text>
-          </View>
-          <Text style={[styles.title, { color: colors.text }]}>Connect your Phoenix</Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Enter the address of a running instance. We’ll verify it before anything is saved.
-          </Text>
-        </View>
-
-        <View style={styles.form}>
-          <Controller
-            control={control}
-            name="host"
-            render={({ field: { onBlur, onChange, value } }) => (
-              <View style={styles.field}>
-                <Text style={[styles.label, { color: colors.text }]}>Host and port</Text>
-                <TextInput
-                  accessibilityLabel="Phoenix host and port"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="url"
-                  onBlur={onBlur}
-                  onChangeText={onChange}
-                  placeholder="192.168.1.10:6006"
-                  placeholderTextColor={colors.textSecondary}
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: colors.backgroundSelected,
-                      borderColor: errors.host ? colors.danger : colors.border,
-                      color: colors.text,
-                    },
-                  ]}
-                  value={value}
-                />
-                {errors.host && (
-                  <Text style={[styles.error, { color: colors.danger }]}>
-                    {errors.host.message}
-                  </Text>
-                )}
-              </View>
-            )}
-          />
-
-          <Controller
-            control={control}
-            name="name"
-            render={({ field: { onBlur, onChange, value } }) => (
-              <View style={styles.field}>
-                <Text style={[styles.label, { color: colors.text }]}>Display name</Text>
-                <TextInput
-                  accessibilityLabel="Display name"
-                  autoCapitalize="words"
-                  onBlur={onBlur}
-                  onChangeText={onChange}
-                  placeholder="Local Phoenix (optional)"
-                  placeholderTextColor={colors.textSecondary}
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: colors.backgroundSelected,
-                      borderColor: errors.name ? colors.danger : colors.border,
-                      color: colors.text,
-                    },
-                  ]}
-                  value={value}
-                />
-                {errors.name && (
-                  <Text style={[styles.error, { color: colors.danger }]}>
-                    {errors.name.message}
-                  </Text>
-                )}
-              </View>
-            )}
-          />
-
-          <View
-            style={[
-              styles.notice,
-              { backgroundColor: colors.backgroundSelected, borderColor: colors.border },
-            ]}
-          >
-            <View style={styles.noticeHeader}>
-              <Text style={[styles.noticeTitle, { color: colors.text }]}>Authentication</Text>
-              <View style={[styles.soonBadge, { backgroundColor: colors.accentSoft }]}>
-                <Text style={[styles.soonBadgeText, { color: colors.brand }]}>OAUTH 2</Text>
-              </View>
+      <View style={[styles.content, column, { paddingBottom: 24 + insets.bottom }]}>
+        <Controller
+          control={control}
+          name="host"
+          render={({ field: { onBlur, onChange, value } }) => (
+            <View style={styles.field}>
+              <Text style={[Type.label, { color: colors.textSecondary }]}>Host and port</Text>
+              <TextInput
+                accessibilityLabel="Phoenix host and port"
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                onBlur={onBlur}
+                onChangeText={onChange}
+                placeholder="192.168.1.10:6006"
+                placeholderTextColor={colors.textTertiary}
+                style={[
+                  styles.input,
+                  styles.hostInput,
+                  {
+                    backgroundColor: colors.backgroundElement,
+                    borderColor: errors.host ? colors.danger : colors.border,
+                    color: colors.text,
+                  },
+                ]}
+                value={value}
+              />
+              {errors.host && (
+                <Text style={[Type.subhead, { color: colors.danger }]}>{errors.host.message}</Text>
+              )}
             </View>
-            <Text style={[styles.noticeCopy, { color: colors.textSecondary }]}>
-              Anonymous servers connect directly. Phoenix 19+ servers that require authentication
-              open a system-browser sign-in. OAuth uses HTTPS unless you explicitly allow local HTTP
-              below.
-            </Text>
-          </View>
+          )}
+        />
 
+        <Controller
+          control={control}
+          name="name"
+          render={({ field: { onBlur, onChange, value } }) => (
+            <View style={styles.field}>
+              <Text style={[Type.label, { color: colors.textSecondary }]}>Name</Text>
+              <TextInput
+                accessibilityLabel="Display name"
+                autoCapitalize="words"
+                onBlur={onBlur}
+                onChangeText={onChange}
+                placeholder="Optional, such as Local Phoenix"
+                placeholderTextColor={colors.textTertiary}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: colors.backgroundElement,
+                    borderColor: errors.name ? colors.danger : colors.border,
+                    color: colors.text,
+                  },
+                ]}
+                value={value}
+              />
+              {errors.name && (
+                <Text style={[Type.subhead, { color: colors.danger }]}>{errors.name.message}</Text>
+              )}
+            </View>
+          )}
+        />
+
+        <Text style={[Type.subhead, { color: colors.textSecondary }]}>
+          Phoenix Mobile checks the server before saving it. On a phone, use your computer’s LAN
+          address instead of localhost.
+        </Text>
+
+        <View style={[styles.optionGroup, { borderColor: colors.separator }]}>
           <Controller
             control={control}
             name="allowInsecureOAuth"
             render={({ field: { onChange, value } }) => (
-              <MotionPressable
-                accessibilityLabel="Allow OAuth credentials over insecure HTTP"
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: value }}
-                haptic="selection"
-                onPress={() => onChange(!value)}
-                style={[
-                  styles.insecureOption,
-                  { borderColor: value ? colors.danger : colors.border },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.checkbox,
-                    {
-                      backgroundColor: value ? colors.danger : 'transparent',
-                      borderColor: value ? colors.danger : colors.border,
-                    },
-                  ]}
-                >
-                  {value ? <Text style={styles.checkmark}>✓</Text> : null}
-                </View>
-                <View style={styles.insecureCopy}>
-                  <Text style={[styles.insecureTitle, { color: colors.text }]}>
-                    Allow local HTTP authentication
+              <View style={styles.switchRow}>
+                <View style={styles.switchCopy}>
+                  <Text style={[Type.headline, { color: colors.text }]}>
+                    Allow sign-in over HTTP
                   </Text>
-                  <Text style={[styles.noticeCopy, { color: colors.textSecondary }]}>
-                    Development only. Passwords and OAuth tokens can be intercepted on the network.
+                  <Text style={[Type.subhead, { color: colors.textSecondary }]}>
+                    Development only. Passwords and tokens can be intercepted on the network.
                   </Text>
                 </View>
-              </MotionPressable>
+                <Switch
+                  accessibilityLabel="Allow OAuth credentials over insecure HTTP"
+                  onValueChange={(next) => {
+                    haptics.selection();
+                    onChange(next);
+                  }}
+                  trackColor={{ false: colors.backgroundSelected, true: colors.danger }}
+                  value={value}
+                />
+              </View>
             )}
           />
-
-          {errors.root && (
-            <Text style={[styles.rootError, { color: colors.danger }]}>{errors.root.message}</Text>
-          )}
-
-          <MotionPressable
-            accessibilityLabel={
-              connectionStatus === 'idle' ? 'Verify and connect' : 'Verifying Phoenix server'
-            }
-            accessibilityRole="button"
-            disabled={connect.isPending}
-            onPress={() => void handleSubmit((values) => connect.mutate(values))()}
-            style={[
-              styles.submit,
-              { backgroundColor: colors.accent, opacity: connect.isPending ? 0.9 : 1 },
-            ]}
-          >
-            <Animated.View
-              key={connectionStatus}
-              entering={FadeIn.duration(160).reduceMotion(ReduceMotion.System)}
-              exiting={FadeOut.duration(100).reduceMotion(ReduceMotion.System)}
-              style={styles.submitContent}
-            >
-              {(connectionStatus === 'verifying' || connectionStatus === 'authorizing') && (
-                <PhoenixLogo loading size={25} />
-              )}
-              {connectionStatus === 'success' && (
-                <View style={[styles.successIcon, { backgroundColor: colors.success }]}>
-                  <Text style={styles.successIconText}>✓</Text>
-                </View>
-              )}
-              <Text style={[styles.submitText, { color: colors.accentForeground }]}>
-                {connectionStatus === 'verifying'
-                  ? 'Verifying Phoenix…'
-                  : connectionStatus === 'authorizing'
-                    ? 'Waiting for sign-in…'
-                    : connectionStatus === 'success'
-                      ? 'Connected'
-                      : 'Verify and connect'}
-              </Text>
-            </Animated.View>
-          </MotionPressable>
-        </View>
-
-        <View style={styles.deviceNoteRow}>
-          <View style={[styles.deviceNoteDot, { backgroundColor: colors.brand }]} />
-          <Text style={[styles.deviceNote, { color: colors.textSecondary }]}>
-            On a physical device, use your computer’s LAN address instead of localhost.
+          <Text style={[Type.subhead, styles.footnote, { color: colors.textTertiary }]}>
+            Servers without authentication connect directly. Phoenix 19 or newer servers that
+            require sign-in open the system browser, over HTTPS unless HTTP is allowed above.
           </Text>
         </View>
+
+        {errors.root && (
+          <Text accessibilityRole="alert" style={[Type.subhead, { color: colors.danger }]}>
+            {errors.root.message}
+          </Text>
+        )}
+
+        <MotionPressable
+          accessibilityLabel={
+            connectionStatus === 'idle' ? 'Verify and connect' : 'Verifying Phoenix server'
+          }
+          accessibilityRole="button"
+          accessibilityState={{ busy: connect.isPending }}
+          disabled={connect.isPending}
+          onPress={() => void handleSubmit((values) => connect.mutate(values))()}
+          style={[styles.submit, { backgroundColor: colors.accent }]}
+        >
+          <Animated.View
+            key={connectionStatus}
+            entering={FadeIn.duration(160).reduceMotion(ReduceMotion.System)}
+            exiting={FadeOut.duration(100).reduceMotion(ReduceMotion.System)}
+            style={styles.submitContent}
+          >
+            {busy && <ActivityIndicator color={colors.accentForeground} size="small" />}
+            {connectionStatus === 'success' && (
+              <SymbolView
+                name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                size={15}
+                tintColor={colors.accentForeground}
+                weight="bold"
+              />
+            )}
+            <Text style={[styles.submitText, { color: colors.accentForeground }]}>
+              {connectionStatus === 'verifying'
+                ? 'Verifying…'
+                : connectionStatus === 'authorizing'
+                  ? 'Waiting for sign-in…'
+                  : connectionStatus === 'success'
+                    ? 'Connected'
+                    : 'Connect'}
+            </Text>
+          </Animated.View>
+        </MotionPressable>
       </View>
     </ScrollView>
   );
@@ -433,82 +397,28 @@ function getConnectionError(error: Error): string {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   scrollContent: { flexGrow: 1 },
-  content: {
-    alignSelf: 'center',
-    gap: 28,
-    maxWidth: MaxContentWidth,
-    padding: 20,
-    width: '100%',
-  },
-  heading: { gap: 10, paddingBottom: 4 },
-  connectionType: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  connectionTypeText: { fontFamily: AppFonts.medium, fontSize: 13 },
-  title: { fontFamily: AppFonts.semibold, fontSize: 34, letterSpacing: -1.3, lineHeight: 39 },
-  subtitle: { fontFamily: AppFonts.regular, fontSize: 16, lineHeight: 24, maxWidth: 420 },
-  form: { gap: 22 },
-  field: { gap: 9 },
-  label: { fontFamily: AppFonts.medium, fontSize: 14 },
+  content: { alignSelf: 'center', gap: 18, paddingTop: 16, width: '100%' },
+  field: { gap: 6 },
   input: {
-    borderRadius: 15,
-    borderWidth: 1,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
     fontFamily: AppFonts.regular,
     fontSize: 16,
-    minHeight: 56,
-    paddingHorizontal: 16,
+    minHeight: 48,
+    paddingHorizontal: 14,
   },
-  error: { fontFamily: AppFonts.regular, fontSize: 14 },
-  notice: { borderRadius: 16, borderWidth: 1, gap: 9, padding: 16 },
-  noticeHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  noticeTitle: { fontFamily: AppFonts.semibold, fontSize: 14 },
-  soonBadge: { borderRadius: 5, paddingHorizontal: 7, paddingVertical: 4 },
-  soonBadgeText: { fontFamily: AppFonts.medium, fontSize: 9, letterSpacing: 0.9 },
-  noticeCopy: { fontFamily: AppFonts.regular, fontSize: 14, lineHeight: 21 },
-  insecureOption: {
-    alignItems: 'flex-start',
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 12,
-    minHeight: 64,
-    padding: 14,
-  },
-  checkbox: {
+  hostInput: { fontFamily: Fonts.mono, fontSize: 15 },
+  optionGroup: { borderTopWidth: StyleSheet.hairlineWidth, gap: 8, paddingTop: 14 },
+  switchRow: { alignItems: 'center', flexDirection: 'row', gap: 14, minHeight: 48 },
+  switchCopy: { flex: 1, gap: 2 },
+  footnote: { paddingRight: 8 },
+  submit: {
     alignItems: 'center',
-    borderRadius: 6,
-    borderWidth: 1,
-    height: 24,
+    borderRadius: 24,
     justifyContent: 'center',
-    marginTop: 1,
-    width: 24,
+    marginTop: 4,
+    minHeight: 50,
   },
-  checkmark: { color: '#FFFFFF', fontFamily: AppFonts.semibold, fontSize: 14 },
-  insecureCopy: { flex: 1, gap: 4 },
-  insecureTitle: { fontFamily: AppFonts.semibold, fontSize: 14 },
-  rootError: { fontFamily: AppFonts.regular, fontSize: 14, lineHeight: 21 },
-  submit: { alignItems: 'center', borderRadius: 15, justifyContent: 'center', minHeight: 54 },
-  submitContent: { alignItems: 'center', flexDirection: 'row', gap: 9, justifyContent: 'center' },
+  submitContent: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'center' },
   submitText: { fontFamily: AppFonts.semibold, fontSize: 15 },
-  successIcon: {
-    alignItems: 'center',
-    borderRadius: 10,
-    height: 20,
-    justifyContent: 'center',
-    width: 20,
-  },
-  successIconText: { color: '#FFFFFF', fontFamily: AppFonts.semibold, fontSize: 12 },
-  deviceNoteRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 10,
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-  },
-  deviceNoteDot: { borderRadius: 3, height: 6, marginTop: 7, width: 6 },
-  deviceNote: {
-    flex: 1,
-    fontFamily: AppFonts.regular,
-    fontSize: 13,
-    lineHeight: 20,
-    maxWidth: 340,
-  },
 });
