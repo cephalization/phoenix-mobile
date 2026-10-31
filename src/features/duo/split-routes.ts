@@ -3,7 +3,7 @@ import { StackRouter as ExpoStackRouter } from 'expo-router/build/layouts/stack-
 
 import type { StackRouterOptions } from 'expo-router/react-navigation';
 
-import { applyColumnRules } from './split-columns';
+import { applyColumnRules, clearDetailAbove } from './split-columns';
 
 export { columnRoleOf, nativePopAction, reconcileScreens } from './split-columns';
 
@@ -52,6 +52,10 @@ export function SplitStackRouter(options: StackRouterOptions) {
       const result = base.getStateForAction(...args);
 
       if (!columnsEnabled || !isActionHandled(result)) return result;
+
+      if (action.type === 'SET_PARAMS' && action.source !== undefined) {
+        return { ...result, state: clearDetailAbove(result.state, action.source) };
+      }
 
       if (action.type !== 'PUSH' && action.type !== 'NAVIGATE' && action.type !== 'REPLACE') {
         return result;

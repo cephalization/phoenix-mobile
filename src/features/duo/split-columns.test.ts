@@ -1,13 +1,22 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyColumnRules, columnRoleOf, nativePopAction, reconcileScreens } from './split-columns';
+import {
+  applyColumnRules,
+  clearDetailAbove,
+  columnRoleOf,
+  nativePopAction,
+  reconcileScreens,
+} from './split-columns';
 
 const route = (key: string, name: string) => ({ key, name });
 
 const home = route('home', 'index');
 const instance = route('instance', 'instances/[id]/index');
 const project = route('project', 'instances/[id]/projects/[projectId]');
-const sessions = route('sessions', 'instances/[id]/projects/[projectId]/sessions/index');
+
+// A second project page, as when one project links to another.
+const sessions = route('sessions', 'instances/[id]/projects/[projectId]');
+
 const traceA = route('trace-a', 'instances/[id]/projects/[projectId]/traces/[traceId]');
 const traceB = route('trace-b', 'instances/[id]/projects/[projectId]/traces/[traceId]');
 const session = route('session', 'instances/[id]/projects/[projectId]/sessions/[sessionId]');
@@ -96,5 +105,28 @@ describe('reconcileScreens', () => {
       home,
       project,
     ]);
+  });
+});
+
+describe('clearDetailAbove', () => {
+  it('drops the selection when its list page changes its parameters', () => {
+    const next = clearDetailAbove(stack(home, project, traceA), 'project');
+
+    expect(next.routes.map((r) => r.key)).toEqual(['home', 'project']);
+    expect(next.index).toBe(1);
+  });
+
+  it('leaves the stack alone when the page has nothing selected above it', () => {
+    const state = stack(home, project);
+
+    expect(clearDetailAbove(state, 'project')).toBe(state);
+  });
+
+  it('ignores detail pages and pages under another sidebar page', () => {
+    const drilled = stack(home, project, traceA, traceB);
+    const deeper = stack(home, project, sessions, session);
+
+    expect(clearDetailAbove(drilled, 'trace-a')).toBe(drilled);
+    expect(clearDetailAbove(deeper, 'project')).toBe(deeper);
   });
 });

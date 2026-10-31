@@ -294,11 +294,12 @@ function ReviewForm({
         if (router.canGoBack()) router.back();
         else {
           router.replace({
-            pathname: '/instances/[id]/projects/[projectId]/sessions',
+            pathname: '/instances/[id]/projects/[projectId]',
             params: {
               filter: queueFilter ?? 'needs-review',
               id: routeInstanceId,
               projectId,
+              view: 'sessions',
             },
           });
         }

@@ -1,4 +1,4 @@
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useState } from 'react';
 import {
@@ -62,17 +62,19 @@ const QUEUE_SPLIT_RATIO = 0.42;
  * bar menu and the queue's settings a bar item on iOS; elsewhere both stay in
  * the list.
  */
-export default function SessionsScreen() {
-  const {
-    filter: routeFilter,
-    id,
-    projectId,
-  } = useLocalSearchParams<{
-    filter?: SessionQueueFilter;
-    id: string;
-    projectId: string;
-  }>();
-
+/** The project's sessions and review queue: the project screen's other list. */
+export function ProjectSessions({
+  active,
+  filter: routeFilter,
+  id,
+  projectId,
+}: {
+  /** False while the project shows its traces; the list stays mounted but idle. */
+  active: boolean;
+  filter: SessionQueueFilter | undefined;
+  id: string;
+  projectId: string;
+}) {
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
   const { isRegularWidth, systemBarEdge } = useDuoLayout();
@@ -185,9 +187,9 @@ export default function SessionsScreen() {
   // A session page in the native detail column moves through this order after a review.
   const queueOrder = filteredRows.map((row) => row.session.id).join('\n');
   useEffect(() => {
-    if (splitDetail.active)
+    if (active && splitDetail.active)
       publishQueueOrder(projectId, queueOrder === '' ? [] : queueOrder.split('\n'));
-  }, [projectId, publishQueueOrder, queueOrder, splitDetail.active]);
+  }, [active, projectId, publishQueueOrder, queueOrder, splitDetail.active]);
 
   // PXI replaces the detail pane, so the session it showed moves onto the stack.
   const moveSessionToStack = () => {
@@ -324,12 +326,7 @@ export default function SessionsScreen() {
           keyExtractor={({ session }) => session.id}
           ListHeaderComponent={
             <View>
-              <ProjectViewPicker
-                instanceId={id}
-                projectId={projectId}
-                title={project?.name}
-                value="sessions"
-              />
+              <ProjectViewPicker title={project?.name} value="sessions" />
               {nativeBar ? null : (
                 <InlineChoice
                   label="Show"
@@ -420,21 +417,23 @@ export default function SessionsScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      <Stack.Screen
-        options={{
-          headerBackTitle: instance.name,
-          title: nativeHeaderTitle(systemBarEdge, project?.name ?? 'Project'),
-          headerRight: nativeBar ? undefined : pxiHeader.headerRight,
-          // PXI comes last, which puts it at the top of a vertical bar.
-          unstable_headerRightItems: nativeBar
-            ? (props) => [
-                filterMenu,
-                queueButton,
-                ...(pxiHeader.unstable_headerRightItems?.(props) ?? []),
-              ]
-            : undefined,
-        }}
-      />
+      {active ? (
+        <Stack.Screen
+          options={{
+            headerBackTitle: instance.name,
+            title: nativeHeaderTitle(systemBarEdge, project?.name ?? 'Project'),
+            headerRight: nativeBar ? undefined : pxiHeader.headerRight,
+            // PXI comes last, which puts it at the top of a vertical bar.
+            unstable_headerRightItems: nativeBar
+              ? (props) => [
+                  filterMenu,
+                  queueButton,
+                  ...(pxiHeader.unstable_headerRightItems?.(props) ?? []),
+                ]
+              : undefined,
+          }}
+        />
+      ) : null}
       {isRegularWidth ? (
         <DuoArrangement
           preferredAxis="horizontal"

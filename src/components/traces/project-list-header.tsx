@@ -1,4 +1,5 @@
-import { router } from 'expo-router';
+import { useNavigation } from 'expo-router';
+import type { NavigationProp, ParamListBase } from 'expo-router/react-navigation';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { RowInset } from '@/components/ui/list-row';
@@ -15,22 +16,19 @@ const Views = [
 ] as const satisfies readonly { label: string; value: ProjectView }[];
 
 /**
- * Traces and Sessions are one place: the control replaces the route rather
- * than pushing, so Back still leaves the project. Beside a vertical system bar
+ * Traces and Sessions are one place: the control changes the project route's
+ * `view` parameter in place, so nothing is pushed and Back leaves the project. Beside a vertical system bar
  * the navigation bar has no title, so the project's name leads the list.
  */
 export function ProjectViewPicker({
-  instanceId,
-  projectId,
   title,
   value,
 }: {
-  instanceId: string;
-  projectId: string;
   title: string | undefined;
   value: ProjectView;
 }) {
   const colors = useAppColors();
+  const navigation = useNavigation<NavigationProp<ParamListBase>>();
   const { systemBarEdge } = useDuoLayout();
 
   return (
@@ -45,15 +43,9 @@ export function ProjectViewPicker({
         </Text>
       ) : null}
       <SegmentedControl
-        onChange={(next) =>
-          router.replace({
-            pathname:
-              next === 'traces'
-                ? '/instances/[id]/projects/[projectId]'
-                : '/instances/[id]/projects/[projectId]/sessions',
-            params: { id: instanceId, projectId },
-          })
-        }
+        // This screen's own navigation, so the change targets the project
+        // route even while a selected trace or session is focused beside it.
+        onChange={(next) => navigation.setParams({ filter: undefined, view: next })}
         options={Views}
         value={value}
       />

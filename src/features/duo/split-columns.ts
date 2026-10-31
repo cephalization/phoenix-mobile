@@ -8,8 +8,8 @@ const SidebarRoutes = new Set([
   'index',
   // Redirects to the root; kept a sidebar route so it never opens the detail column.
   'instances/[id]/index',
+  // Traces or sessions, by its `view` parameter.
   'instances/[id]/projects/[projectId]',
-  'instances/[id]/projects/[projectId]/sessions/index',
 ]);
 
 export type ColumnRole = 'sidebar' | 'detail';
@@ -53,6 +53,33 @@ export function applyColumnRules<Route extends RouteLike, State extends StackLik
   );
 
   return { ...next, index: routes.length - 1, routes: [...routes, ...preloaded] };
+}
+
+/**
+ * Drops the detail pages above a sidebar page whose parameters just changed,
+ * such as a project switching from traces to sessions: they were selected
+ * from a list the page no longer shows.
+ */
+export function clearDetailAbove<Route extends RouteLike, State extends StackLike<Route>>(
+  state: State,
+  key: string,
+): State {
+  const index = state.routes.findIndex((route) => route.key === key);
+  const page = state.routes[index];
+
+  if (page === undefined || columnRoleOf(page.name) !== 'sidebar' || index >= state.index) {
+    return state;
+  }
+
+  const above = state.routes.slice(index + 1, state.index + 1);
+
+  if (above.some((route) => columnRoleOf(route.name) === 'sidebar')) return state;
+
+  return {
+    ...state,
+    index,
+    routes: [...state.routes.slice(0, index + 1), ...state.routes.slice(state.index + 1)],
+  };
 }
 
 /**

@@ -151,10 +151,6 @@ function AppNavigator({ columns, dark }: { columns: boolean; dark: boolean }) {
       options: { ...contentScreen, title: 'Trace' },
     },
     {
-      name: 'instances/[id]/projects/[projectId]/sessions/index',
-      options: { ...contentScreen, title: 'Sessions' },
-    },
-    {
       name: 'instances/[id]/projects/[projectId]/sessions/[sessionId]',
       options: { ...contentScreen, title: 'Session' },
     },

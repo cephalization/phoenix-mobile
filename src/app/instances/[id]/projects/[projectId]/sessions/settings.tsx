@@ -61,7 +61,7 @@ export default function SessionQueueSettingsScreen() {
   const openNewConfig = () => {
     router.push({
       pathname: '/instances/[id]/projects/[projectId]/sessions/new-annotation-config',
-      params: { id, projectId },
+      params: { id, projectId, view: 'sessions' },
     });
   };
 
@@ -76,12 +76,17 @@ export default function SessionQueueSettingsScreen() {
     if (router.canGoBack()) router.back();
     else
       router.replace({
-        pathname: '/instances/[id]/projects/[projectId]/sessions',
-        params: { id, projectId },
+        pathname: '/instances/[id]/projects/[projectId]',
+        params: { id, projectId, view: 'sessions' },
       });
   };
 
   const saveDisabled = !hasHydrated || configs.isPending || configs.isError;
+
+  // With no configurations there is nothing to choose, so Create configuration
+  // is the sheet's one primary action; Save returns once there is something to
+  // save, including removed configurations to clear from the queue.
+  const showSave = configs.data?.length !== 0 || staleNames.length > 0;
 
   return (
     <ScrollView
@@ -171,19 +176,21 @@ export default function SessionQueueSettingsScreen() {
       ) : null}
 
       <View style={[styles.inset, styles.actions]}>
-        <MotionPressable
-          accessibilityRole="button"
-          accessibilityState={{ disabled: saveDisabled }}
-          disabled={saveDisabled}
-          haptic="none"
-          onPress={save}
-          style={[
-            styles.saveButton,
-            { backgroundColor: colors.accent, opacity: saveDisabled ? 0.4 : 1 },
-          ]}
-        >
-          <Text style={[styles.saveLabel, { color: colors.accentForeground }]}>Save queue</Text>
-        </MotionPressable>
+        {showSave ? (
+          <MotionPressable
+            accessibilityRole="button"
+            accessibilityState={{ disabled: saveDisabled }}
+            disabled={saveDisabled}
+            haptic="none"
+            onPress={save}
+            style={[
+              styles.saveButton,
+              { backgroundColor: colors.accent, opacity: saveDisabled ? 0.4 : 1 },
+            ]}
+          >
+            <Text style={[styles.saveLabel, { color: colors.accentForeground }]}>Save queue</Text>
+          </MotionPressable>
+        ) : null}
         {Platform.OS === 'web' ? (
           <Text style={[Type.label, styles.webHint, { color: colors.textTertiary }]}>
             Queue settings are stored only on this device.

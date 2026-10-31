@@ -550,7 +550,7 @@ The app follows T3 Code's mobile design, which the owner named the best iPhone D
 
 - The root is the active instance's projects (`src/app/index.tsx`).
 - The instance is chosen from the title menu, and its version, status, sign-in, and removal live in the Connections sheet (`src/app/instances/index.tsx`). `instances/[id]` only redirects, so old links keep working.
-- A project is one place with a Traces or Sessions segmented control, which replaces the route.
+- A project is one route with a Traces or Sessions segmented control that sets its `view` parameter. Replacing between two routes animated as a push in the native column stack.
 - Screens use the primitives in `src/components/ui` and the rules in `docs/design.md`: flat full-width rows, hairlines instead of cards, actions as bar items, monospaced figures, and colour reserved for errors, OK states, and the brand.
 
 Rows are titled by what was asked. The trace list reads each root span's `input.value`, which the list already fetched, and the session list makes one extra root-span request per loaded page (`usePhoenixTraceOpeners`) because Phoenix's session records carry no input. Verified on the iPhone Duo simulator open and closed, in light and dark, on 2026-10-30. Android and web were type-checked and exported but not inspected.

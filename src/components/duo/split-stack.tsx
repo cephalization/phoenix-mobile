@@ -289,7 +289,7 @@ function SplitColumns({
 
   const sidebarKeys = new Set(sidebar.map((route) => route.key));
   const detailKeys = new Set(detail.map((route) => route.key));
-  const placeholder = emptyDetail(sidebar.at(-1)?.name);
+  const placeholder = emptyDetail(sidebar.at(-1));
   // Route objects keep their identity until the route changes, so the value
   // only changes when the detail column does; list screens read it, and a
   // fresh object on every render would re-render them and their header options.
@@ -393,19 +393,23 @@ function SplitColumns({
   );
 }
 
-function emptyDetail(sidebarRoute: string | undefined) {
-  switch (sidebarRoute) {
+function emptyDetail(sidebarRoute: Route | undefined) {
+  const view = isJsonObject(sidebarRoute?.params) ? sidebarRoute.params.view : undefined;
+
+  switch (sidebarRoute?.name) {
     case 'instances/[id]/projects/[projectId]':
+      if (view === 'sessions') {
+        return {
+          title: 'No session selected',
+          message: 'Pick a session to read the conversation and review it.',
+          symbol: 'bubble.left.and.text.bubble.right',
+        } as const;
+      }
+
       return {
         title: 'No trace selected',
         message: 'Pick a trace to see its spans, input, and output.',
         symbol: 'point.3.connected.trianglepath.dotted',
-      } as const;
-    case 'instances/[id]/projects/[projectId]/sessions/index':
-      return {
-        title: 'No session selected',
-        message: 'Pick a session to read the conversation and review it.',
-        symbol: 'bubble.left.and.text.bubble.right',
       } as const;
     default:
       return {
