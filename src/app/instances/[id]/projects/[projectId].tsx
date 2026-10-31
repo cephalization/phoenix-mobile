@@ -11,13 +11,15 @@ import type { ProjectView } from '@/components/traces/project-list-header';
  * A project: its traces or its sessions. The two lists are one page, so the
  * segmented control changes the `view` parameter in place instead of pushing
  * or replacing a route. A list stays mounted once shown and the other is only
- * hidden, so switching back neither reloads nor reflows it.
+ * hidden, so switching back neither reloads nor reflows it. `filter` is the
+ * sessions queue filter; `query` is a trace filter expression for the traces list.
  */
 export default function ProjectScreen() {
-  const { filter, id, projectId, view } = useLocalSearchParams<{
+  const { filter, id, projectId, query, view } = useLocalSearchParams<{
     filter?: SessionQueueFilter;
     id: string;
     projectId: string;
+    query?: string;
     view?: ProjectView;
   }>();
 
@@ -30,7 +32,7 @@ export default function ProjectScreen() {
     <View style={styles.screen}>
       {visited.has('traces') ? (
         <View style={[styles.screen, shown !== 'traces' && styles.hidden]}>
-          <ProjectTraces active={shown === 'traces'} id={id} projectId={projectId} />
+          <ProjectTraces active={shown === 'traces'} id={id} projectId={projectId} query={query} />
         </View>
       ) : null}
       {visited.has('sessions') ? (

@@ -22,7 +22,8 @@ import { useAppColors } from '@/constants/theme';
 import { useContentColumnStyle, useDuoLayout } from '@/features/duo/layout';
 import type { PxiActionParams } from '@/features/pxi/actions';
 import { createPxiInvestigationKey, usePxiInvestigationStore } from '@/features/pxi/investigation';
-import { isSameModel, usePxiModelCatalog } from '@/features/pxi/model-catalog';
+import { usePxiModelCatalog } from '@/features/pxi/model-catalog';
+import { availableModel } from '@/features/pxi/model-search';
 import type { ModelSelection } from '@/features/pxi/types';
 import { classifySessionReview } from '@/features/session-review/classifier';
 import { usePhoenixProjects, usePhoenixViewer } from '@/hooks/use-phoenix-data';
@@ -217,7 +218,7 @@ export function SessionDetailView({
   const investigate = () => {
     // An existing run (live or finished while the sheet was closed) reopens the
     // transcript; the model choice only applies to a brand-new investigation.
-    if (investigation || !catalog.data || catalog.data.options.length === 0) {
+    if (investigation || !catalog.data) {
       openInvestigationSheet();
 
       return;
@@ -400,21 +401,18 @@ export function SessionDetailView({
       ) : (
         renderBody(session.data)
       )}
-      {catalog.data && catalog.data.options.length > 0 ? (
+      {catalog.data ? (
         <ModelPicker
+          catalog={catalog.data}
+          instanceId={id}
           onClose={() => setModelPickerVisible(false)}
           onSelect={(model) => {
             setPxiModel(id, model);
             setModelPickerVisible(false);
             openInvestigationSheet(model);
           }}
-          options={catalog.data.options}
           selected={
-            catalog.data.options.find(
-              (option) => preferredPxiModel && isSameModel(option.selection, preferredPxiModel),
-            )?.selection ??
-            catalog.data.defaultSelection ??
-            catalog.data.options[0].selection
+            availableModel(catalog.data, preferredPxiModel) ?? catalog.data.defaultSelection
           }
           visible={modelPickerVisible}
         />

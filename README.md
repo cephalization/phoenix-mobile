@@ -36,9 +36,10 @@ macOS may ask whether Node can accept incoming connections the first time Metro 
 
 ### What Expo Go cannot show
 
-Everything the app uses is bundled in Expo Go except two things that need a [development build](#development-builds):
+Everything the app uses is bundled in Expo Go except three things that need a [development build](#development-builds):
 
 - **iPhone Duo and iPad columns.** The native split columns and the trailing sheets need the vendored react-native-screens fork and the local `modules/duo-native` module, so Expo Go shows the single-stack layout and sheets dock to the leading edge on the open Duo.
+- **On-device Ask for trace filters.** Turning plain English into a filter on the phone uses Apple Intelligence through the local `modules/on-device-llm` module. In Expo Go, Ask uses the instance's PXI model instead, or is hidden when none is selected.
 - **OAuth sign-in.** Authenticated Phoenix servers return to the app through the private `phoenixmobile://oauth/callback` redirect, which Expo Go does not own. Use unauthenticated instances in Expo Go.
 
 ## Run Phoenix locally
@@ -67,7 +68,9 @@ Send some traces to the server so the app has projects to show; the [Phoenix tra
 - Save multiple Phoenix server connections on-device
 - Verify a server before saving it
 - Browse a server's projects, traces, and sessions in a flat, native layout (see [docs/design.md](./docs/design.md)), with the server version and status in Connections
+- Filter traces with Phoenix's filter expressions, suggested filters, or plain English turned into a filter on device (Apple Intelligence) or by the instance's PXI model
 - Refresh server data through TanStack Query
+- Pick PXI's model from a searchable list of every provider, or type any model name
 - Stream PXI conversations against persisted server-side agent sessions, with chat history shared across every PXI client (Phoenix 20.0.0+)
 - Run contextual PXI actions, like open coding a session into PXI notes that reviewers read before annotating (Phoenix 20.11.0+)
 - Support light, dark, mobile, tablet, and web layouts, with native split columns on iPhone Duo and iPad, trailing sheets, and PXI as the split's inspector (see [docs/iphone-duo.md](./docs/iphone-duo.md))
@@ -108,7 +111,7 @@ Before contributing, read:
 
 ### Development builds
 
-A development build is the app compiled with its native modules plus the Expo dev client. It is needed for the two features listed under [What Expo Go cannot show](#what-expo-go-cannot-show), and for anything that changes native code or `app.json`.
+A development build is the app compiled with its native modules plus the Expo dev client. It is needed for the three features listed under [What Expo Go cannot show](#what-expo-go-cannot-show), and for anything that changes native code or `app.json`.
 
 - [iOS physical device](#ios-physical-device) below
 - [Android device development](./docs/android-development.md)

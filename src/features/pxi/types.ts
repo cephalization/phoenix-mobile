@@ -61,15 +61,52 @@ export type PxiChatRequest = {
   lastMessageId: string | null;
 };
 
-export type PxiModelOption = {
-  id: string;
-  label: string;
-  providerLabel: string;
+/**
+ * Whether PXI can authenticate with a provider, from server-side status only:
+ * - `ready`: credentials are set on the server, or none are needed
+ * - `may-work`: none are set, but the provider can use an ambient credential
+ *   chain the server can't detect (AWS, Azure)
+ * - `no-key`: credentials are required and missing
+ */
+export type PxiCredentialState = 'ready' | 'may-work' | 'no-key';
+
+/** A provider models can be sent to: a built-in one or a custom one. */
+export type PxiProviderOption = {
+  /** Stable id: the provider key, or `custom:<id>` for a custom provider. */
+  key: string;
+  /** The built-in provider; for a custom provider, the provider of its SDK. */
+  provider: BuiltInProvider;
+  /** The custom provider's GlobalID, or null for a built-in provider. */
+  customProviderId: string | null;
+  name: string;
+  credentialState: PxiCredentialState;
+};
+
+/** One pickable model. */
+export type PxiModelRow = {
+  /** Stable id, see `modelKey` in `model-search.ts`. */
+  key: string;
   selection: ModelSelection;
-  recommended: boolean;
+  provider: BuiltInProvider;
+  customProviderId: string | null;
+  providerName: string;
+  modelName: string;
+  /** On Phoenix's Recommended list. */
+  isCurated: boolean;
+  /** The curated display name, or null to show the raw id. */
+  displayName: string | null;
+  credentialState: PxiCredentialState;
+  /** A resolved selection whose custom provider no longer exists. Catalog rows never set it. */
+  isProviderMissing: boolean;
 };
 
 export type PxiModelCatalog = {
-  options: PxiModelOption[];
+  /** Installed built-in providers in server order, then custom providers. */
+  providers: PxiProviderOption[];
+  /** Built-in playground models, then each custom provider's model names. */
+  rows: PxiModelRow[];
+  /** The curated models the server lists, in Phoenix's order. */
+  recommended: PxiModelRow[];
+  /** The model a new chat uses when nothing was chosen, or null when no provider is ready. */
   defaultSelection: ModelSelection | null;
 };

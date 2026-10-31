@@ -5,6 +5,7 @@ import { createJSONStorage, persist, type StateStorage } from 'zustand/middlewar
 
 import type { PhoenixInstance } from '@/types/instance';
 import { revokeAndDeleteCredentials } from '@/features/auth/session';
+import { addRecentModel } from '@/features/pxi/model-search';
 import type { ModelSelection } from '@/features/pxi/types';
 import { useSessionReviewSettingsStore } from '@/store/session-review-settings';
 
@@ -12,6 +13,8 @@ type InstanceState = {
   instances: PhoenixInstance[];
   activeInstanceId: string | null;
   pxiModels: Record<string, ModelSelection>;
+  /** Recently picked PXI models per instance, newest first; any model name is kept. */
+  pxiRecentModels: Record<string, ModelSelection[]>;
   pendingOAuthRegistrations: Record<string, PendingOAuthRegistration>;
   hasHydrated: boolean;
   addInstance: (instance: PhoenixInstance) => Promise<void>;
@@ -20,6 +23,7 @@ type InstanceState = {
   setActiveInstanceId: (id: string | null) => void;
   setHasHydrated: (hasHydrated: boolean) => void;
   setPxiModel: (instanceId: string, model: ModelSelection) => void;
+  recordRecentPxiModel: (instanceId: string, model: ModelSelection) => void;
   savePendingOAuthRegistration: (registration: PendingOAuthRegistration) => void;
 };
 
@@ -49,6 +53,7 @@ export const useInstanceStore = create<InstanceState>()(
       instances: [],
       activeInstanceId: null,
       pxiModels: {},
+      pxiRecentModels: {},
       pendingOAuthRegistrations: {},
       hasHydrated: false,
       addInstance: async (instance) => {
@@ -98,6 +103,7 @@ export const useInstanceStore = create<InstanceState>()(
           instances: [],
           pendingOAuthRegistrations: {},
           pxiModels: {},
+          pxiRecentModels: {},
         });
       },
       removeInstance: async (id) => {
@@ -107,11 +113,13 @@ export const useInstanceStore = create<InstanceState>()(
         useSessionReviewSettingsStore.getState().clearInstanceSettings([id]);
         set((state) => {
           const { [id]: _removedModel, ...pxiModels } = state.pxiModels;
+          const { [id]: _removedRecent, ...pxiRecentModels } = state.pxiRecentModels;
 
           return {
             activeInstanceId: state.activeInstanceId === id ? null : state.activeInstanceId,
             instances: state.instances.filter((item) => item.id !== id),
             pxiModels,
+            pxiRecentModels,
           };
         });
       },
@@ -119,6 +127,13 @@ export const useInstanceStore = create<InstanceState>()(
       setHasHydrated: (hasHydrated) => set({ hasHydrated }),
       setPxiModel: (instanceId, model) =>
         set((state) => ({ pxiModels: { ...state.pxiModels, [instanceId]: model } })),
+      recordRecentPxiModel: (instanceId, model) =>
+        set((state) => ({
+          pxiRecentModels: {
+            ...state.pxiRecentModels,
+            [instanceId]: addRecentModel(state.pxiRecentModels[instanceId] ?? [], model),
+          },
+        })),
       savePendingOAuthRegistration: (registration) =>
         set((state) => ({
           pendingOAuthRegistrations: {
@@ -135,6 +150,7 @@ export const useInstanceStore = create<InstanceState>()(
         instances: state.instances,
         pendingOAuthRegistrations: state.pendingOAuthRegistrations,
         pxiModels: state.pxiModels,
+        pxiRecentModels: state.pxiRecentModels,
       }),
       onRehydrateStorage: (initialState) => (restoredState) => {
         if (restoredState) {

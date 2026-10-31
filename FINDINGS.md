@@ -209,15 +209,6 @@ Expo SQLite web support uses a WASM worker and `SharedArrayBuffer`. Even with CO
 
 **Implication:** Keep web storage free of Expo SQLite imports unless all supported web origins can guarantee secure-context isolation. Changes to the PXI repository contract must be implemented and verified in both storage backends.
 
-### 2026-07-14 - PXI Model Availability Comes From GraphQL Preflight
-
-**Status:** Decision
-**Area:** PXI, model providers
-
-The mobile model catalog queries `modelProviders` and `playgroundModels`, then applies the same ordered allowlist as Phoenix's `AgentModelMenu`. Only curated built-in models whose provider dependencies and credentials are ready are selectable. Other built-in and custom-provider models stay hidden, matching the main agent menu's default `limitToCuratedModels` behavior.
-
-**Implication:** Revalidate before each new app session, keep the allowlist synchronized with Phoenix's `agentCuratedModels.ts`, and show an actionable no-model state. Never request or persist model provider credentials on the phone.
-
 ### 2026-07-24 - Phoenix OAuth Uses DCR, Private Callbacks, And Rotating Tokens
 
 **Status:** Decision
@@ -541,6 +532,62 @@ The targeted Metro resolver shim fixed iOS and Android bundling without polyfill
 
 ## Design Decisions
 
+### 2026-10-31 - PXI Model Picker Searches Every Provider And Accepts Typed Names
+
+**Status:** Decision (supersedes 2026-07-14 "PXI Model Availability Comes From GraphQL Preflight")
+**Area:** PXI, model providers
+
+The catalog mirrors Phoenix's `useModelMenuData` through `phoenixGraphQL`: `modelProviders`, `playgroundModels`, and `generativeModelCustomProviders` (paged 50 at a time). Every installed built-in provider and every custom provider is listed with a server-side credential state:
+
+- ready;
+- may-work, for AWS and Azure, whose ambient credentials Phoenix can't detect;
+- no-key.
+
+Providers without keys are shown with an "Add key" badge instead of being hidden.
+
+`src/features/pxi/model-search.ts` ports Phoenix's `agentModelSearch.ts`, `agentModelConfig.ts`, and `agentCuratedModels.ts` from the searchable picker of Phoenix 20.27.0: ranking, provider aliases, provider guessing, the custom-model option, and the Recommended list.
+
+Phoenix 20.0.0+ accepts any model name for built-in providers, and for custom providers by GlobalID. A bad name only fails when a turn runs, so the app no longer validates saved or preferred models against the catalog. Only a model whose custom provider was deleted is treated as unavailable and offered a replacement. Recent picks (5 stored, 3 shown) are non-secret per-instance state in `useInstanceStore.pxiRecentModels`.
+
+**Implication:**
+
+- Recheck the ported search and the curated list when Phoenix's agent picker changes.
+- Don't reintroduce catalog gating for model names.
+- Built-in provider keys that the installed `@arizeai/phoenix-client` doesn't know are skipped until the client is upgraded.
+- Never request or persist provider credentials on the phone; "Add key" is only a label.
+
+### 2026-10-31 - Trace Filters Use The Trace DSL Over REST, With On-Device Natural Language
+
+**Status:** Decision
+**Area:** traces, filtering, on-device model
+
+**The filter is a trace-level filter.** Phoenix's REST spans endpoint accepts no filter expression (upstream issue #15099), so the Traces list filters with the trace DSL on `GET /v1/projects/{id}/traces?filter=` (Phoenix 20.12.0+). Span conditions are written as comprehensions, for example `any(span.status_code == 'ERROR' for span in spans)`. The filter applies to both the list and the range statistics. It is AND-combined with the Errors view as `(error_count > 0) and (<filter>)`.
+
+**Rejections and validation:**
+
+- A rejected expression comes back as HTTP 400 with a `text/plain` body that holds only the message. The app surfaces it as `TraceFilterExpressionError` and doesn't retry.
+- As-you-type validation uses GraphQL `node(id) { ... on Project { validateTraceFilterCondition(condition) } }`.
+- Field completions come from `traceFilterVocabulary(timeRange)`.
+- Both GraphQL queries exist on every server that passes the 20.12 gate, and both degrade quietly if they're missing.
+- The suggested filters are a port of Phoenix's `traceFilterSnippets` (`src/features/traces/filter.ts`).
+
+**Ask mode (natural language):**
+
+- It ports Phoenix's AI query prompt (`buildAIQueryPrompt.ts`) and its one repair round, and validates every answer.
+- It runs on Apple's Foundation Models through the local module `modules/on-device-llm` when `onDeviceModelAvailability()` is `available`. That needs iOS 26+, an eligible device with Apple Intelligence on, and a development build.
+- Otherwise it uses the instance's selected PXI model through Phoenix's OpenAI-compatible `POST /v1/chat/completions` proxy (19.16.0+). Model ids there are `{provider lowercased}:{model}` or `custom:{providerGlobalId}:{model}`.
+- The on-device prompt is a compact profile of about 1.4k tokens, kept well inside the 4096-token window that iOS 26 reports; the server prompt is the full one.
+
+Verified on 2026-10-31 on the iPhone Duo simulator (iOS 27.1, host model): "slow traces where a tool call failed" produced `latency_ms > 10_000 and any(span.span_kind == 'TOOL' and span.status_code == 'ERROR' for span in spans)`, which validated.
+
+**Implication:**
+
+- Keep filters at trace level until Phoenix's REST spans endpoint takes expressions.
+- Sync the snippets and the AI prompt when Phoenix's `traceFilterDSL.ts` or `components/filter/ai/` change.
+- Range statistics still page every matching trace.
+- The on-device module needs a native rebuild and doesn't exist in Expo Go, where Ask falls back to the server or is hidden.
+- In iOS 27, Foundation Models moved most errors from `LanguageModelSession.GenerationError` to `LanguageModelError`. The module checks the iOS 27 types first and falls back to `GenerationError`.
+
 ### 2026-10-30 - The App Is A Flat List-First Design With Projects As The Root
 
 **Status:** Decision
@@ -671,6 +718,15 @@ On 2026-10-14 `npm audit --omit=dev` reported 49 advisories (1 critical in `shel
 **Implication:** Review advisories before each release and track them against the Expo SDK changelog. Do not run `npm audit fix --force`; it would break the SDK.
 
 ## Superseded
+
+### 2026-07-14 - PXI Model Availability Comes From GraphQL Preflight
+
+**Status:** Superseded by the 2026-10-31 searchable model picker decision: every installed provider and custom provider is listed, and typed model names are accepted.
+**Area:** PXI, model providers
+
+The mobile model catalog queries `modelProviders` and `playgroundModels`, then applies the same ordered allowlist as Phoenix's `AgentModelMenu`. Only curated built-in models whose provider dependencies and credentials are ready are selectable. Other built-in and custom-provider models stay hidden, matching the main agent menu's default `limitToCuratedModels` behavior.
+
+**Implication:** Revalidate before each new app session, keep the allowlist synchronized with Phoenix's `agentCuratedModels.ts`, and show an actionable no-model state. Never request or persist model provider credentials on the phone.
 
 ### 2026-10-15 - iPhone Duo Layouts Are Size-Class Arrangements With A Preview Harness
 

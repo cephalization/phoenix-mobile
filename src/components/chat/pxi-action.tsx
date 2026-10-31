@@ -34,7 +34,8 @@ import {
   usePxiInvestigationStore,
   type PxiInvestigation,
 } from '@/features/pxi/investigation';
-import { isSameModel, usePxiModelCatalog } from '@/features/pxi/model-catalog';
+import { usePxiModelCatalog } from '@/features/pxi/model-catalog';
+import { availableModel, modelDisplayName } from '@/features/pxi/model-search';
 import type { BuiltInProvider, ModelSelection, PxiMessage } from '@/features/pxi/types';
 import { compareVersions } from '@/features/session-review/api';
 import { usePhoenixVersion, usePhoenixViewer } from '@/hooks/use-phoenix-data';
@@ -88,12 +89,11 @@ export function PxiActionView({
 
   const paramModel = parseModelParams(params);
 
-  const preferredOption = catalog.data?.options.find(
-    (option) => preferredModel && isSameModel(option.selection, preferredModel),
-  );
+  const preferredAvailable = catalog.data
+    ? availableModel(catalog.data, preferredModel)
+    : undefined;
 
-  const selectedModel =
-    paramModel ?? preferredOption?.selection ?? catalog.data?.defaultSelection ?? null;
+  const selectedModel = paramModel ?? preferredAvailable ?? catalog.data?.defaultSelection ?? null;
 
   const serverVersion = parseServerVersion(version.data);
 
@@ -146,10 +146,7 @@ export function PxiActionView({
     [clearRun, runKey],
   );
 
-  const modelLabel = run
-    ? (catalog.data?.options.find((option) => isSameModel(option.selection, run.model))?.label ??
-      run.model.modelName)
-    : null;
+  const modelLabel = run ? modelDisplayName(run.model) : null;
 
   // The sheet's native header is translucent and the content runs under it,
   // so the screen's root is always a scroll view with automatic insets, like

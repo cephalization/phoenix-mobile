@@ -155,6 +155,10 @@ function AppNavigator({ columns, dark }: { columns: boolean; dark: boolean }) {
       options: { ...contentScreen, title: 'Session' },
     },
     {
+      name: 'instances/[id]/projects/[projectId]/filter',
+      options: { ...formSheet(0.88), title: 'Filter traces' },
+    },
+    {
       name: 'instances/[id]/projects/[projectId]/sessions/add-to-dataset',
       options: { ...formSheet(0.72), title: 'Add to dataset' },
     },

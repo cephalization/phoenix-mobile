@@ -1,173 +1,153 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { authenticatedFetch, getAuthorizationHeaders } from '@/features/auth/session';
+import {
+  isJsonArray,
+  isJsonBoolean,
+  isJsonObject,
+  isJsonString,
+  type JsonObject,
+  type JsonValue,
+} from '@/lib/json';
+import { phoenixGraphQL } from '@/lib/phoenix-graphql';
 import type { PhoenixInstance } from '@/types/instance';
 
-import type { BuiltInProvider, ModelSelection, PxiModelCatalog, PxiModelOption } from './types';
+import {
+  buildCatalog,
+  buildProviderOptions,
+  type CatalogInput,
+  defaultSelection,
+  isBuiltInProvider,
+  recommendedRows,
+} from './model-search';
+import type { PxiModelCatalog } from './types';
 
-const MODEL_PREFLIGHT_QUERY = `
-  query PxiModelPreflightQuery {
-    modelProviders {
-      key
-      name
-      dependenciesInstalled
-      credentialsSet
-      credentialRequirements { envVarName isRequired }
+// Phoenix's `useModelMenuData` query: every built-in provider with its server
+// status, the playground's model list, and the custom providers. The server
+// accepts any model name for either kind (Phoenix 20.0.0+).
+const MODEL_CATALOG_QUERY = `
+  query PxiModelCatalogQuery {
+    modelProviders { key name dependenciesInstalled credentialsSet }
+    playgroundModels { name providerKey }
+    generativeModelCustomProviders(first: 50) {
+      edges { node { id name sdk modelNames } }
+      pageInfo { hasNextPage endCursor }
     }
-    playgroundModels { providerKey name }
   }
 `;
 
-const MODEL_PREFLIGHT_TIMEOUT_MS = 10_000;
+const CUSTOM_PROVIDERS_PAGE_QUERY = `
+  query PxiCustomProvidersPageQuery($after: String) {
+    generativeModelCustomProviders(first: 50, after: $after) {
+      edges { node { id name sdk modelNames } }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+`;
 
-// Keep this order aligned with Phoenix AgentModelMenu's agentCuratedModels.ts
-// (js/app/src/components/agent/agentCuratedModels.ts; synced with Phoenix 20.21.4).
-const CURATED_MODELS = [
-  ['ANTHROPIC', 'claude-fable-5-1'],
-  ['ANTHROPIC', 'claude-fable-5'],
-  ['ANTHROPIC', 'claude-opus-5'],
-  ['ANTHROPIC', 'claude-opus-4-8'],
-  ['ANTHROPIC', 'claude-opus-4-6'],
-  ['ANTHROPIC', 'claude-sonnet-4-6'],
-  ['OPENAI', 'gpt-5.6-sol'],
-  ['OPENAI', 'gpt-5.4'],
-  ['OPENAI', 'gpt-5.4-mini'],
-  ['OPENAI', 'gpt-5.5'],
-  ['GOOGLE', 'gemini-3.7-flash'],
-  ['GOOGLE', 'gemini-3.1-pro-preview'],
-] as const;
+/** A defensive bound on custom-provider pages (50 each). */
+const MAX_CUSTOM_PROVIDER_PAGES = 20;
 
-type ModelPreflightResponse = {
-  data?: {
-    modelProviders: {
-      key: BuiltInProvider;
-      name: string;
-      dependenciesInstalled: boolean;
-      credentialsSet: boolean;
-    }[];
-    playgroundModels: { providerKey: BuiltInProvider; name: string }[];
-  };
-  errors?: { message?: string }[];
-};
-
-function modelId(selection: ModelSelection): string {
-  return selection.providerType === 'custom'
-    ? `custom:${selection.providerId}/${selection.modelName}`
-    : `${selection.provider}/${selection.modelName}`;
-}
-
-export function isSameModel(left: ModelSelection, right: ModelSelection): boolean {
-  return modelId(left) === modelId(right);
-}
+export { isSameModel } from './model-search';
 
 export async function fetchPxiModelCatalog(
   instance: PhoenixInstance,
-  querySignal?: AbortSignal,
+  signal?: AbortSignal,
 ): Promise<PxiModelCatalog> {
-  const controller = new AbortController();
-  let timedOut = false;
-  const abortForQuery = () => controller.abort();
-  querySignal?.addEventListener('abort', abortForQuery);
+  const data = await phoenixGraphQL(instance, MODEL_CATALOG_QUERY, { signal });
+  const customProviders: CatalogInput['customProviders'][number][] = [];
+  let page = readCustomProviderPage(data);
 
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, MODEL_PREFLIGHT_TIMEOUT_MS);
+  customProviders.push(...page.providers);
 
-  let response: Response;
-
-  try {
-    response = await authenticatedFetch(
-      instance,
-      `${instance.baseUrl.replace(/\/+$/, '')}/graphql`,
-      {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          ...(await getAuthorizationHeaders(instance)),
-        },
-        body: JSON.stringify({ query: MODEL_PREFLIGHT_QUERY }),
-        signal: controller.signal,
-      },
-      true,
-    );
-  } catch (error) {
-    if (timedOut)
-      throw new Error(
-        'Phoenix model discovery timed out. Check the instance address and network.',
-        { cause: error },
-      );
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-    querySignal?.removeEventListener('abort', abortForQuery);
-  }
-
-  if (!response.ok) throw new Error(`Phoenix model discovery failed with HTTP ${response.status}.`);
-  // SAFETY: the body is Phoenix's GraphQL reply to MODEL_PREFLIGHT_QUERY above;
-  // its selection set is exactly the shape of ModelPreflightResponse, and
-  // `data` is checked for presence before any field is read.
-  const payload = (await response.json()) as ModelPreflightResponse;
-
-  if (!payload.data) {
-    const detail = payload.errors
-      ?.map((error) => error.message)
-      .filter(Boolean)
-      .join(' ');
-
-    throw new Error(detail || 'Phoenix returned no model catalog.');
-  }
-
-  const providerNames = new Map(
-    payload.data.modelProviders.map((provider) => [provider.key, provider.name]),
-  );
-
-  const usableProviders = new Set(
-    payload.data.modelProviders
-      .filter((provider) => provider.dependenciesInstalled && provider.credentialsSet)
-      .map((provider) => provider.key),
-  );
-
-  const curatedIds = new Set(CURATED_MODELS.map(([provider, name]) => `${provider}/${name}`));
-
-  const options: PxiModelOption[] = payload.data.playgroundModels
-    .filter(
-      (model) =>
-        usableProviders.has(model.providerKey) &&
-        curatedIds.has(`${model.providerKey}/${model.name}`),
-    )
-    .map((model) => {
-      const selection: ModelSelection = {
-        providerType: 'builtin',
-        provider: model.providerKey,
-        modelName: model.name,
-      };
-
-      return {
-        id: modelId(selection),
-        label: model.name,
-        providerLabel: providerNames.get(model.providerKey) ?? model.providerKey,
-        selection,
-        recommended: curatedIds.has(`${model.providerKey}/${model.name}`),
-      };
+  for (let pages = 1; page.endCursor !== null && pages < MAX_CUSTOM_PROVIDER_PAGES; pages += 1) {
+    const next = await phoenixGraphQL(instance, CUSTOM_PROVIDERS_PAGE_QUERY, {
+      signal,
+      variables: { after: page.endCursor },
     });
 
-  const curatedOrder = new Map(
-    CURATED_MODELS.map(([provider, name], index) => [`${provider}/${name}`, index]),
-  );
+    page = readCustomProviderPage(next);
+    customProviders.push(...page.providers);
+  }
 
-  options.sort((left, right) => {
-    const leftRank = curatedOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER;
-    const rightRank = curatedOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+  const input: CatalogInput = {
+    modelProviders: arrayField(data, 'modelProviders').flatMap((provider) =>
+      isJsonObject(provider) &&
+      isJsonString(provider.key) &&
+      isBuiltInProvider(provider.key) &&
+      isJsonString(provider.name) &&
+      isJsonBoolean(provider.dependenciesInstalled) &&
+      isJsonBoolean(provider.credentialsSet)
+        ? [
+            {
+              key: provider.key,
+              name: provider.name,
+              dependenciesInstalled: provider.dependenciesInstalled,
+              credentialsSet: provider.credentialsSet,
+            },
+          ]
+        : [],
+    ),
+    playgroundModels: arrayField(data, 'playgroundModels').flatMap((model) =>
+      isJsonObject(model) &&
+      isJsonString(model.name) &&
+      isJsonString(model.providerKey) &&
+      isBuiltInProvider(model.providerKey)
+        ? [{ name: model.name, providerKey: model.providerKey }]
+        : [],
+    ),
+    customProviders,
+  };
 
-    if (leftRank !== rightRank) return leftRank - rightRank;
+  const providers = buildProviderOptions(input);
+  const rows = buildCatalog({ ...input, providers });
+  const recommended = recommendedRows(rows);
 
-    return `${left.providerLabel}/${left.label}`.localeCompare(
-      `${right.providerLabel}/${right.label}`,
-    );
+  return { providers, rows, recommended, defaultSelection: defaultSelection(rows, recommended) };
+}
+
+function arrayField(data: JsonObject, field: string): JsonValue[] {
+  const value = data[field];
+
+  return isJsonArray(value) ? value : [];
+}
+
+/** One page of the custom-provider connection; `endCursor` is null on the last page. */
+type CustomProviderPage = {
+  providers: CatalogInput['customProviders'];
+  endCursor: string | null;
+};
+
+function readCustomProviderPage(data: JsonObject): CustomProviderPage {
+  const connection = data.generativeModelCustomProviders;
+
+  if (!isJsonObject(connection)) return { providers: [], endCursor: null };
+  const edges = isJsonArray(connection.edges) ? connection.edges : [];
+
+  const providers = edges.flatMap((edge) => {
+    const node = isJsonObject(edge) ? edge.node : null;
+
+    if (
+      !isJsonObject(node) ||
+      !isJsonString(node.id) ||
+      !isJsonString(node.name) ||
+      !isJsonString(node.sdk)
+    ) {
+      return [];
+    }
+
+    const modelNames = isJsonArray(node.modelNames) ? node.modelNames.filter(isJsonString) : [];
+
+    return [{ id: node.id, name: node.name, sdk: node.sdk, modelNames }];
   });
 
-  return { options, defaultSelection: options[0]?.selection ?? null };
+  const pageInfo = connection.pageInfo;
+
+  const endCursor =
+    isJsonObject(pageInfo) && pageInfo.hasNextPage === true && isJsonString(pageInfo.endCursor)
+      ? pageInfo.endCursor
+      : null;
+
+  return { providers, endCursor };
 }
 
 export function usePxiModelCatalog(instance: PhoenixInstance | undefined) {

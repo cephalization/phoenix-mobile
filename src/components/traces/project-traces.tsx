@@ -19,6 +19,7 @@ import { ContentColumn } from '@/components/duo/content-column';
 import { usePxiHeaderOptions } from '@/components/pxi-header-button';
 import { TraceDetailView } from '@/components/traces/trace-detail';
 import { InlineChoice, ProjectViewPicker } from '@/components/traces/project-list-header';
+import { TraceFilterField } from '@/components/traces/trace-filter-field';
 import { TraceRow } from '@/components/traces/trace-row';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SectionHeader } from '@/components/ui/section-header';
@@ -37,16 +38,22 @@ import {
   type TraceRangeSelection,
 } from '@/features/traces/range';
 import {
+  TraceFilterExpressionError,
+  TraceFilterExpressionsMinimum,
+} from '@/features/traces/filter-api';
+import {
   type PhoenixTraceFilter,
   type PhoenixTraceSummary,
   usePhoenixProjects,
   usePhoenixProjectTraceSummary,
   usePhoenixProjectTraces,
+  usePhoenixVersionAtLeast,
 } from '@/hooks/use-phoenix-data';
 import { formatCompactNumber, formatDuration } from '@/lib/format';
 import { haptics } from '@/lib/haptics';
 import { useInstanceStore } from '@/store/instances';
 import { type TraceRangePreset, useSettingsStore } from '@/store/settings';
+import { traceFilterKey, useTraceFilterStore } from '@/store/trace-filters';
 
 /** Primary share of the regular-width split: the feed leads, the trace detail takes the rest. */
 const SplitRatio = 0.44;
@@ -57,20 +64,24 @@ const StreamingOptions = [
 ] as const;
 
 /**
- * The project's Traces list. The time range, streaming, and the
- * Recent/Errors/Slowest filter live in one bar menu on iOS and in a line of
- * choices above the list elsewhere.
+ * The project's Traces list: one of the two lists the project screen switches
+ * between. The time range, streaming, and the Recent/Errors/Slowest view live
+ * in one bar menu on iOS and in a line of choices above the list elsewhere.
+ * The filter field above the statistics narrows both with a trace filter
+ * expression, edited in the filter sheet.
  */
-/** The project's traces: one of the two lists the project screen switches between. */
 export function ProjectTraces({
   active,
   id,
   projectId,
+  query,
 }: {
   /** False while the project shows its sessions; the list stays mounted but idle. */
   active: boolean;
   id: string;
   projectId: string;
+  /** A trace filter from the route's `query` parameter, applied when the list opens. */
+  query?: string;
 }) {
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
@@ -96,10 +107,21 @@ export function ProjectTraces({
     state.instances.find((candidate) => candidate.id === id),
   );
 
+  const filterKey = traceFilterKey(id, projectId);
+  const storedExpression = useTraceFilterStore((state) => state.active[filterKey] ?? null);
+  const applyFilter = useTraceFilterStore((state) => state.applyFilter);
+  const clearFilter = useTraceFilterStore((state) => state.clearFilter);
+
+  // Phoenix 20.12 added `filter` to the trace list; older servers get no field.
+  const filterSupported =
+    usePhoenixVersionAtLeast(instance, TraceFilterExpressionsMinimum) === true;
+
+  const expression = filterSupported ? storedExpression : null;
+
   const projects = usePhoenixProjects(instance);
   const project = projects.data?.find((candidate) => candidate.id === projectId);
-  const summary = usePhoenixProjectTraceSummary(instance, projectId, range);
-  const activeTraces = usePhoenixProjectTraces(instance, projectId, filter, range);
+  const summary = usePhoenixProjectTraceSummary(instance, projectId, range, expression);
+  const activeTraces = usePhoenixProjectTraces(instance, projectId, filter, range, expression);
   const traces = activeTraces.data?.pages.flatMap((page) => page.items) ?? [];
   const firstTraceId = traces[0]?.traceId ?? null;
 
@@ -168,6 +190,10 @@ export function ProjectTraces({
     if (pollTick > 0) refetchPolledRange();
   }, [pollTick]);
 
+  useEffect(() => {
+    if (query) applyFilter(filterKey, query);
+  }, [applyFilter, filterKey, query]);
+
   if (!instance) {
     return (
       <UnavailableState
@@ -218,6 +244,14 @@ export function ProjectTraces({
     haptics.selection();
     setStreaming(value);
   };
+
+  const openFilter = () =>
+    router.push({
+      pathname: '/instances/[id]/projects/[projectId]/filter',
+      params: { id: instance.id, projectId },
+    });
+
+  const filterRejected = activeTraces.error instanceof TraceFilterExpressionError;
 
   const rangeLabel = traceRangePreset(range.preset).label;
   const filterLabel = traceFilterLabel(filter);
@@ -275,6 +309,7 @@ export function ProjectTraces({
   };
 
   const sectionLabel = [
+    expression === null ? null : 'Filtered',
     rangeLabel,
     filter === 'recent' ? null : filterLabel,
     streaming ? 'Live' : null,
@@ -295,6 +330,17 @@ export function ProjectTraces({
           ListEmptyComponent={
             activeTraces.isPending ? (
               <EmptyState loading title="Loading traces" />
+            ) : activeTraces.isError && filterRejected ? (
+              <EmptyState
+                action={{ label: 'Edit filter', onPress: openFilter }}
+                message={activeTraces.error.message}
+                symbol={{
+                  android: 'filter_list_off',
+                  ios: 'line.3.horizontal.decrease.circle',
+                  web: 'filter_list_off',
+                }}
+                title="Phoenix couldn’t use this filter"
+              />
             ) : activeTraces.isError ? (
               <EmptyState
                 action={{ label: 'Try again', onPress: () => void activeTraces.refetch() }}
@@ -305,6 +351,17 @@ export function ProjectTraces({
                   web: 'error',
                 }}
                 title="Couldn’t load traces"
+              />
+            ) : expression !== null ? (
+              <EmptyState
+                action={{ label: 'Clear filter', onPress: () => clearFilter(filterKey) }}
+                message="No traces in this range match the filter."
+                symbol={{
+                  android: 'filter_list',
+                  ios: 'line.3.horizontal.decrease.circle',
+                  web: 'filter_list',
+                }}
+                title="No matching traces"
               />
             ) : (
               <EmptyState
@@ -323,7 +380,7 @@ export function ProjectTraces({
               <ActivityIndicator color={colors.textSecondary} style={styles.footer} />
             ) : traces.length > 0 && !activeTraces.hasNextPage ? (
               <Text style={[Type.subhead, styles.listEnd, { color: colors.textTertiary }]}>
-                All traces in range loaded
+                {expression === null ? 'All traces in range loaded' : 'All matching traces loaded'}
               </Text>
             ) : undefined
           }
@@ -355,6 +412,13 @@ export function ProjectTraces({
                   />
                 </View>
               )}
+              {filterSupported ? (
+                <TraceFilterField
+                  expression={expression}
+                  onClear={() => clearFilter(filterKey)}
+                  onPress={openFilter}
+                />
+              ) : null}
               <TraceStats isLoading={summary.isPending} summary={summary.data} />
               <SectionHeader label={sectionLabel} />
             </View>

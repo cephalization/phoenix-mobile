@@ -36,7 +36,8 @@ import {
   formatPxiError,
 } from '@/features/pxi/client';
 import { finalizeInterruptedMessages } from '@/features/pxi/message-state';
-import { isSameModel, usePxiModelCatalog } from '@/features/pxi/model-catalog';
+import { usePxiModelCatalog } from '@/features/pxi/model-catalog';
+import { availableModel, modelDisplayName, modelKey } from '@/features/pxi/model-search';
 import {
   getAgentSession,
   isAgentSessionConflict,
@@ -147,22 +148,19 @@ export function PxiChat({
 
   const savedModel = shouldRestoreSession ? savedSession.data?.model : undefined;
 
-  const savedModelOption = catalog.data?.options.find(
-    (option) => savedModel && isSameModel(option.selection, savedModel),
-  );
+  // Phoenix accepts any model name, so a saved or preferred model stays in use
+  // unless its custom provider was deleted.
+  const savedAvailable = catalog.data ? availableModel(catalog.data, savedModel) : undefined;
 
-  const preferredOption = catalog.data?.options.find(
-    (option) => preferredModel && isSameModel(option.selection, preferredModel),
-  );
+  const preferredAvailable = catalog.data
+    ? availableModel(catalog.data, preferredModel)
+    : undefined;
 
   const selectedModel =
-    savedModelOption?.selection ??
-    preferredOption?.selection ??
-    catalog.data?.defaultSelection ??
-    null;
+    savedAvailable ?? preferredAvailable ?? catalog.data?.defaultSelection ?? null;
 
   const requiresModelReplacement = Boolean(
-    savedModel && !savedModelOption && replacementApprovedSessionId !== sessionId,
+    savedModel && catalog.data && !savedAvailable && replacementApprovedSessionId !== sessionId,
   );
 
   useEffect(() => {
@@ -170,8 +168,8 @@ export function PxiChat({
   }, [id, setActiveInstanceId]);
 
   useEffect(() => {
-    if (selectedModel && !preferredOption) setPxiModel(id, selectedModel);
-  }, [id, preferredOption, selectedModel, setPxiModel]);
+    if (selectedModel && !preferredAvailable) setPxiModel(id, selectedModel);
+  }, [id, preferredAvailable, selectedModel, setPxiModel]);
 
   const selectModel = (model: ModelSelection) => {
     setPxiModel(instance.id, model);
@@ -261,17 +259,17 @@ export function PxiChat({
       symbol={WarningSymbol}
       title="Couldn’t restore this chat"
     />
-  ) : !selectedModel || catalog.data.options.length === 0 ? (
+  ) : !selectedModel ? (
     <EmptyState
-      action={{ label: 'Check again', onPress: () => void catalog.refetch() }}
-      message="Configure a Phoenix-recommended agent model, then try again."
+      action={{ label: 'Choose a model', onPress: () => setPickerVisible(true) }}
+      message="No provider on this Phoenix has a key. Add one in Phoenix, or choose a model to try anyway."
       symbol={ModelSymbol}
-      title="No recommended model is configured"
+      title="No model is ready"
     />
   ) : requiresModelReplacement ? (
     <EmptyState
       action={{ label: 'Use available model', onPress: () => void approveModelReplacement() }}
-      message={`This chat used ${savedModel?.modelName}. Continuing will switch it to ${selectedModel.modelName}.`}
+      message={`This chat used ${savedModel?.modelName}, whose provider was removed. Continuing will switch it to ${selectedModel.modelName}.`}
       symbol={ModelSymbol}
       title="Saved model is unavailable"
     />
@@ -282,12 +280,9 @@ export function PxiChat({
         shouldRestoreSession ? (savedSession.data?.messages ?? []) : [],
       )}
       instance={instance}
-      key={`${sessionId}:${modelIdentity(selectedModel)}:${sessionRuntimeVersion}`}
+      key={`${sessionId}:${modelKey(selectedModel)}:${sessionRuntimeVersion}`}
       model={selectedModel}
-      modelLabel={
-        catalog.data.options.find((option) => isSameModel(option.selection, selectedModel))
-          ?.label ?? selectedModel.modelName
-      }
+      modelLabel={modelDisplayName(selectedModel)}
       onActivateSession={() => {
         if (!sessionChoice) {
           setSessionChoice({ id: sessionId, restore: shouldRestoreSession });
@@ -397,11 +392,12 @@ export function PxiChat({
             body
           )}
 
-          {selectedModel && catalog.data && (
+          {catalog.data && (
             <ModelPicker
+              catalog={catalog.data}
+              instanceId={id}
               onClose={() => setPickerVisible(false)}
               onSelect={selectModel}
-              options={catalog.data.options}
               selected={selectedModel}
               visible={pickerVisible}
             />
@@ -803,12 +799,6 @@ function ChatSession({
       </View>
     </KeyboardAvoidingView>
   );
-}
-
-function modelIdentity(model: ModelSelection): string {
-  return model.providerType === 'custom'
-    ? `custom:${model.providerId}/${model.modelName}`
-    : `${model.provider}/${model.modelName}`;
 }
 
 const WarningSymbol: SymbolViewProps['name'] = {

@@ -1,8 +1,17 @@
 import type { Types } from '@arizeai/phoenix-client';
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 
+import { PhoenixAuthError } from '@/features/auth/oauth';
 import { compareVersions, getCachedServerVersion } from '@/features/session-review/api';
 import { inputExcerpt } from '@/features/traces/excerpt';
+import { combineTraceFilters, normalizeTraceFilter } from '@/features/traces/filter';
+import {
+  fetchTraceFilterVocabulary,
+  TraceFilterExpressionError,
+  TraceFilterExpressionsMinimum,
+  validateTraceFilterCondition,
+} from '@/features/traces/filter-api';
 import { isJsonObject } from '@/lib/json';
 import { createPhoenixClient } from '@/lib/phoenix';
 import type { PhoenixInstance } from '@/types/instance';
@@ -55,6 +64,8 @@ type PhoenixTracesResponse = {
     data: PhoenixTrace[];
     next_cursor: string | null;
   };
+  error?: string;
+  response: Response;
 };
 
 type PhoenixSpansResponse = {
@@ -69,27 +80,36 @@ const TRACE_PAGE_SIZE = 30;
 // The trace list accepts up to 1000 rows per page; summaries only need slim span rows.
 const TRACE_SUMMARY_PAGE_SIZE = 1000;
 
-// `filter` expressions on the trace list (`error_count > 0`) shipped in Phoenix 20.12.0.
-const TRACE_FILTER_EXPRESSIONS_MINIMUM = [20, 12, 0] as const;
+// The errors feed's server-side definition, AND-combined with the user's filter.
+const ERRORS_FILTER = 'error_count > 0';
+
+const TRACE_FILTER_VALIDATION_DEBOUNCE_MS = 250;
 const initialTraceCursor: string | null = null;
 
 export const phoenixQueryKeys = {
   all: ['phoenix'] as const,
   instance: (instanceId: string) => [...phoenixQueryKeys.all, 'instance', instanceId] as const,
   projects: (instanceId: string) => [...phoenixQueryKeys.instance(instanceId), 'projects'] as const,
-  traceSummary: (instanceId: string, projectId: string, range: PhoenixTraceRange) =>
+  traceSummary: (
+    instanceId: string,
+    projectId: string,
+    range: PhoenixTraceRange,
+    expression: string | null,
+  ) =>
     [
       ...phoenixQueryKeys.instance(instanceId),
       'project',
       projectId,
       'trace-summary',
       range.cacheKey,
+      expression,
     ] as const,
   traces: (
     instanceId: string,
     projectId: string,
     filter: PhoenixTraceFilter,
     range: PhoenixTraceRange,
+    expression: string | null,
   ) =>
     [
       ...phoenixQueryKeys.instance(instanceId),
@@ -98,6 +118,23 @@ export const phoenixQueryKeys = {
       'traces',
       filter,
       range.cacheKey,
+      expression,
+    ] as const,
+  traceFilterValidation: (instanceId: string, projectId: string, condition: string) =>
+    [
+      ...phoenixQueryKeys.instance(instanceId),
+      'project',
+      projectId,
+      'trace-filter-validation',
+      condition,
+    ] as const,
+  traceFilterVocabulary: (instanceId: string, projectId: string, rangeKey: string) =>
+    [
+      ...phoenixQueryKeys.instance(instanceId),
+      'project',
+      projectId,
+      'trace-filter-vocabulary',
+      rangeKey,
     ] as const,
   trace: (instanceId: string, projectId: string, traceId: string) =>
     [...phoenixQueryKeys.instance(instanceId), 'project', projectId, 'trace', traceId] as const,
@@ -159,11 +196,17 @@ export function usePhoenixViewer(instance: PhoenixInstance | undefined) {
   });
 }
 
+/**
+ * The traces list. `expression` is the user's trace filter DSL condition (or
+ * null); it narrows every feed and is AND-combined with the errors feed's own
+ * condition. An expression the server rejects throws `TraceFilterExpressionError`.
+ */
 export function usePhoenixProjectTraces(
   instance: PhoenixInstance | undefined,
   projectId: string | undefined,
   filter: PhoenixTraceFilter,
   range: PhoenixTraceRange,
+  expression: string | null = null,
 ) {
   return useInfiniteQuery({
     queryKey: phoenixQueryKeys.traces(
@@ -171,6 +214,7 @@ export function usePhoenixProjectTraces(
       projectId ?? 'missing',
       filter,
       range,
+      expression,
     ),
     queryFn: async ({ pageParam }): Promise<PhoenixTracePage> => {
       if (!instance || !projectId) throw new Error('Phoenix project not found.');
@@ -179,7 +223,9 @@ export function usePhoenixProjectTraces(
       const serverVersion = await getCachedServerVersion(instance, client);
 
       const supportsFilterExpressions =
-        compareVersions(serverVersion, TRACE_FILTER_EXPRESSIONS_MINIMUM) >= 0;
+        compareVersions(serverVersion, TraceFilterExpressionsMinimum) >= 0;
+
+      if (expression && !supportsFilterExpressions) throw unsupportedFilterError();
 
       if (filter === 'errors' && !supportsFilterExpressions) {
         // Pre-20.12 fallback: only root-span errors are visible without the
@@ -212,8 +258,9 @@ export function usePhoenixProjectTraces(
           query: {
             cursor: pageParam,
             end_time: range.endTime,
-            // Matches the Phoenix UI's error indicator: any span in the trace errored.
-            filter: filter === 'errors' ? 'error_count > 0' : undefined,
+            // The errors feed matches the Phoenix UI's error indicator: any
+            // span in the trace errored.
+            filter: combineTraceFilters([filter === 'errors' ? ERRORS_FILTER : null, expression]),
             include_spans: false,
             limit: TRACE_PAGE_SIZE,
             order: 'desc',
@@ -223,7 +270,10 @@ export function usePhoenixProjectTraces(
         },
       });
 
-      if (!tracesResponse.data) throw new Error('Phoenix could not load traces.');
+      if (!tracesResponse.data) {
+        throw traceListError(tracesResponse, 'Phoenix could not load traces.');
+      }
+
       const traces = tracesResponse.data.data;
       const traceIds = traces.map((trace) => trace.trace_id);
       let rootSpans: PhoenixSpan[] = [];
@@ -256,23 +306,38 @@ export function usePhoenixProjectTraces(
     initialPageParam: initialTraceCursor,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: Boolean(instance && projectId),
+    retry: retryUnlessRejected,
   });
 }
 
+/** Range statistics for the traces the user's filter (if any) keeps. */
 export function usePhoenixProjectTraceSummary(
   instance: PhoenixInstance | undefined,
   projectId: string | undefined,
   range: PhoenixTraceRange,
+  expression: string | null = null,
 ) {
   return useQuery({
     queryKey: phoenixQueryKeys.traceSummary(
       instance?.id ?? 'missing',
       projectId ?? 'missing',
       range,
+      expression,
     ),
     queryFn: async (): Promise<PhoenixTraceSummary> => {
       if (!instance || !projectId) throw new Error('Phoenix project not found.');
       const client = await createPhoenixClient(instance);
+
+      if (
+        expression &&
+        compareVersions(
+          await getCachedServerVersion(instance, client),
+          TraceFilterExpressionsMinimum,
+        ) < 0
+      ) {
+        throw unsupportedFilterError();
+      }
+
       const latencies: number[] = [];
       let cursor: string | null = null;
       let errorCount = 0;
@@ -288,6 +353,7 @@ export function usePhoenixProjectTraceSummary(
               query: {
                 cursor,
                 end_time: range.endTime,
+                filter: expression ?? undefined,
                 // Slim per-span rows (id, kind, status, timing) ride along with
                 // each trace, so error counts need no second spans request.
                 include_spans: true,
@@ -300,7 +366,9 @@ export function usePhoenixProjectTraceSummary(
           },
         );
 
-        if (!tracesResponse.data) throw new Error('Phoenix could not load trace statistics.');
+        if (!tracesResponse.data) {
+          throw traceListError(tracesResponse, 'Phoenix could not load trace statistics.');
+        }
 
         const traces = tracesResponse.data.data;
 
@@ -341,6 +409,7 @@ export function usePhoenixProjectTraceSummary(
       };
     },
     enabled: Boolean(instance && projectId),
+    retry: retryUnlessRejected,
   });
 }
 
@@ -388,6 +457,131 @@ export function usePhoenixTrace(
       return spans;
     },
     enabled: Boolean(instance && projectId && traceId),
+  });
+}
+
+/**
+ * The trace list answers a rejected `filter` with HTTP 400 and the
+ * compiler's message as plain text; surface that rather than a generic failure.
+ */
+function traceListError(response: PhoenixTracesResponse, fallback: string) {
+  const message = response.error?.trim();
+
+  if (response.response.status === 400 && message) return new TraceFilterExpressionError(message);
+
+  return new Error(fallback);
+}
+
+/** The app's retry policy, minus a filter the server rejected: asking again cannot help. */
+function retryUnlessRejected(failureCount: number, error: Error) {
+  return (
+    !(error instanceof TraceFilterExpressionError) &&
+    !(error instanceof PhoenixAuthError) &&
+    failureCount < 1
+  );
+}
+
+function unsupportedFilterError() {
+  return new TraceFilterExpressionError(
+    'This Phoenix server does not support trace filters. Update it to 20.12 or later.',
+  );
+}
+
+/** Whether the instance runs at least `minimum`; undefined until its version loads. */
+export function usePhoenixVersionAtLeast(
+  instance: PhoenixInstance | undefined,
+  minimum: readonly number[],
+) {
+  const version = usePhoenixVersion(instance);
+
+  if (!version.data) return undefined;
+
+  return compareVersions(version.data.split('.').map(Number), minimum) >= 0;
+}
+
+export type TraceFilterValidation = {
+  /** `unavailable`: the server could not judge it (no validator or a network failure). */
+  state: 'idle' | 'checking' | 'valid' | 'invalid' | 'unavailable';
+  message: string | null;
+  warnings: string[];
+};
+
+/**
+ * Validates a draft trace filter on the server as the user types, 250 ms
+ * after the last keystroke (Phoenix's `VALIDATION_DEBOUNCE_MS`).
+ */
+export function useTraceFilterValidation(
+  instance: PhoenixInstance | undefined,
+  projectId: string | undefined,
+  expression: string,
+): TraceFilterValidation {
+  const condition = normalizeTraceFilter(expression);
+  const [debounced, setDebounced] = useState(condition);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebounced(condition), TRACE_FILTER_VALIDATION_DEBOUNCE_MS);
+
+    return () => clearTimeout(timeout);
+  }, [condition]);
+
+  const query = useQuery({
+    queryKey: phoenixQueryKeys.traceFilterValidation(
+      instance?.id ?? 'missing',
+      projectId ?? 'missing',
+      debounced,
+    ),
+    queryFn: ({ signal }) => {
+      if (!instance || !projectId) throw new Error('Phoenix project not found.');
+
+      return validateTraceFilterCondition(instance, projectId, debounced, signal);
+    },
+    enabled: Boolean(instance && projectId) && debounced.length > 0,
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
+
+  if (condition.length === 0) return { state: 'idle', message: null, warnings: [] };
+
+  if (debounced !== condition || query.isPending) {
+    return { state: 'checking', message: null, warnings: [] };
+  }
+
+  if (query.isError) return { state: 'unavailable', message: query.error.message, warnings: [] };
+
+  if (query.data === null) return { state: 'unavailable', message: null, warnings: [] };
+
+  return query.data.isValid
+    ? { state: 'valid', message: null, warnings: query.data.warnings }
+    : {
+        state: 'invalid',
+        message: query.data.errorMessage ?? 'This filter is not valid.',
+        warnings: query.data.warnings,
+      };
+}
+
+/**
+ * The project's trace filter vocabulary for completions and the AI prompt.
+ * Empty on servers without `traceFilterVocabulary`.
+ */
+export function useTraceFilterVocabulary(
+  instance: PhoenixInstance | undefined,
+  projectId: string | undefined,
+  range: PhoenixTraceRange,
+) {
+  return useQuery({
+    queryKey: phoenixQueryKeys.traceFilterVocabulary(
+      instance?.id ?? 'missing',
+      projectId ?? 'missing',
+      range.cacheKey,
+    ),
+    queryFn: ({ signal }) => {
+      if (!instance || !projectId) throw new Error('Phoenix project not found.');
+
+      return fetchTraceFilterVocabulary(instance, projectId, range, signal);
+    },
+    enabled: Boolean(instance && projectId),
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60_000,
   });
 }
 

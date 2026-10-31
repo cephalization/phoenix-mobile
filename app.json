@@ -22,6 +22,7 @@
         }
       },
       "bundleIdentifier": "com.anonymous.phoenix-mobile",
+      "appleTeamId": "6W8JBK4HQP",
       "supportsTablet": true,
       "requireFullScreen": false
     },

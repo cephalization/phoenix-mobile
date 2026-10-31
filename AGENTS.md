@@ -64,6 +64,7 @@ src/store/                Persisted local state
 src/types/                Domain models
 src/features/duo/         iPhone Duo layout model and split-column routing
 modules/duo-native/       Local Expo module: layout metrics and trailing sheets
+modules/on-device-llm/    Local Expo module: Apple Foundation Models for natural-language filters
 deps/                     Vendored react-native-screens fork (see docs/iphone-duo.md)
 assets/                   Bundled application assets
 tools/oxlint/anti-slop/   Vendored lint rules (see its UPSTREAM.md before editing)
