@@ -13,6 +13,16 @@ This is the project's living technical memory. Record discoveries that would oth
 
 ## Active Constraints
 
+### 2026-11-01 - Apple Signing Is Per Developer
+
+**Status:** Current
+
+**Area:** iOS, app config, onboarding
+
+A team ID in `app.json` makes every clone sign as that team, and a bundle identifier can only be registered to one Apple team, so a shared value breaks physical-device builds for everyone else. `app.config.ts` takes `PHOENIX_APPLE_TEAM_ID` and `PHOENIX_IOS_BUNDLE_ID` from the environment; Expo CLI loads them from the gitignored `.env.local`. Without them, the config falls back to `app.json`'s identifier and sets no team, which is all Expo Go and simulators need.
+
+**Implication:** `npm run ios:device:clean` stops early without `PHOENIX_IOS_BUNDLE_ID`. An existing `ios/` folder keeps its old values until the next prebuild. A published app will need one fixed identifier, which is still undecided.
+
 ### 2026-10-27 - Expo Go Runs The App; Trailing Sheets And OAuth Need A Development Build
 
 **Status:** Decision

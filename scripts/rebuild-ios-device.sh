@@ -22,6 +22,19 @@ if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
   exit 1
 fi
 
+if [[ -f "${ROOT_DIR}/.env.local" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "${ROOT_DIR}/.env.local"
+  set +a
+fi
+
+if [[ -z "${PHOENIX_IOS_BUNDLE_ID:-}" ]]; then
+  printf 'PHOENIX_IOS_BUNDLE_ID is not set. A physical iPhone needs a bundle identifier of your own:\n' >&2
+  printf '  cp .env.example .env.local, then set it there.\n' >&2
+  exit 1
+fi
+
 if [[ "$(xcode-select -p 2>/dev/null || true)" != "${DEVELOPER_DIR}" ]]; then
   printf 'Selecting Xcode at %s...\n' "${XCODE_APP}"
   sudo xcode-select --switch "${DEVELOPER_DIR}"
@@ -51,7 +64,7 @@ printf '\nConnected Apple devices:\n'
 xcrun devicectl list devices
 
 printf '\nBefore continuing, make sure the iPhone is unlocked, trusted, and has Developer Mode enabled.\n'
-printf 'Xcode may ask you to choose an Apple Development team or a unique bundle identifier.\n\n'
+printf 'Without PHOENIX_APPLE_TEAM_ID, Xcode may ask you to choose an Apple Development team.\n\n'
 
 if [[ $# -gt 1 ]]; then
   printf 'Usage: %s [device-name-or-UDID]\n' "$0" >&2

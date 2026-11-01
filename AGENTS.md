@@ -122,6 +122,7 @@ Lint policy lives in `.oxlintrc.json` and the vendored `tools/oxlint/anti-slop` 
 ## Platform Constraints
 
 - A physical phone cannot reach a development computer through `localhost`; use the computer's LAN address.
+- Shared app config lives in `app.json`. Apple signing (team and iOS bundle identifier) is per developer: `app.config.ts` reads it from `.env.local`, so never commit a team ID or a personal bundle identifier.
 - Local Phoenix deployments often use HTTP. Android cleartext traffic and iOS local-network/transport settings are intentionally configured in `app.json`.
 - The Phoenix client currently imports Node-only configuration helpers. `metro.config.js` narrowly shims unused `node:fs` and `node:path` imports on native platforms.
 - Static web rendering runs in Node. Persisted stores must use a server-safe storage adapter and must not access browser globals during SSR.

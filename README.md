@@ -119,6 +119,12 @@ A development build is the app compiled with its native modules plus the Expo de
 
 ### iOS physical device
 
+A bundle identifier can only be registered to one Apple team, so a physical iPhone needs one of your own. Copy the example file and set `PHOENIX_IOS_BUNDLE_ID`, plus `PHOENIX_APPLE_TEAM_ID` if you want to name your team. Git ignores `.env.local`, and `app.config.ts` reads it. Expo Go and simulators need neither.
+
+```bash
+cp .env.example .env.local
+```
+
 For the first development build on a connected iPhone, or after native dependency and app-config changes, enable Developer Mode on the phone and run:
 
 ```bash
@@ -131,7 +137,7 @@ Pass a device name or UDID to skip Expo's device prompt:
 npm run ios:device:clean -- "My iPhone"
 ```
 
-The clean script selects `/Applications/Xcode.app`, completes Xcode's first-launch setup, installs locked JavaScript dependencies, regenerates the iOS project, installs CocoaPods dependencies, and builds and installs Phoenix Mobile. Xcode discovers a locally configured development team for signing; a free Personal Team is enough, and no team identifier is stored in the repository. Set `XCODE_APP` when Xcode is installed elsewhere.
+The clean script selects `/Applications/Xcode.app`, completes Xcode's first-launch setup, installs locked JavaScript dependencies, regenerates the iOS project, installs CocoaPods dependencies, and builds and installs Phoenix Mobile. It stops early if `PHOENIX_IOS_BUNDLE_ID` isn't set. Signing uses `PHOENIX_APPLE_TEAM_ID`, or otherwise a team you set up in Xcode; a free Personal Team is enough, and no team identifier is stored in the repository. Set `XCODE_APP` when Xcode is installed elsewhere.
 
 For normal JavaScript and TypeScript development, leave the installed development client on the phone and run `npm start` for Fast Refresh. Use `npm run ios:device` only when an incremental native rebuild is needed.
 
