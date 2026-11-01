@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { RowInset, RowSeparator } from '@/components/ui/list-row';
 import { SectionHeader } from '@/components/ui/section-header';
 import { Type, useAppColors } from '@/constants/theme';
+import { causedByNetworkFailure } from '@/features/offline/reachability';
 import type { SessionTurn, SpanNoteAnnotation } from '@/features/session-review/types';
 import type { usePhoenixSessionPxiNotes } from '@/hooks/use-phoenix-sessions';
 import { formatRelativeTime } from '@/lib/format';
@@ -38,7 +39,11 @@ export function PxiNotesSection({
       (turnIndexBySpanId.get(right.span_id) ?? Number.MAX_SAFE_INTEGER),
   );
 
-  if (!notes.isError && data.length === 0) return null;
+  // Offline with nothing saved, or saved with no notes, there is nothing to say;
+  // other failures keep their error so a broken server stays visible.
+  const failed = notes.isError && notes.data === undefined && !causedByNetworkFailure(notes.error);
+
+  if (!failed && data.length === 0) return null;
 
   return (
     <View>
@@ -48,11 +53,11 @@ export function PxiNotesSection({
         label="PXI notes"
         onToggle={() => setExpanded((current) => !current)}
       />
-      {!expanded ? null : notes.isError ? (
+      {!expanded ? null : failed ? (
         <EmptyState
           action={{ label: 'Try again', onPress: () => void notes.refetch() }}
           fill={false}
-          message={notes.error.message}
+          message={notes.error?.message}
           title="Couldn’t load PXI notes"
         />
       ) : (

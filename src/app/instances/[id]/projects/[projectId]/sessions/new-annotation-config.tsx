@@ -14,6 +14,7 @@ import type {
   AnnotationConfigOptimizationDirection,
   AnnotationConfigValueDraft,
 } from '@/features/session-review/types';
+import { useInstanceReachability } from '@/features/offline/reachability';
 import { usePhoenixViewer } from '@/hooks/use-phoenix-data';
 import { useCreatePhoenixAnnotationConfig } from '@/hooks/use-phoenix-sessions';
 import { haptics } from '@/lib/haptics';
@@ -69,6 +70,7 @@ export default function NewAnnotationConfigScreen() {
   const [lowerBound, setLowerBound] = useState('');
   const [upperBound, setUpperBound] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const offline = useInstanceReachability(id).state === 'offline';
 
   const readOnly =
     viewer.data != null && viewer.data.auth_method !== 'ANONYMOUS' && viewer.data.role === 'VIEWER';
@@ -179,6 +181,11 @@ export default function NewAnnotationConfigScreen() {
         Creates a rating on this server and assigns it to this project, so its sessions can be
         reviewed with it.
       </Text>
+      {offline ? (
+        <Text style={[Type.subhead, styles.inset, { color: colors.textTertiary }]}>
+          {instance.name} is offline. Creating saves on this device and uploads when it’s back.
+        </Text>
+      ) : null}
 
       {viewer.isPending ? (
         <EmptyState fill={false} loading title="Checking your access" />

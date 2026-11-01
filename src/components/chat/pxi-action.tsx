@@ -21,6 +21,7 @@ import { PxiGlyph } from '@/components/pxi-glyph';
 import { EmptyState } from '@/components/ui/empty-state';
 import { StatusLabel } from '@/components/ui/status-label';
 import { AppFonts, Type, useAppColors } from '@/constants/theme';
+import { useInstanceReachability } from '@/features/offline/reachability';
 import { useContentColumnStyle } from '@/features/duo/layout';
 import {
   resolvePxiAction,
@@ -86,6 +87,8 @@ export function PxiActionView({
   const version = usePhoenixVersion(instance);
   const viewer = usePhoenixViewer(instance);
   const catalog = usePxiModelCatalog(instance);
+  // PXI runs on the server; an investigation never queues for later.
+  const offline = useInstanceReachability(params.id).state === 'offline';
 
   const paramModel = parseModelParams(params);
 
@@ -105,6 +108,7 @@ export function PxiActionView({
 
   const readyToStart = Boolean(
     !hasRun &&
+    !offline &&
     instance &&
     action &&
     runKey &&
@@ -172,6 +176,12 @@ export function PxiActionView({
       onClose={onClose}
       title="Unknown PXI action"
       copy="This contextual action is missing or has incomplete parameters."
+    />
+  ) : offline ? (
+    <SheetState
+      onClose={onClose}
+      title="PXI is unavailable offline"
+      copy={`PXI needs a connection to ${instance.name}.`}
     />
   ) : version.isError ? (
     <SheetState

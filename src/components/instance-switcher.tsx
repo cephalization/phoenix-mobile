@@ -4,7 +4,10 @@ import { Pressable, StyleSheet, Text } from 'react-native';
 
 import type { NativeStackHeaderItemMenu } from 'expo-router/native-stack';
 
+import { offlineInstanceText } from '@/components/offline/offline-state';
 import { AppFonts, useAppColors } from '@/constants/theme';
+import { NothingSavedOffline, useSavedOfflineDataByInstance } from '@/features/offline/persistence';
+import { useReachabilityStore } from '@/features/offline/reachability';
 import { haptics } from '@/lib/haptics';
 import { useInstanceStore } from '@/store/instances';
 import type { PhoenixInstance } from '@/types/instance';
@@ -19,8 +22,17 @@ export function useInstanceSwitcherItem(
 ): NativeStackHeaderItemMenu | null {
   const instances = useInstanceStore((state) => state.instances);
   const setActiveInstanceId = useInstanceStore((state) => state.setActiveInstanceId);
+  const reachability = useReachabilityStore((state) => state.instances);
+  const deviceOnline = useReachabilityStore((state) => state.deviceOnline);
+  const saved = useSavedOfflineDataByInstance();
 
   if (!active) return null;
+
+  // Offline, each instance says what it can still show instead of its URL.
+  const description = (instance: PhoenixInstance) =>
+    deviceOnline && reachability[instance.id]?.state !== 'offline'
+      ? instance.baseUrl
+      : offlineInstanceText(saved[instance.id] ?? NothingSavedOffline);
 
   return {
     type: 'menu',
@@ -36,7 +48,7 @@ export function useInstanceSwitcherItem(
           items: instances.map((instance) => ({
             type: 'action',
             label: instance.name,
-            description: instance.baseUrl,
+            description: description(instance),
             state: instance.id === active.id ? 'on' : 'off',
             onPress: () => {
               haptics.selection();

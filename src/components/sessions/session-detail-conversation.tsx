@@ -16,6 +16,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MessageMarkdown } from '@/components/chat/message-markdown';
 import { isJsonBlockValue, JsonBlock } from '@/components/json-block';
 import { MotionPressable } from '@/components/motion-pressable';
+import { isUnavailableOffline } from '@/components/offline/offline-state';
+import { OfflineUnavailable } from '@/components/offline/offline-unavailable';
 import { PxiGlyph } from '@/components/pxi-glyph';
 import { EmptyState } from '@/components/ui/empty-state';
 import { RowInset } from '@/components/ui/list-row';
@@ -38,6 +40,8 @@ const TITLE_LENGTH = 140;
 /** Content-side session actions, for platforms and hosts without a native bar. */
 export type SessionContentActions = {
   investigationStatus: PxiInvestigationStatus | null;
+  /** Why Investigate can't start now (PXI needs the server), or null when it can. */
+  investigateUnavailable: string | null;
   onAddToDataset: () => void;
   onCopySessionId: () => void;
   onInvestigate: () => void;
@@ -54,7 +58,9 @@ export function ConversationList({
   actions,
   footer,
   instanceId,
+  notice,
   projectId,
+  unreachableInstanceName,
   refreshControl,
   reviewStatus,
   session,
@@ -64,12 +70,16 @@ export function ConversationList({
   actions: SessionContentActions | null;
   footer?: ReactElement;
   instanceId: string;
+  /** A line above the session, such as the offline notice. */
+  notice?: ReactElement;
   projectId: string;
   refreshControl: ReactElement<RefreshControlProps>;
   /** Undefined while the review state is still loading. */
   reviewStatus?: ReviewStatus;
   session: LoadedSession;
   turns: TurnsQuery;
+  /** The instance's name while it can't be reached, for turns that weren't saved. */
+  unreachableInstanceName?: string;
 }) {
   const insets = useSafeAreaInsets();
   const column = useContentColumnStyle(0);
@@ -78,13 +88,14 @@ export function ConversationList({
     <FlatList
       contentContainerStyle={[styles.content, column, { paddingBottom: 30 + insets.bottom }]}
       contentInsetAdjustmentBehavior="automatic"
-      data={turns.isSuccess ? turns.data : []}
+      data={turns.data ?? []}
       initialNumToRender={3}
       keyboardDismissMode="interactive"
       keyboardShouldPersistTaps="handled"
       keyExtractor={(turn) => turn.traceId}
       ListHeaderComponent={
         <>
+          {notice}
           <SessionHeader
             actions={actions}
             reviewStatus={reviewStatus}
@@ -92,9 +103,15 @@ export function ConversationList({
             turns={turns.data}
           />
           <SectionHeader label="Conversation" />
-          {turns.isPending ? (
+          {unreachableInstanceName !== undefined && isUnavailableOffline(turns, true) ? (
+            <OfflineUnavailable
+              fill={false}
+              instanceName={unreachableInstanceName}
+              onRetry={() => void turns.refetch()}
+            />
+          ) : turns.isPending ? (
             <EmptyState fill={false} loading title="Loading turns" />
-          ) : turns.isError ? (
+          ) : turns.isError && turns.data === undefined ? (
             <EmptyState
               action={{ label: 'Try again', onPress: () => void turns.refetch() }}
               fill={false}
@@ -186,10 +203,12 @@ function SessionActionsRow({ actions }: { actions: SessionContentActions }) {
     <View style={styles.actions}>
       <TextAction
         accessibilityHint={
-          actions.investigationStatus != null
+          actions.investigateUnavailable ??
+          (actions.investigationStatus != null
             ? 'Opens the PXI investigation for this session'
-            : 'Choose a model, then PXI open codes this session and saves notes for reviewers'
+            : 'Choose a model, then PXI open codes this session and saves notes for reviewers')
         }
+        disabled={actions.investigateUnavailable !== null}
         accessibilityLabel={
           investigating
             ? 'PXI is investigating'
@@ -240,12 +259,14 @@ function ActionSymbol({ name }: { name: SymbolViewProps['name'] }) {
 function TextAction({
   accessibilityHint,
   accessibilityLabel,
+  disabled = false,
   icon,
   label,
   onPress,
 }: {
   accessibilityHint?: string;
   accessibilityLabel?: string;
+  disabled?: boolean;
   icon: ReactNode;
   label: string;
   onPress: () => void;
@@ -257,9 +278,11 @@ function TextAction({
       accessibilityHint={accessibilityHint}
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       haptic="selection"
       onPress={onPress}
-      style={styles.textAction}
+      style={[styles.textAction, disabled && styles.textActionDisabled]}
     >
       {icon}
       <Text style={[styles.textActionLabel, { color: colors.text }]}>{label}</Text>
@@ -506,6 +529,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     paddingHorizontal: RowInset,
   },
+  textActionDisabled: { opacity: 0.45 },
   textAction: { alignItems: 'center', flexDirection: 'row', gap: 7, minHeight: 48 },
   textActionLabel: { fontFamily: AppFonts.medium, fontSize: 14 },
   turn: { gap: 12, paddingHorizontal: RowInset, paddingTop: 20 },

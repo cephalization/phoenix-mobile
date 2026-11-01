@@ -1,3 +1,4 @@
+import { NotSavedOfflineGlyph } from '@/components/offline/not-saved-offline-glyph';
 import { ListRow } from '@/components/ui/list-row';
 import { StatusLabel } from '@/components/ui/status-label';
 import type { PhoenixTraceListItem } from '@/hooks/use-phoenix-data';
@@ -13,10 +14,13 @@ export function TraceRow({
   onPress,
   selected,
   trace,
+  unsaved = false,
 }: {
   onPress: () => void;
   selected: boolean;
   trace: PhoenixTraceListItem;
+  /** Offline, and its details were never saved: it would open to nothing. */
+  unsaved?: boolean;
 }) {
   const isError = trace.statusCode === 'ERROR';
   const status = isError ? 'Error' : trace.statusCode === 'OK' ? 'OK' : 'Unset';
@@ -37,8 +41,9 @@ export function TraceRow({
 
   return (
     <ListRow
-      accessibilityHint="Opens trace details"
+      accessibilityHint={unsaved ? 'Not saved for offline use' : 'Opens trace details'}
       accessibilityLabel={`${title}, ${trace.name}, ${status}, ${latency}, started ${started}`}
+      dimmed={unsaved}
       leading={isError ? <StatusLabel size={12} tone="error" /> : undefined}
       meta={latency}
       onPress={onPress}
@@ -46,6 +51,7 @@ export function TraceRow({
       subtitle={subtitle}
       subtitleTone={isError ? 'danger' : 'default'}
       title={title}
+      trailing={unsaved ? <NotSavedOfflineGlyph /> : null}
       variant="sidebar"
     />
   );

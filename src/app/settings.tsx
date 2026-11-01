@@ -1,11 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import { router, Stack } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { barButton } from '@/components/duo/column-header';
-import { ListRow, RowInset } from '@/components/ui/list-row';
+import { ListRow, RowInset, RowSeparator } from '@/components/ui/list-row';
 import { SectionHeader } from '@/components/ui/section-header';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { Type, useAppColors } from '@/constants/theme';
@@ -15,6 +15,7 @@ import { confirmAction } from '@/lib/confirm';
 import { useInstanceStore } from '@/store/instances';
 import { type Appearance, useSettingsStore } from '@/store/settings';
 import { useContentColumnStyle } from '@/features/duo/layout';
+import { clearOfflineData } from '@/features/offline/persistence';
 
 const appearanceOptions: readonly { label: string; value: Appearance }[] = [
   { label: 'System', value: 'system' },
@@ -30,6 +31,8 @@ export default function SettingsScreen() {
   const queryClient = useQueryClient();
   const appearance = useSettingsStore((state) => state.appearance);
   const setAppearance = useSettingsStore((state) => state.setAppearance);
+  const offlineCacheEnabled = useSettingsStore((state) => state.offlineCacheEnabled);
+  const setOfflineCacheEnabled = useSettingsStore((state) => state.setOfflineCacheEnabled);
   const instances = useInstanceStore((state) => state.instances);
   const clearInstances = useInstanceStore((state) => state.clearInstances);
 
@@ -43,6 +46,23 @@ export default function SettingsScreen() {
         try {
           await clearInstances();
           queryClient.removeQueries({ queryKey: phoenixQueryKeys.all });
+          haptics.success();
+        } catch {
+          haptics.error();
+        }
+      },
+    });
+  };
+
+  const clearOffline = () => {
+    confirmAction({
+      title: 'Clear offline data?',
+      message:
+        'Saved Phoenix pages will be removed from this device. Connections stay, and pages are saved again as you open them.',
+      confirmLabel: 'Clear',
+      onConfirm: async () => {
+        try {
+          await clearOfflineData();
           haptics.success();
         } catch {
           haptics.error();
@@ -83,6 +103,32 @@ export default function SettingsScreen() {
         <SegmentedControl onChange={setAppearance} options={appearanceOptions} value={appearance} />
       </View>
 
+      <SectionHeader label="Offline" />
+      <View style={styles.switchRow}>
+        <View style={styles.switchCopy}>
+          <Text style={[Type.headline, { color: colors.text }]}>Keep data for offline use</Text>
+          <Text style={[Type.subhead, { color: colors.textSecondary }]}>
+            Saves pages you open for 14 days, unencrypted on this device.
+          </Text>
+        </View>
+        <Switch
+          accessibilityLabel="Keep data for offline use"
+          onValueChange={(next) => {
+            haptics.selection();
+            setOfflineCacheEnabled(next);
+          }}
+          value={offlineCacheEnabled}
+        />
+      </View>
+      <RowSeparator />
+      <ListRow
+        accessibilityHint="Removes saved Phoenix pages from this device"
+        onPress={clearOffline}
+        title="Clear offline data"
+        titleTone="danger"
+        variant="flat"
+      />
+
       <SectionHeader label="Connections" />
       <ListRow
         accessibilityHint="Removes every saved connection from this device"
@@ -119,4 +165,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: RowInset,
   },
   aboutTitle: { flex: 1 },
+  switchRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 56,
+    paddingHorizontal: RowInset,
+    paddingVertical: 11,
+  },
+  switchCopy: { flex: 1, gap: 3, minWidth: 0 },
 });

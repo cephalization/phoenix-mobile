@@ -23,6 +23,10 @@ import { useDuoLayout } from '@/features/duo/layout';
 import { NativeMetricsProvider } from '@/features/duo/native-metrics';
 import { enableColumnRouting } from '@/features/duo/split-routes';
 import { PhoenixAuthError } from '@/features/auth/oauth';
+import { attachOfflineCache, offlineQueryPersister } from '@/features/offline/persistence';
+import { isNetworkFailure } from '@/features/offline/reachability';
+import { OutboxReplayer } from '@/features/offline/outbox-replayer';
+import { ReachabilityMonitor } from '@/features/offline/reachability-monitor';
 import { usePxiPaneStore } from '@/features/pxi/pane-store';
 import { useSettingsStore } from '@/store/settings';
 
@@ -52,13 +56,23 @@ export default function RootLayout() {
       new QueryClient({
         defaultOptions: {
           queries: {
+            // Long enough that moving around a cached project offline keeps its
+            // pages in memory; anything older comes back from offline storage.
+            gcTime: 30 * 60_000,
+            persister: offlineQueryPersister,
+            // An unreachable server answers no faster the second time.
             retry: (failureCount, error) =>
-              !(error instanceof PhoenixAuthError) && failureCount < 1,
+              !(error instanceof PhoenixAuthError) && !isNetworkFailure(error) && failureCount < 1,
             staleTime: 30_000,
           },
+          // Queued offline changes decide for themselves whether to send or wait,
+          // so mutations run even while TanStack Query thinks the device is offline.
+          mutations: { networkMode: 'always' },
         },
       }),
   );
+
+  useEffect(() => attachOfflineCache(queryClient), [queryClient]);
 
   useEffect(() => {
     if (fontsLoaded || fontError) SplashScreen.hideAsync();
@@ -76,6 +90,8 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
+        <ReachabilityMonitor />
+        <OutboxReplayer />
         <ThemeProvider value={resolvedScheme === 'dark' ? DarkTheme : DefaultTheme}>
           <StatusBar style={resolvedScheme === 'dark' ? 'light' : 'dark'} />
           <NativeMetricsProvider>
@@ -141,6 +157,7 @@ function AppNavigator({ columns, dark }: { columns: boolean; dark: boolean }) {
     { name: 'oauth/callback', options: { headerShown: false } },
     { name: 'instances/new', options: { ...formSheet(0.72), title: 'Add Instance' } },
     { name: 'instances/index', options: { ...formSheet(0.58), title: 'Connections' } },
+    { name: 'instances/[id]/pending', options: { ...formSheet(0.58), title: 'Waiting to upload' } },
     { name: 'instances/[id]/index', options: { headerShown: false } },
     {
       name: 'instances/[id]/projects/[projectId]',

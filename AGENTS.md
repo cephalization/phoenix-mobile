@@ -63,6 +63,7 @@ src/lib/                  Phoenix client, haptics, and infrastructure
 src/store/                Persisted local state
 src/types/                Domain models
 src/features/duo/         iPhone Duo layout model and split-column routing
+src/features/offline/     Reachability, offline query persistence, and the write outbox
 modules/duo-native/       Local Expo module: layout metrics and trailing sheets
 modules/on-device-llm/    Local Expo module: Apple Foundation Models for natural-language filters
 deps/                     Vendored react-native-screens fork (see docs/iphone-duo.md)
@@ -74,7 +75,8 @@ tools/oxlint/anti-slop/   Vendored lint rules (see its UPSTREAM.md before editin
 
 - Keep route files focused on composition and route-specific behavior.
 - Put reusable server requests behind well-modeled TanStack Query hooks.
-- Keep remote Phoenix data out of Zustand. TanStack Query owns server state.
+- Keep remote Phoenix data out of Zustand. TanStack Query owns server state; its offline copy is the query persister, not a store.
+- Screens show saved `data` before error states, and write mutations go through the outbox's `sendOrQueue` so they work offline (see `FINDINGS.md`).
 - Use Zustand for local preferences and persisted instance metadata.
 - Store secrets only in SecureStore. Never place access tokens or refresh tokens in AsyncStorage or route parameters.
 - PXI chats are persisted server-side agent sessions. Treat their transcripts and history as TanStack Query server state; do not persist messages or tool payloads locally.

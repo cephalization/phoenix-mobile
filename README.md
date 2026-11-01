@@ -69,6 +69,7 @@ Send some traces to the server so the app has projects to show; the [Phoenix tra
 - Verify a server before saving it
 - Browse a server's projects, traces, and sessions in a flat, native layout (see [docs/design.md](./docs/design.md)), with the server version and status in Connections
 - Filter traces with Phoenix's filter expressions, suggested filters, or plain English turned into a filter on device (Apple Intelligence) or by the instance's PXI model
+- Read previously opened servers, projects, traces, and sessions offline, with a quiet notice, and queue reviews, notes, configs, and dataset adds to upload when the server is back
 - Refresh server data through TanStack Query
 - Pick PXI's model from a searchable list of every provider, or type any model name
 - Stream PXI conversations against persisted server-side agent sessions, with chat history shared across every PXI client (Phoenix 20.0.0+)

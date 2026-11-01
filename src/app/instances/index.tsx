@@ -6,6 +6,8 @@ import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { barButton } from '@/components/duo/column-header';
+import { NotSavedOfflineGlyph } from '@/components/offline/not-saved-offline-glyph';
+import { hasSavedData, offlineInstanceText } from '@/components/offline/offline-state';
 import { ListRow, RowInset, RowSeparator } from '@/components/ui/list-row';
 import { SectionHeader } from '@/components/ui/section-header';
 import { StatStrip } from '@/components/ui/stat-strip';
@@ -14,6 +16,7 @@ import { Type, useAppColors } from '@/constants/theme';
 import { runOAuthLogin } from '@/features/auth/login';
 import { useContentColumnStyle } from '@/features/duo/layout';
 import { useInstanceStatus } from '@/features/instances/status';
+import { useSavedOfflineData } from '@/features/offline/persistence';
 import { phoenixQueryKeys, usePhoenixProjects, usePhoenixVersion } from '@/hooks/use-phoenix-data';
 import { confirmAction } from '@/lib/confirm';
 import { haptics } from '@/lib/haptics';
@@ -35,7 +38,8 @@ export default function ConnectionsSheet() {
 
   const refresh = async () => {
     haptics.selection();
-    await queryClient.invalidateQueries({ queryKey: ['phoenix'] });
+    // Paused queries resume on their own once the device is back online.
+    await queryClient.invalidateQueries({ queryKey: ['phoenix'] }, { cancelRefetch: false });
   };
 
   return (
@@ -91,19 +95,24 @@ export default function ConnectionsSheet() {
 function InstanceRow({ active, instance }: { active: boolean; instance: PhoenixInstance }) {
   const colors = useAppColors();
   const status = useInstanceStatus(instance);
+  const saved = useSavedOfflineData(instance.id);
   const setActiveInstanceId = useInstanceStore((state) => state.setActiveInstanceId);
+  // Offline, an instance with nothing saved would open to an empty list.
+  const unsaved = status.offline && !hasSavedData(saved);
+  const statusText = status.offline ? offlineInstanceText(saved) : status.label;
 
   return (
     <ListRow
       accessibilityHint={active ? undefined : 'Shows this instance’s projects'}
-      accessibilityLabel={`${instance.name}, ${status.label}${active ? ', current' : ''}`}
+      accessibilityLabel={`${instance.name}, ${statusText}${active ? ', current' : ''}`}
+      dimmed={unsaved}
       leading={<StatusLabel tone={status.tone} />}
       onPress={() => {
         setActiveInstanceId(instance.id);
         router.back();
       }}
-      subtitle={status.tone === 'error' ? status.label : instance.baseUrl}
-      subtitleMono={status.tone !== 'error'}
+      subtitle={status.tone === 'error' || status.offline ? statusText : instance.baseUrl}
+      subtitleMono={status.tone !== 'error' && !status.offline}
       subtitleTone={status.tone === 'error' ? 'danger' : 'default'}
       title={instance.name}
       trailing={
@@ -114,6 +123,8 @@ function InstanceRow({ active, instance }: { active: boolean; instance: PhoenixI
             tintColor={colors.text}
             weight="semibold"
           />
+        ) : unsaved ? (
+          <NotSavedOfflineGlyph />
         ) : null
       }
       variant="flat"
@@ -152,7 +163,7 @@ function ActiveInstanceDetails({ instance }: { instance: PhoenixInstance }) {
   const remove = () => {
     confirmAction({
       title: 'Remove connection?',
-      message: `${instance.name} and its local PXI history will be removed from this device.`,
+      message: `${instance.name} and the data saved for offline use will be removed from this device. PXI chats stay on the server.`,
       confirmLabel: 'Remove',
       onConfirm: async () => {
         try {
@@ -204,7 +215,7 @@ function ActiveInstanceDetails({ instance }: { instance: PhoenixInstance }) {
         ) : null}
         <RowSeparator inset={0} />
         <ListRow
-          accessibilityHint="Removes this instance and its local PXI history"
+          accessibilityHint="Removes this instance and its offline data"
           onPress={remove}
           title="Remove connection"
           titleTone="danger"

@@ -17,6 +17,9 @@ import type { NativeStackHeaderItemMenu } from 'expo-router/native-stack';
 import { barButton } from '@/components/duo/column-header';
 import { DuoArrangement } from '@/components/duo/arrangement';
 import { ContentColumn } from '@/components/duo/content-column';
+import { CachedDataNotice } from '@/components/offline/cached-data-notice';
+import { isDeviceOffline, isUnavailableOffline } from '@/components/offline/offline-state';
+import { OfflineUnavailable } from '@/components/offline/offline-unavailable';
 import { usePxiHeaderOptions } from '@/components/pxi-header-button';
 import {
   SessionDetailView,
@@ -33,6 +36,8 @@ import { Type, useAppColors } from '@/constants/theme';
 import { nativeHeaderTitle, useDuoLayout } from '@/features/duo/layout';
 import { isSplitDetail, useSessionQueueOrder, useSplitDetail } from '@/features/duo/split-detail';
 import { selectDetail } from '@/features/duo/split-routes';
+import { useSavedOfflineData } from '@/features/offline/persistence';
+import { useInstanceReachability } from '@/features/offline/reachability';
 import { classifySessionReview } from '@/features/session-review/classifier';
 import type { SessionData } from '@/features/session-review/types';
 import { usePhoenixProjects, usePhoenixTraceOpeners } from '@/hooks/use-phoenix-data';
@@ -93,6 +98,8 @@ export function ProjectSessions({
   // empty while the list has content.
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const instance = useInstanceStore((state) => state.instances.find((item) => item.id === id));
+  const offline = useInstanceReachability(id).state === 'offline';
+  const savedSessionIds = new Set(useSavedOfflineData(id).sessionIds);
   const projects = usePhoenixProjects(instance);
   const project = projects.data?.find((candidate) => candidate.id === projectId);
   const sessionsQuery = usePhoenixProjectSessions(instance, projectId);
@@ -137,13 +144,20 @@ export function ProjectSessions({
   const filter: SessionQueueFilter =
     requestedFilter === 'needs-review' && queueUnset ? 'all' : requestedFilter;
 
+  // A failed refetch keeps the data it had (offline, a saved copy), so only an
+  // error with nothing to show replaces the list. Offline, the review state is
+  // judged from whatever annotations were saved.
   const dataError =
-    sessionsQuery.error ??
-    configsQuery.error ??
-    (annotationsQuery.isEnabled ? annotationsQuery.error : null);
+    (sessionsQuery.data ? null : sessionsQuery.error) ??
+    (configsQuery.data ? null : configsQuery.error) ??
+    (annotationsQuery.isEnabled && !offline ? annotationsQuery.error : null);
 
-  const annotationsReady = !queueConfigured || annotationsQuery.isSuccess;
-  const dependenciesReady = sessionsQuery.isSuccess && configsQuery.isSuccess && annotationsReady;
+  const annotationsReady =
+    !queueConfigured || annotationsQuery.isSuccess || (offline && !annotationsQuery.isPending);
+
+  const dependenciesReady =
+    sessionsQuery.data !== undefined && configsQuery.data !== undefined && annotationsReady;
+
   const annotationsBySessionId = new Map<string, typeof annotationsQuery.data>();
 
   for (const annotation of annotationsQuery.data ?? []) {
@@ -218,6 +232,13 @@ export function ProjectSessions({
 
   const refresh = async () => {
     if (manualRefreshing) return;
+
+    if (isDeviceOffline()) {
+      haptics.warning();
+
+      return;
+    }
+
     haptics.selection();
     setManualRefreshing(true);
 
@@ -326,6 +347,7 @@ export function ProjectSessions({
           keyExtractor={({ session }) => session.id}
           ListHeaderComponent={
             <View>
+              <CachedDataNotice dataUpdatedAt={sessionsQuery.dataUpdatedAt} instance={instance} />
               <ProjectViewPicker title={project?.name} value="sessions" />
               {nativeBar ? null : (
                 <InlineChoice
@@ -349,6 +371,11 @@ export function ProjectSessions({
           ListEmptyComponent={
             <SessionListState
               dataError={dataError}
+              instanceName={instance.name}
+              unavailableOffline={
+                isUnavailableOffline(sessionsQuery, offline) ||
+                isUnavailableOffline(configsQuery, offline)
+              }
               filter={filter}
               hasNextPage={Boolean(sessionsQuery.hasNextPage)}
               hasSessions={sessions.length > 0}
@@ -407,6 +434,7 @@ export function ProjectSessions({
                   : item.session.id === activeSessionId
               }
               session={item.session}
+              unsaved={offline && !savedSessionIds.has(item.session.id)}
             />
           )}
           windowSize={7}
@@ -513,12 +541,17 @@ function SessionListState({
   filter,
   hasNextPage,
   hasSessions,
+  instanceName,
   loading,
   queueConfigured,
   retry,
   scan,
+  unavailableOffline,
 }: {
   dataError: Error | null;
+  instanceName: string;
+  /** Unreachable, with no saved sessions or annotation configs to show. */
+  unavailableOffline: boolean;
   filter: SessionQueueFilter;
   hasNextPage: boolean;
   hasSessions: boolean;
@@ -527,6 +560,8 @@ function SessionListState({
   retry: () => void;
   scan: () => void;
 }) {
+  if (unavailableOffline) return <OfflineUnavailable instanceName={instanceName} onRetry={retry} />;
+
   if (dataError)
     return (
       <EmptyState

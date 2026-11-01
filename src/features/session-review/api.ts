@@ -3,6 +3,7 @@ import type { PhoenixClient, Types } from '@arizeai/phoenix-client';
 import { isJsonString, type JsonObject } from '@/lib/json';
 import { PXI_NOTE_IDENTIFIER } from '@/features/pxi/actions';
 import { createPhoenixClient } from '@/lib/phoenix';
+import { instanceReachability } from '@/features/offline/reachability';
 import type { PhoenixInstance } from '@/types/instance';
 
 import { uniqueTrimmed } from './classifier';
@@ -28,7 +29,7 @@ import type {
 
 type Schemas = Types['V1']['components']['schemas'];
 
-type SessionAnnotationData = Schemas['SessionAnnotationData'];
+export type SessionAnnotationData = Schemas['SessionAnnotationData'];
 
 type AnnotationResult = NonNullable<SessionAnnotationData['result']>;
 
@@ -587,34 +588,28 @@ export async function writeSessionAnnotation(
   instance: PhoenixInstance,
   input: SessionAnnotationWrite,
 ): Promise<{ id: string }> {
-  const annotation = buildSessionAnnotationData(input);
+  const [inserted] = await postSessionAnnotations(instance, [buildSessionAnnotationData(input)]);
 
-  return withSessionApiError('Phoenix could not save the session annotation', async () => {
-    const client = await compatibleClient(
-      instance,
-      'Session annotations',
-      sessionReviewCompatibility.sessionAnnotations,
-    );
-
-    const response = await client.POST('/v1/session_annotations', {
-      params: { query: { sync: true } },
-      body: { data: [annotation] },
-    });
-
-    const inserted = response.data?.data?.[0];
-
-    if (!inserted) throw new Error('The server did not return the saved annotation ID.');
-
-    return inserted;
-  });
+  return inserted;
 }
 
 export async function writeSessionAnnotations(
   instance: PhoenixInstance,
   input: SessionAnnotationsWrite,
 ): Promise<{ id: string }[]> {
-  if (input.annotations.length === 0) return [];
-  const annotations = input.annotations.map(buildSessionAnnotationData);
+  return postSessionAnnotations(instance, input.annotations.map(buildSessionAnnotationData));
+}
+
+/**
+ * Sends already-built session annotations in one synchronous request. The
+ * offline outbox replays queued reviews through this, so a queued review keeps
+ * the deterministic identifiers it was built with.
+ */
+export async function postSessionAnnotations(
+  instance: PhoenixInstance,
+  annotations: SessionAnnotationData[],
+): Promise<{ id: string }[]> {
+  if (annotations.length === 0) return [];
 
   return withSessionApiError('Phoenix could not save the session review', async () => {
     const client = await compatibleClient(
@@ -700,8 +695,17 @@ export async function addSessionToDataset(
   instance: PhoenixInstance,
   input: SessionDatasetWrite,
 ): Promise<SessionDatasetWriteResult> {
-  const { body } = buildSessionDatasetUpload(input);
+  return uploadSessionDataset(instance, buildSessionDatasetUpload(input).body);
+}
 
+/**
+ * Uploads an already-built dataset body. The offline outbox replays queued
+ * dataset adds through this, so it stores the small body rather than spans.
+ */
+export async function uploadSessionDataset(
+  instance: PhoenixInstance,
+  body: SessionDatasetUploadBody,
+): Promise<SessionDatasetWriteResult> {
   return withSessionApiError('Phoenix could not add this session to the dataset', async () => {
     const client = await compatibleClient(
       instance,
@@ -990,6 +994,29 @@ async function compatibleClient(
 const serverVersionCache = new Map<string, Promise<readonly number[]>>();
 const MAX_SERVER_VERSION_CACHE_ENTRIES = 24;
 
+/**
+ * The Phoenix client swallows the network error behind its version request
+ * and throws "server version could not be determined", which reads like an
+ * incompatible server. While the server is unreachable, report a network
+ * failure instead, so callers treat it as offline (saved data, queued writes).
+ */
+async function serverVersionOrNetworkError(
+  instance: PhoenixInstance,
+  client: PhoenixClient,
+): Promise<readonly number[]> {
+  try {
+    return await client.getServerVersion();
+  } catch (error) {
+    if (instanceReachability(instance.id) === 'offline') {
+      throw new TypeError('Network request failed: the Phoenix server is unreachable.', {
+        cause: error,
+      });
+    }
+
+    throw error;
+  }
+}
+
 export async function getCachedServerVersion(
   instance: PhoenixInstance,
   client: PhoenixClient,
@@ -999,7 +1026,7 @@ export async function getCachedServerVersion(
   let version = serverVersionCache.get(key);
 
   if (!version) {
-    version = client.getServerVersion();
+    version = serverVersionOrNetworkError(instance, client);
     serverVersionCache.set(key, version);
 
     if (serverVersionCache.size > MAX_SERVER_VERSION_CACHE_ENTRIES) {

@@ -11,10 +11,13 @@ type SettingsState = {
   appearance: Appearance;
   traceRangePreset: TraceRangePreset;
   traceStreaming: boolean;
+  /** Save Phoenix pages as they load so they can be read offline. */
+  offlineCacheEnabled: boolean;
   /** Project IDs per instance, most recently opened first. */
   recentProjects: Record<string, string[]>;
   noteProjectOpened: (instanceId: string, projectId: string) => void;
   setAppearance: (appearance: Appearance) => void;
+  setOfflineCacheEnabled: (offlineCacheEnabled: boolean) => void;
   setTraceRangePreset: (traceRangePreset: TraceRangePreset) => void;
   setTraceStreaming: (traceStreaming: boolean) => void;
 };
@@ -37,6 +40,7 @@ export const useSettingsStore = create<SettingsState>()(
       appearance: 'system',
       traceRangePreset: 'day',
       traceStreaming: false,
+      offlineCacheEnabled: true,
       recentProjects: {},
       noteProjectOpened: (instanceId, projectId) =>
         set((state) => {
@@ -55,6 +59,7 @@ export const useSettingsStore = create<SettingsState>()(
           };
         }),
       setAppearance: (appearance) => set({ appearance }),
+      setOfflineCacheEnabled: (offlineCacheEnabled) => set({ offlineCacheEnabled }),
       setTraceRangePreset: (traceRangePreset) => set({ traceRangePreset }),
       setTraceStreaming: (traceStreaming) => set({ traceStreaming }),
     }),

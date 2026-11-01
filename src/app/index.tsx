@@ -14,6 +14,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { barButton } from '@/components/duo/column-header';
+import { CachedDataNotice } from '@/components/offline/cached-data-notice';
+import { isDeviceOffline, isUnavailableOffline } from '@/components/offline/offline-state';
+import { NotSavedOfflineGlyph } from '@/components/offline/not-saved-offline-glyph';
+import { OfflineUnavailable } from '@/components/offline/offline-unavailable';
 import { InstanceTitleButton, useInstanceSwitcherItem } from '@/components/instance-switcher';
 import { PhoenixLogo } from '@/components/phoenix-logo';
 import { PxiHeaderButton, usePxiHeaderOptions } from '@/components/pxi-header-button';
@@ -24,6 +28,8 @@ import { Type, useAppColors } from '@/constants/theme';
 import { runOAuthLogin } from '@/features/auth/login';
 import { useContentColumnStyle } from '@/features/duo/layout';
 import { useInstanceStatus } from '@/features/instances/status';
+import { useSavedOfflineData } from '@/features/offline/persistence';
+import { useInstanceReachability } from '@/features/offline/reachability';
 import {
   phoenixQueryKeys,
   type PhoenixProject,
@@ -61,6 +67,8 @@ function InstanceProjects({ instance }: { instance: PhoenixInstance }) {
   const column = useContentColumnStyle(0);
   const projects = usePhoenixProjects(instance);
   const status = useInstanceStatus(instance);
+  const offline = useInstanceReachability(instance.id).state === 'offline';
+  const saved = useSavedOfflineData(instance.id);
   const switcher = useInstanceSwitcherItem(instance);
   const pxiHeader = usePxiHeaderOptions(instance);
   const recentIds = useSettingsStore((state) => state.recentProjects[instance.id] ?? NoRecents);
@@ -70,6 +78,12 @@ function InstanceProjects({ instance }: { instance: PhoenixInstance }) {
   const nativeBar = Platform.OS === 'ios';
 
   const refresh = async () => {
+    if (isDeviceOffline()) {
+      haptics.warning();
+
+      return;
+    }
+
     haptics.selection();
     const results = await Promise.all([projects.refetch(), status.viewer.refetch()]);
 
@@ -101,7 +115,9 @@ function InstanceProjects({ instance }: { instance: PhoenixInstance }) {
 
   const sections = projectSections(projects.data ?? [], recentIds, query);
 
-  const emptyState = projects.isPending ? (
+  const emptyState = isUnavailableOffline(projects, offline) ? (
+    <OfflineUnavailable instanceName={instance.name} onRetry={() => void refresh()} />
+  ) : projects.isPending ? (
     <EmptyState loading title="Loading projects" />
   ) : status.loginRequired && instance.auth.type === 'oauth2' ? (
     <EmptyState
@@ -161,6 +177,7 @@ function InstanceProjects({ instance }: { instance: PhoenixInstance }) {
               </View>
             </View>
           )}
+          <CachedDataNotice dataUpdatedAt={projects.dataUpdatedAt} instance={instance} />
           {(projects.data?.length ?? 0) > 6 ? (
             <View style={[styles.search, { backgroundColor: colors.backgroundSelected }]}>
               <SymbolView
@@ -192,14 +209,21 @@ function InstanceProjects({ instance }: { instance: PhoenixInstance }) {
           tintColor={colors.textSecondary}
         />
       }
-      renderItem={({ item }) => (
-        <ListRow
-          accessibilityHint="Opens the project's traces"
-          onPress={() => open(item)}
-          subtitle={item.description ?? undefined}
-          title={item.name}
-        />
-      )}
+      renderItem={({ item }) => {
+        // Offline, a project only opens to something if one of its lists was saved.
+        const unsaved = offline && !saved.projectIds.includes(item.id);
+
+        return (
+          <ListRow
+            accessibilityHint={unsaved ? 'Not saved for offline use' : "Opens the project's traces"}
+            dimmed={unsaved}
+            onPress={() => open(item)}
+            subtitle={unsaved ? 'Not saved offline' : (item.description ?? undefined)}
+            title={item.name}
+            trailing={unsaved ? <NotSavedOfflineGlyph /> : null}
+          />
+        );
+      }}
       renderSectionHeader={({ section }) =>
         section.title ? <SectionHeader label={section.title} /> : null
       }

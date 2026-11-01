@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { z } from 'zod';
 
+import { trackReachability } from '@/features/offline/reachability';
 import { parseJsonValue } from '@/lib/json';
 import type { PhoenixInstance } from '@/types/instance';
 
@@ -182,11 +183,11 @@ export async function authenticatedFetch(
 
   if (instance.auth.type === 'oauth2') requestInit.redirect = 'error';
 
-  let response = await fetch(input, requestInit);
+  let response = await trackReachability(instance.id, () => fetch(input, requestInit));
 
   if (response.status === 401 && instance.auth.type === 'oauth2' && retryUnauthorized) {
     headers.set('Authorization', `Bearer ${await getAccessToken(instance, true, sentAccessToken)}`);
-    response = await fetch(input, requestInit);
+    response = await trackReachability(instance.id, () => fetch(input, requestInit));
 
     if (response.status === 401) {
       throw new PhoenixAuthError(

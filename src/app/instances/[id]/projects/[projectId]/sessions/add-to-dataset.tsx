@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { ListRow, RowInset, RowSeparator } from '@/components/ui/list-row';
 import { SectionHeader } from '@/components/ui/section-header';
 import { AppFonts, Type, useAppColors } from '@/constants/theme';
+import { useInstanceReachability } from '@/features/offline/reachability';
 import { formatRelativeTime } from '@/lib/format';
 import { usePhoenixViewer } from '@/hooks/use-phoenix-data';
 import {
@@ -44,6 +45,7 @@ export default function AddSessionToDatasetScreen() {
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const offline = useInstanceReachability(id).state === 'offline';
 
   const readOnly =
     viewer.data != null && viewer.data.auth_method !== 'ANONYMOUS' && viewer.data.role === 'VIEWER';
@@ -124,6 +126,11 @@ export default function AddSessionToDatasetScreen() {
             : 'Adds this session’s turns as examples.'}{' '}
           Each example links back to its source span.
         </Text>
+        {offline ? (
+          <Text style={[Type.subhead, { color: colors.textTertiary }]}>
+            {instance.name} is offline. Adding saves on this device and uploads when it’s back.
+          </Text>
+        ) : null}
         {skippedCount > 0 ? (
           <Text style={[Type.subhead, { color: colors.textTertiary }]}>
             {skippedCount} turn{skippedCount === 1 ? ' has' : 's have'} no root span and will be

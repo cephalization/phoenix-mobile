@@ -5,7 +5,10 @@ import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MotionPressable } from '@/components/motion-pressable';
+import { isUnavailableOffline } from '@/components/offline/offline-state';
+import { OfflineUnavailable } from '@/components/offline/offline-unavailable';
 import { EmptyState } from '@/components/ui/empty-state';
+import { useInstanceReachability } from '@/features/offline/reachability';
 import { ListRow, RowInset, RowSeparator } from '@/components/ui/list-row';
 import { SectionHeader } from '@/components/ui/section-header';
 import { StatusLabel } from '@/components/ui/status-label';
@@ -26,6 +29,7 @@ export default function SessionQueueSettingsScreen() {
   // Pads clear of iPhone Duo's vertical bar, which runs down a sheet's trailing edge.
   const column = useContentColumnStyle(0);
   const instance = useInstanceStore((state) => state.instances.find((item) => item.id === id));
+  const offline = useInstanceReachability(id).state === 'offline';
   const queues = useSessionReviewSettingsStore((state) => state.queues);
   const hasHydrated = useSessionReviewSettingsStore((state) => state.hasHydrated);
 
@@ -81,7 +85,8 @@ export default function SessionQueueSettingsScreen() {
       });
   };
 
-  const saveDisabled = !hasHydrated || configs.isPending || configs.isError;
+  // Queue settings are local, so saved configurations are enough to edit them offline.
+  const saveDisabled = !hasHydrated || configs.data === undefined;
 
   // With no configurations there is nothing to choose, so Create configuration
   // is the sheet's one primary action; Save returns once there is something to
@@ -101,11 +106,17 @@ export default function SessionQueueSettingsScreen() {
 
       {configs.isPending || !hasHydrated ? (
         <EmptyState fill={false} loading title="Loading annotation configurations" />
-      ) : configs.isError ? (
+      ) : isUnavailableOffline(configs, offline) && instance ? (
+        <OfflineUnavailable
+          fill={false}
+          instanceName={instance.name}
+          onRetry={() => void configs.refetch()}
+        />
+      ) : configs.data === undefined ? (
         <EmptyState
           action={{ label: 'Try again', onPress: () => void configs.refetch() }}
           fill={false}
-          message={configs.error.message}
+          message={configs.error?.message}
           symbol={{ ios: 'exclamationmark.triangle', android: 'warning', web: 'warning' }}
           title="Couldn’t load annotation configurations"
         />

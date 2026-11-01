@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 
 import { PhoenixAuthError } from '@/features/auth/oauth';
 import { compareVersions, getCachedServerVersion } from '@/features/session-review/api';
+import { isNetworkFailure } from '@/features/offline/reachability';
 import { inputExcerpt } from '@/features/traces/excerpt';
 import { combineTraceFilters, normalizeTraceFilter } from '@/features/traces/filter';
 import {
@@ -147,7 +148,7 @@ export function usePhoenixVersion(instance: PhoenixInstance | undefined) {
     queryKey: phoenixQueryKeys.version(instance?.id ?? 'missing'),
     queryFn: async () => {
       if (!instance) throw new Error('Phoenix instance not found.');
-      const version = await (await createPhoenixClient(instance)).getServerVersion();
+      const version = await getCachedServerVersion(instance, await createPhoenixClient(instance));
 
       return version.join('.');
     },
@@ -477,6 +478,7 @@ function retryUnlessRejected(failureCount: number, error: Error) {
   return (
     !(error instanceof TraceFilterExpressionError) &&
     !(error instanceof PhoenixAuthError) &&
+    !isNetworkFailure(error) &&
     failureCount < 1
   );
 }

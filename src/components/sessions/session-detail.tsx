@@ -16,10 +16,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ModelPicker } from '@/components/chat/model-picker';
 import { DuoArrangement, useArrangementPane } from '@/components/duo/arrangement';
 import { barButton, barMenu } from '@/components/duo/column-header';
+import { CachedDataNotice } from '@/components/offline/cached-data-notice';
+import { isDeviceOffline, isUnavailableOffline } from '@/components/offline/offline-state';
+import { OfflineUnavailable } from '@/components/offline/offline-unavailable';
 import { openPxiAction } from '@/components/pxi-header-button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useAppColors } from '@/constants/theme';
 import { useContentColumnStyle, useDuoLayout } from '@/features/duo/layout';
+import { useInstanceReachability } from '@/features/offline/reachability';
 import type { PxiActionParams } from '@/features/pxi/actions';
 import { createPxiInvestigationKey, usePxiInvestigationStore } from '@/features/pxi/investigation';
 import { usePxiModelCatalog } from '@/features/pxi/model-catalog';
@@ -99,6 +103,7 @@ export function SessionDetailView({
   const instance = useInstanceStore((state) => state.instances.find((item) => item.id === id));
   const projects = usePhoenixProjects(instance);
   const project = projects.data?.find((candidate) => candidate.id === projectId);
+  const offline = useInstanceReachability(id).state === 'offline';
   const session = usePhoenixSession(instance, projectId, sessionId);
   const turns = usePhoenixSessionTurns(instance, projectId, session.data);
   const configsQuery = usePhoenixProjectAnnotationConfigs(instance, projectId);
@@ -135,7 +140,14 @@ export function SessionDetailView({
     settings.requiredConfigNames.length > 0 ? [...settings.requiredConfigNames, 'note'] : [],
   );
 
-  const annotationsSuccess = settings.requiredConfigNames.length === 0 || annotations.isSuccess;
+  // Offline, the review state comes from whatever annotations were saved.
+  const annotationsSuccess =
+    settings.requiredConfigNames.length === 0 ||
+    annotations.isSuccess ||
+    (offline && !annotations.isPending);
+
+  // A failed refetch keeps saved configs, which still drive the review form.
+  const configsReady = configsQuery.data !== undefined;
 
   const classification = classifySessionReview(
     settings.requiredConfigNames,
@@ -144,7 +156,7 @@ export function SessionDetailView({
   );
 
   const reviewStatus =
-    reviewSettingsHydrated && configsQuery.isSuccess && annotationsSuccess
+    reviewSettingsHydrated && configsReady && annotationsSuccess
       ? classification.status
       : undefined;
 
@@ -167,6 +179,13 @@ export function SessionDetailView({
   const investigation = usePxiInvestigationStore((state) =>
     investigationKey ? state.runs[investigationKey] : undefined,
   );
+
+  // PXI runs on the server, so a new investigation needs it; a past run still opens.
+  const pxiOffline = offline && !investigation;
+
+  const investigateUnavailable = pxiOffline
+    ? `PXI needs a connection to ${instance?.name ?? 'this server'}`
+    : null;
 
   const isRefreshing =
     session.isRefetching ||
@@ -240,6 +259,12 @@ export function SessionDetailView({
   };
 
   const refresh = async () => {
+    if (isDeviceOffline()) {
+      haptics.warning();
+
+      return;
+    }
+
     haptics.selection();
     const sessionResult = await session.refetch();
 
@@ -273,6 +298,7 @@ export function SessionDetailView({
     ? null
     : {
         investigationStatus: investigation?.status ?? null,
+        investigateUnavailable,
         onAddToDataset: addToDataset,
         onCopySessionId: copySessionId,
         onInvestigate: investigate,
@@ -282,13 +308,13 @@ export function SessionDetailView({
     const reviewTools = (
       <ReviewTools
         allAnnotations={annotations.data ?? []}
-        annotationsError={annotations.error}
+        annotationsError={offline ? null : annotations.error}
         annotationsSuccess={annotationsSuccess}
         anonymousReviewerId={anonymousReviewerId}
         classification={classification}
         configs={configs}
-        configsError={configsQuery.error}
-        configsSuccess={configsQuery.isSuccess}
+        configsError={configsReady ? null : configsQuery.error}
+        configsSuccess={configsReady}
         instanceId={id}
         onReviewed={onReviewed}
         projectId={projectId}
@@ -307,11 +333,17 @@ export function SessionDetailView({
         actions={contentActions}
         footer={split ? undefined : reviewTools}
         instanceId={id}
+        notice={
+          instance ? (
+            <CachedDataNotice dataUpdatedAt={session.dataUpdatedAt} instance={instance} />
+          ) : undefined
+        }
         projectId={projectId}
         refreshControl={refreshControl}
         reviewStatus={reviewStatus}
         session={loaded}
         turns={turns}
+        unreachableInstanceName={offline ? instance?.name : undefined}
       />
     );
 
@@ -373,8 +405,9 @@ export function SessionDetailView({
                   ? investigation.status === 'running'
                     ? 'PXI is investigating'
                     : 'View PXI investigation'
-                  : 'Investigate with PXI',
+                  : (investigateUnavailable ?? 'Investigate with PXI'),
                 icon: { type: 'sfSymbol', name: 'text.magnifyingglass' },
+                disabled: investigateUnavailable !== null,
                 onPress: investigate,
                 visibilityPriority: 'high',
               }),
@@ -383,9 +416,11 @@ export function SessionDetailView({
           }}
         />
       ) : null}
-      {session.isPending ? (
+      {isUnavailableOffline(session, offline) ? (
+        <OfflineUnavailable instanceName={instance.name} onRetry={() => void session.refetch()} />
+      ) : session.isPending ? (
         <EmptyState loading title="Loading session" />
-      ) : session.isError ? (
+      ) : session.isError && session.data === undefined ? (
         <EmptyState
           action={{ label: 'Try again', onPress: () => void session.refetch() }}
           message={session.error.message}

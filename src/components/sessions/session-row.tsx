@@ -1,3 +1,4 @@
+import { NotSavedOfflineGlyph } from '@/components/offline/not-saved-offline-glyph';
 import { ListRow } from '@/components/ui/list-row';
 import { StatusLabel, type StatusTone } from '@/components/ui/status-label';
 import type { SessionData, SessionReviewClassification } from '@/features/session-review/types';
@@ -14,6 +15,7 @@ export function SessionRow({
   opener,
   selected,
   session,
+  unsaved = false,
 }: {
   classification: SessionReviewClassification;
   onPress: () => void;
@@ -21,6 +23,8 @@ export function SessionRow({
   opener: string | null;
   selected: boolean;
   session: SessionData;
+  /** Offline, and its details were never saved: it would open to nothing. */
+  unsaved?: boolean;
 }) {
   const configured = classification.status !== 'not-configured';
   const review = reviewLabel(classification);
@@ -43,14 +47,16 @@ export function SessionRow({
 
   return (
     <ListRow
-      accessibilityHint="Opens session details and review"
+      accessibilityHint={unsaved ? 'Not saved for offline use' : 'Opens session details and review'}
       accessibilityLabel={`Session ${session.session_id}, ${review}, ${turns} turn${turns === 1 ? '' : 's'}, ${duration}, ${tokens} tokens, started ${started}`}
+      dimmed={unsaved}
       leading={configured ? <StatusLabel tone={reviewTone(classification)} /> : undefined}
       meta={`${turns} turn${turns === 1 ? '' : 's'}`}
       onPress={onPress}
       selected={selected}
       subtitle={subtitle}
       title={opener ?? session.session_id}
+      trailing={unsaved ? <NotSavedOfflineGlyph /> : null}
       variant="sidebar"
     />
   );

@@ -1,3 +1,4 @@
+import { trackReachability } from '@/features/offline/reachability';
 import type { PhoenixInstance } from '@/types/instance';
 
 import { PhoenixAuthError } from './oauth';
@@ -26,7 +27,7 @@ export async function authenticatedFetch(
   for (const [key, value] of Object.entries(await getAuthorizationHeaders(instance)))
     headers.set(key, value);
 
-  return fetch(input, { ...init, headers });
+  return trackReachability(instance.id, () => fetch(input, { ...init, headers }));
 }
 
 export async function revokeAndDeleteCredentials(

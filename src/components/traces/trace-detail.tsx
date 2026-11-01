@@ -3,12 +3,16 @@ import { useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CachedDataNotice } from '@/components/offline/cached-data-notice';
+import { isUnavailableOffline } from '@/components/offline/offline-state';
+import { OfflineUnavailable } from '@/components/offline/offline-unavailable';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ListRow, RowInset, RowSeparator } from '@/components/ui/list-row';
 import { SectionHeader } from '@/components/ui/section-header';
 import { StatusLabel, type StatusTone } from '@/components/ui/status-label';
 import { Type, useAppColors } from '@/constants/theme';
 import { useContentColumnStyle } from '@/features/duo/layout';
+import { useInstanceReachability } from '@/features/offline/reachability';
 import { type PhoenixSpan, usePhoenixProjects, usePhoenixTrace } from '@/hooks/use-phoenix-data';
 import { formatCompactNumber, formatDuration, formatRelativeTime } from '@/lib/format';
 import { useInstanceStore } from '@/store/instances';
@@ -72,6 +76,7 @@ export function TraceDetailView({
   const projects = usePhoenixProjects(instance);
   const project = projects.data?.find((candidate) => candidate.id === projectId);
   const trace = usePhoenixTrace(instance, projectId, traceId);
+  const offline = useInstanceReachability(instanceId).state === 'offline';
   const spans = trace.data ?? [];
   const root = findRootSpan(spans);
 
@@ -95,9 +100,14 @@ export function TraceDetailView({
     );
   }
 
+  if (isUnavailableOffline(trace, offline)) {
+    return <OfflineUnavailable instanceName={instance.name} onRetry={() => void trace.refetch()} />;
+  }
+
   if (trace.isPending) return <EmptyState loading title="Loading trace" />;
 
-  if (trace.isError) {
+  // A failed refetch keeps the trace it had, which stays readable.
+  if (trace.isError && trace.data === undefined) {
     return (
       <EmptyState
         action={{ label: 'Try again', onPress: () => void trace.refetch() }}
@@ -134,6 +144,7 @@ export function TraceDetailView({
       }
       style={[styles.screen, { backgroundColor: colors.background }]}
     >
+      <CachedDataNotice dataUpdatedAt={trace.dataUpdatedAt} instance={instance} />
       <TraceContent
         actionsInBar={actionsInBar}
         baseUrl={instance.baseUrl}

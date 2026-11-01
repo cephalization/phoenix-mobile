@@ -8,6 +8,8 @@ import { RowInset, RowSeparator } from '@/components/ui/list-row';
 import { SectionHeader } from '@/components/ui/section-header';
 import { StatusLabel, type StatusTone } from '@/components/ui/status-label';
 import { AppFonts, Type, useAppColors } from '@/constants/theme';
+import { usePendingChangeCount } from '@/features/offline/outbox';
+import { useInstanceReachability } from '@/features/offline/reachability';
 import { latestOwnedAnnotation } from '@/features/session-review/classifier';
 import {
   createAuthenticatedAnnotationIdentifier,
@@ -103,8 +105,9 @@ export function ReviewTools({
         sessionId={session.session_id}
         staleNames={staleNames}
         viewer={viewer.data}
-        viewerError={viewer.error}
-        viewerSuccess={viewer.isSuccess}
+        // A saved viewer is enough to review offline; only a missing one is an error.
+        viewerError={viewer.data === undefined ? viewer.error : null}
+        viewerSuccess={viewer.data !== undefined}
       />
     </>
   );
@@ -161,6 +164,9 @@ function ReviewForm({
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pristine, setPristine] = useState(true);
+  const [savedOffline, setSavedOffline] = useState(false);
+  const pendingCount = usePendingChangeCount(routeInstanceId);
+  const offline = useInstanceReachability(routeInstanceId).state === 'offline';
   const initializedSource = useRef('');
   const authenticatedViewerId = viewer && viewer.auth_method !== 'ANONYMOUS' ? viewer.id : null;
 
@@ -275,7 +281,7 @@ function ReviewForm({
     }
 
     try {
-      await writeAnnotations.mutateAsync({
+      const review = await writeAnnotations.mutateAsync({
         annotations: drafts.map(({ config, draft }) => ({
           config,
           draft,
@@ -284,10 +290,12 @@ function ReviewForm({
         })),
       });
 
-      if (note.trim()) {
-        await writeNote.mutateAsync({ identifier: noteIdentifier, note, sessionId });
-      }
+      const savedNote = note.trim()
+        ? await writeNote.mutateAsync({ identifier: noteIdentifier, note, sessionId })
+        : null;
 
+      // A queued review shows as saved right away and uploads when the server is back.
+      setSavedOffline(review.queued || savedNote?.queued === true);
       haptics.success();
 
       if (moveNext && !onReviewed) {
@@ -450,6 +458,33 @@ function ReviewForm({
                 {error}
               </Text>
             ) : null}
+            {pendingCount > 0 && (savedOffline || offline) ? (
+              <Pressable
+                accessibilityHint="Shows the changes waiting to upload"
+                accessibilityRole="button"
+                onPress={() =>
+                  router.push({
+                    pathname: '/instances/[id]/pending',
+                    params: { id: routeInstanceId },
+                  })
+                }
+                style={({ pressed }) => [styles.offlineNote, pressed && styles.receded]}
+              >
+                <StatusLabel tone="pending" />
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={[Type.subhead, styles.noticeText, { color: colors.textSecondary }]}
+                >
+                  {offline
+                    ? `Saved on this device. Uploads when ${instance?.name ?? 'the server'} is back`
+                    : 'Saved on this device. Uploading'}
+                  {' · '}
+                  <Text style={[Type.mono, { color: colors.textSecondary }]}>
+                    {pendingCount} waiting
+                  </Text>
+                </Text>
+              </Pressable>
+            ) : null}
             <MotionPressable
               accessibilityRole="button"
               accessibilityState={{ busy: submitting, disabled: !enabled }}
@@ -515,6 +550,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   submit: { gap: 4, paddingHorizontal: RowInset, paddingTop: 12 },
+  offlineNote: { alignItems: 'center', flexDirection: 'row', gap: 8, minHeight: 48 },
   primary: {
     alignItems: 'center',
     borderRadius: 26,

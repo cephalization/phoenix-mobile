@@ -28,6 +28,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { RowInset } from '@/components/ui/list-row';
 import { AppFonts, MaxContentWidth, Type, useAppColors } from '@/constants/theme';
 import { useDuoLayout } from '@/features/duo/layout';
+import { useInstanceReachability } from '@/features/offline/reachability';
 import { parseServerVersion } from '@/features/pxi/actions';
 import {
   createPxiId,
@@ -458,6 +459,8 @@ function ChatSession({
   const [wasStopped, setWasStopped] = useState(false);
   const submitting = useRef(false);
   const [serverSessionId, setServerSessionId] = useState(agentSessionId ?? null);
+  // PXI runs on the server, so turns are never queued for later.
+  const offline = useInstanceReachability(instance.id).state === 'offline';
 
   const [transport] = useState(() =>
     createPxiTransport({
@@ -557,7 +560,7 @@ function ChatSession({
   const submit = async () => {
     const text = input.trim();
 
-    if (!text || isStreaming || submitting.current) return;
+    if (!text || isStreaming || offline || submitting.current) return;
     submitting.current = true;
     onActivateSession();
     setInput('');
@@ -595,7 +598,7 @@ function ChatSession({
     else retry();
   };
 
-  const canSend = input.trim().length > 0;
+  const canSend = input.trim().length > 0 && !offline;
 
   return (
     <KeyboardAvoidingView
@@ -696,7 +699,20 @@ function ChatSession({
           },
         ]}
       >
-        {(error || wasStopped) && (
+        {offline && !isStreaming ? (
+          <View accessibilityLiveRegion="polite" style={styles.notice}>
+            <SymbolView
+              name={{ ios: 'wifi.slash', android: 'cloud_off', web: 'cloud_off' }}
+              size={13}
+              tintColor={colors.textSecondary}
+            />
+            <Text style={[Type.subhead, styles.noticeText, { color: colors.textSecondary }]}>
+              PXI needs a connection to {instance.name}
+            </Text>
+          </View>
+        ) : null}
+
+        {!offline && (error || wasStopped) && (
           <View accessibilityLiveRegion="polite" style={styles.notice}>
             <SymbolView
               name={

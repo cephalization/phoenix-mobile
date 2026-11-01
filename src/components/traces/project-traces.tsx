@@ -16,6 +16,9 @@ import type { NativeStackHeaderItemMenu } from 'expo-router/native-stack';
 
 import { DuoArrangement, useArrangementPane } from '@/components/duo/arrangement';
 import { ContentColumn } from '@/components/duo/content-column';
+import { CachedDataNotice } from '@/components/offline/cached-data-notice';
+import { isDeviceOffline, isUnavailableOffline } from '@/components/offline/offline-state';
+import { OfflineUnavailable } from '@/components/offline/offline-unavailable';
 import { usePxiHeaderOptions } from '@/components/pxi-header-button';
 import { TraceDetailView } from '@/components/traces/trace-detail';
 import { InlineChoice, ProjectViewPicker } from '@/components/traces/project-list-header';
@@ -28,6 +31,8 @@ import { Type, useAppColors } from '@/constants/theme';
 import { nativeHeaderTitle, useDuoLayout } from '@/features/duo/layout';
 import { isSplitDetail, useSplitDetail } from '@/features/duo/split-detail';
 import { selectDetail } from '@/features/duo/split-routes';
+import { useSavedOfflineData } from '@/features/offline/persistence';
+import { useInstanceReachability } from '@/features/offline/reachability';
 import {
   createTraceRange,
   DefaultTraceView,
@@ -107,6 +112,8 @@ export function ProjectTraces({
     state.instances.find((candidate) => candidate.id === id),
   );
 
+  const offline = useInstanceReachability(id).state === 'offline';
+  const savedTraceIds = new Set(useSavedOfflineData(id).traceIds);
   const filterKey = traceFilterKey(id, projectId);
   const storedExpression = useTraceFilterStore((state) => state.active[filterKey] ?? null);
   const applyFilter = useTraceFilterStore((state) => state.applyFilter);
@@ -214,6 +221,13 @@ export function ProjectTraces({
 
   const refresh = async () => {
     if (dataRefreshing || manualRefreshing) return;
+
+    if (isDeviceOffline()) {
+      haptics.warning();
+
+      return;
+    }
+
     haptics.selection();
     setManualRefreshing(true);
 
@@ -328,7 +342,12 @@ export function ProjectTraces({
           initialNumToRender={12}
           keyExtractor={(trace) => trace.id}
           ListEmptyComponent={
-            activeTraces.isPending ? (
+            isUnavailableOffline(activeTraces, offline) ? (
+              <OfflineUnavailable
+                instanceName={instance.name}
+                onRetry={() => void activeTraces.refetch()}
+              />
+            ) : activeTraces.isPending ? (
               <EmptyState loading title="Loading traces" />
             ) : activeTraces.isError && filterRejected ? (
               <EmptyState
@@ -386,6 +405,7 @@ export function ProjectTraces({
           }
           ListHeaderComponent={
             <View>
+              <CachedDataNotice dataUpdatedAt={activeTraces.dataUpdatedAt} instance={instance} />
               <ProjectViewPicker title={project?.name} value="traces" />
               {nativeBar ? null : (
                 <View>
@@ -441,6 +461,7 @@ export function ProjectTraces({
           removeClippedSubviews={Platform.OS === 'android'}
           renderItem={({ item }) => (
             <TraceRow
+              unsaved={offline && !savedTraceIds.has(item.traceId)}
               onPress={() => {
                 if (isRegularWidth) {
                   setSelectedTraceId(item.traceId);

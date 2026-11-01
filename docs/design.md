@@ -63,6 +63,10 @@ Build items with `barButton`, and menus with `barMenu`, from `src/components/duo
 | Session  | More (copy session ID), Add to dataset, Investigate, PXI |
 | Sheets   | Done (`checkmark`, `variant: 'done'`, high priority)     |
 
+## Offline
+
+When an instance can't be reached, screens keep showing what was last loaded, with `CachedDataNotice` at the top: one quiet line, "Offline · Saved 2h ago", plus "· 3 waiting" when changes are queued (tap to open Waiting to upload). A page that was never saved shows `OfflineUnavailable`, never a raw network error. The notice leads the screen, above a list's own title and segmented control. Lists say in advance what will open: offline, a trace or session whose details were never saved, and a project with neither list saved, is dimmed with "Not saved offline" and a trailing `NotSavedOfflineGlyph`, and instances in Connections and the switcher menu read "Offline · 3 projects saved" (or "Nothing saved", dimmed with the glyph). Actions that need the server (PXI, Investigate) are disabled with a short reason; everything else works and queues.
+
 ## Motion
 
 Rows don't animate in. A list appears settled, and pull to refresh keeps it in place. Keep animation for state changes such as sheets, the PXI panel, and folding sections, and respect Reduce Motion.

@@ -532,6 +532,80 @@ The targeted Metro resolver shim fixed iOS and Android bundling without polyfill
 
 ## Design Decisions
 
+### 2026-10-31 - Phoenix Data Is Cached Per Query For Offline Reading
+
+**Status:** Decision
+**Area:** offline, TanStack Query, storage, security
+
+**What is saved.** Successful queries under `['phoenix','instance',id,…]` persist through TanStack's `experimental_createQueryPersister` into AsyncStorage:
+
+- entries are stored as `phoenix-offline-*`, with a 14-day max age and the buster `schema-N` from `OfflineCacheSchemaVersion`;
+- PXI agent-session keys and filter validation are excluded;
+- trace range keys carry a per-selection timestamp, so the stored identity normalises `day:<ISO>` to `day`.
+
+**Restoring.**
+
+- The persister's own refetch-on-restore calls `query.fetch()` without a catch. Against an unreachable server that surfaced as an unhandled rejection, so it is off; `offlineQueryPersister` refetches restored stale data itself and swallows the failure.
+- The persister runs only when a fetch starts, so queries paused by a lost device network are restored separately (`attachOfflineCache`).
+- Optimistic edits are not fetches, so they are saved explicitly with `persistQueryNow`.
+- AsyncStorage is 6 MB on Android and shared with the app's stores, so the cache keeps a size index with a per-platform budget and oldest-first eviction.
+
+**Security.** Cached Phoenix data is stored unencrypted in the app sandbox (localStorage on web). That includes projects, traces with span inputs and outputs, sessions, and annotations. Tokens stay in SecureStore, and PXI transcripts are never cached. Users can turn caching off or clear it in Settings, and removing a connection deletes its cache.
+
+**Implication:**
+
+- Bump the schema version when a cached result shape changes.
+- Exclude any new non-data key under the phoenix prefix in `isPersistableQueryKey`.
+- A screen must prefer `data` over `isError`. TanStack keeps data when a refetch fails, and checking `isError` first hid saved pages behind error states, as in the review queue sheet and the review form's viewer.
+- Verified on 2026-10-31 on the iPhone Duo simulator, with a local TCP proxy to the dev Phoenix that could be stopped. Saved pages restored after a relaunch with the server gone, unsaved pages said "Not available offline", and the notice cleared when the server returned.
+
+### 2026-10-31 - Reachability Is Tracked Per Instance From Real Requests
+
+**Status:** Decision
+**Area:** offline, networking
+
+The device can be online while a LAN Phoenix is not, so `src/features/offline/reachability.ts` records each instance's state from every `authenticatedFetch`.
+
+How detection works:
+
+- **Fail fast:** once an instance is unreachable, other requests to it fail immediately with a network error, instead of waiting out the platform timeout of about a minute for a missing LAN host.
+- **Probes:** `<ReachabilityMonitor />` probes `/arize_phoenix_version` with a 5 s timeout. Probes go to unknown instances at launch, to unreachable ones every 10 s, and to the active instance every 30 s, so the notice appears even when nothing on screen is fetching.
+- **Device network:** `expo-network` drives TanStack's `onlineManager`, so queries pause rather than fail while the device has no network.
+- **Error wrapping:** the Phoenix client hides the network error behind "server version could not be determined", so `getCachedServerVersion` rethrows it as a network failure while the instance is unreachable. Session-review errors wrap the network failure in `cause`, so offline checks use `causedByNetworkFailure`.
+- **Network changes probe at once:** leaving Wi-Fi for cellular, or dropping Tailscale, keeps the device online but strands a LAN server, and a request to it then hangs for the platform's network timeout (about a minute). Every network-state change now probes every instance, and a request already waiting fails as soon as a probe marks its instance unreachable (`untilUnreachable`), so the screen shows its saved copy or Not available offline within the 5 s probe timeout.
+- **Saved-data summary:** `useSavedOfflineData` reads, from the persister's index keys plus in-memory queries, which projects have a traces or sessions list saved, and which traces and sessions have their details saved (`summarizeSavedData`). Lists use it to mark what won't open offline. It is refreshed shortly after each write, removal, and successful fetch, and the index loads 300 ms after launch so the marks are on the first screen.
+- **Selectors return stored values:** zustand v5 compares selector results by reference, so a selector that builds a new object (such as overriding `state` to `offline` when the device has no network) re-renders forever ("Maximum update depth exceeded"). The hook selects the entry and `deviceOnline` separately and derives the result outside. This only shows when the device itself loses its network; a missing server alone never takes that branch.
+
+**Implication:**
+
+- Route every Phoenix request through `authenticatedFetch`.
+- Treat a network failure anywhere in the cause chain as offline.
+- Don't add retries for network failures: the fail-fast gate makes them pointless, and they delay the offline state.
+
+### 2026-10-31 - Offline Writes Queue In A Persisted FIFO Outbox Of Built Request Bodies
+
+**Status:** Decision
+**Area:** offline, sessions, annotations, datasets
+
+**What queues.** Session reviews, notes, annotation-config creates, and dataset adds go through `sendOrQueue` in `use-phoenix-sessions.ts`. A write is queued in `src/features/offline/outbox.ts` (AsyncStorage, each entry zod-checked on load) when its instance is offline or the request never reaches the server. The queue stores built request bodies, not spans, so replay keeps deterministic annotation identifiers. While anything is waiting, new writes for that instance queue behind it.
+
+**Replay** is FIFO per instance, triggered by reachability, foregrounding, and a 30 s timer:
+
+- A network failure stops the replay.
+- 4xx responses other than 408/429, and validation, compatibility, and sign-in errors, mark that change failed; replay continues with the next one.
+- Other errors pause the replay, up to 5 attempts.
+- A queued dataset create that hits a name conflict retries as an append.
+
+**What the user sees.** Queued writes update the cache optimistically with `pending:<opId>` ids, including lists that were never fetched, so a queued review counts as reviewed at once. Replay refreshes the affected queries to restore the server's records. PXI is never queued; it is disabled offline.
+
+Verified on 2026-10-31: an annotation config created offline uploaded about 3 s after the server returned, and a review queued offline moved the session out of Needs review and advanced "Submit & next".
+
+**Implication:**
+
+- The QueryClient must keep `mutations.networkMode: 'always'`, or offline mutations pause instead of queuing.
+- Add a new write mutation through `sendOrQueue`, with an outbox kind, a zod schema, a replay branch in `outbox-replayer.tsx`, and an `invalidateAfterReplay` case.
+- Dataset appends are not idempotent: a response lost after the server accepted the upload can duplicate examples on replay.
+
 ### 2026-10-31 - PXI Model Picker Searches Every Provider And Accepts Typed Names
 
 **Status:** Decision (supersedes 2026-07-14 "PXI Model Availability Comes From GraphQL Preflight")

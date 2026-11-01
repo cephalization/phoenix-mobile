@@ -5,6 +5,7 @@ import { createJSONStorage, persist, type StateStorage } from 'zustand/middlewar
 
 import type { PhoenixInstance } from '@/types/instance';
 import { revokeAndDeleteCredentials } from '@/features/auth/session';
+import { clearOfflineData } from '@/features/offline/persistence';
 import { addRecentModel } from '@/features/pxi/model-search';
 import type { ModelSelection } from '@/features/pxi/types';
 import { useSessionReviewSettingsStore } from '@/store/session-review-settings';
@@ -88,16 +89,19 @@ export const useInstanceStore = create<InstanceState>()(
             ),
           ),
         }));
-        useSessionReviewSettingsStore
-          .getState()
-          .clearInstanceSettings(
-            replacedInstances.filter((item) => item.id !== instance.id).map((item) => item.id),
-          );
+
+        const replacedIds = replacedInstances
+          .filter((item) => item.id !== instance.id)
+          .map((item) => item.id);
+
+        useSessionReviewSettingsStore.getState().clearInstanceSettings(replacedIds);
+        await Promise.all(replacedIds.map((id) => clearOfflineData(id)));
       },
       clearInstances: async () => {
         const instances = useInstanceStore.getState().instances;
         await Promise.all(instances.map((instance) => revokeAndDeleteCredentials(instance, true)));
         useSessionReviewSettingsStore.getState().clearAllSettings();
+        await Promise.all(instances.map((instance) => clearOfflineData(instance.id)));
         set({
           activeInstanceId: null,
           instances: [],
@@ -111,6 +115,7 @@ export const useInstanceStore = create<InstanceState>()(
 
         if (instance) await revokeAndDeleteCredentials(instance, true);
         useSessionReviewSettingsStore.getState().clearInstanceSettings([id]);
+        await clearOfflineData(id);
         set((state) => {
           const { [id]: _removedModel, ...pxiModels } = state.pxiModels;
           const { [id]: _removedRecent, ...pxiRecentModels } = state.pxiRecentModels;
