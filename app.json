@@ -10,7 +10,7 @@
     "backgroundColor": "#0E0E0E",
     "primaryColor": "#000000",
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/phoenix.icon",
       "deploymentTarget": "16.4",
       "config": {
         "usesNonExemptEncryption": false
@@ -27,7 +27,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#EEF8FD",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
