@@ -7,7 +7,7 @@ Phoenix Mobile follows Apple's iPhone Duo guidance (the HIG page "Designing for 
 The root layout waits for the first native metrics (`NativeMetricsProvider`, at most a second) and picks a navigator for the session:
 
 - **Native split columns** (`SplitStack`, `src/components/duo/split-stack.tsx`) on iPhone Duo and iPad, when the binary carries the split host from the vendored react-native-screens fork.
-- **Expo Router's `Stack`** everywhere else (iPhone, Android, web, Expo Go), with PXI as the JavaScript pane (`PxiPaneShell`) on wide windows.
+- **Expo Router's `Stack`** everywhere else (iPhone, Android, Expo Go), with PXI as the JavaScript pane (`PxiPaneShell`) on wide windows.
 
 The choice never changes while the app runs, so screens never remount. The split itself collapses to one column on the closed Duo and expands again when it opens.
 
@@ -25,7 +25,7 @@ Route roles live in `src/features/duo/split-columns.ts`. One router history proj
 - `selectDetail(href)` opens a page the way a list row does: it replaces the detail column, so Back returns to the list.
 - `router.push` from a detail page drills in on top, so Back returns to that page.
 
-List screens mark the row the detail column shows with `useSplitDetail()`. A session page selects the next session after "Submit & next" from the order the sessions list publishes (`useSessionQueueOrder`). With room for it, PXI floats over the columns beside the vertical bar and the columns keep their layout; on the closed Duo it is a sheet. Done, the PXI bar item, or swiping the sheet away closes it. On the closed Duo the sheet's vertical bar holds Done, New Chat, and History (`ColumnHeader` on the inspector, driving `PxiChat` through its `PxiChatHandle` ref) and the chat keeps only a title line; the floating panel on the open Duo keeps the chat's own header, because the window's bar belongs to the page beside it.
+While the sidebar shows a project's Overview and nothing is selected, the detail column is not a placeholder: it draws the overview's charts (`ProjectOverviewBoard` in `src/components/overview/project-overview.tsx`), latency and cost side by side from 480 points. The sidebar keeps the figures, the hours with errors, cost by model, and evals. Both read one range and selection from `useOverviewStore`, so an hour picked in either is marked in both, and the board opens a bin's traces with `router.setParams`, which reaches the project route because it is the focused route while the detail column is empty. List screens mark the row the detail column shows with `useSplitDetail()`. A session page selects the next session after "Submit & next" from the order the sessions list publishes (`useSessionQueueOrder`). With room for it, PXI floats over the columns beside the vertical bar and the columns keep their layout; on the closed Duo it is a sheet. Done, the PXI bar item, or swiping the sheet away closes it. On the closed Duo the sheet's vertical bar holds Done, New Chat, and History (`ColumnHeader` on the inspector, driving `PxiChat` through its `PxiChatHandle` ref) and the chat keeps only a title line; the floating panel on the open Duo keeps the chat's own header, because the window's bar belongs to the page beside it.
 
 ## Measuring a column
 
@@ -36,11 +36,11 @@ Every column body contains the `LayoutMetrics` view from `modules/duo-native`, s
 - `systemBarEdge` from UIKit's `verticalBarEdge`,
 - `division`, the active fold region, for JavaScript layouts such as `DuoArrangement`.
 
-Without the native module (Android, web, Expo Go) the window width decides the size class and there is no fold.
+Without the native module (Android, Expo Go) the window width decides the size class and there is no fold.
 
 ## Bar items
 
-Actions are native header items so iPhone Duo can stack them in its vertical bar. Build them with `barButton` from `src/components/duo/column-header.tsx` and give each an SF Symbol, a label (shown in the overflow menu), and a `visibilityPriority` (`low` items overflow first). A custom glyph must come from the asset catalog (`xcasset`, added by a config plugin such as `plugins/with-pxi-glyph.js`); an image source loads after every navigation and flashes the label first. Trailing items stack from the bar's far end, so the last item sits at the top of a vertical bar. The items on each screen are listed in `docs/design.md`. Android and web keep their pressables.
+Actions are native header items so iPhone Duo can stack them in its vertical bar. Build them with `barButton` from `src/components/duo/column-header.tsx` and give each an SF Symbol, a label (shown in the overflow menu), and a `visibilityPriority` (`low` items overflow first). A custom glyph must come from the asset catalog (`xcasset`, added by a config plugin such as `plugins/with-pxi-glyph.js`); an image source loads after every navigation and flashes the label first. Trailing items stack from the bar's far end, so the last item sits at the top of a vertical bar. The items on each screen are listed in `docs/design.md`. Android keeps its pressables.
 
 ## Sheets
 

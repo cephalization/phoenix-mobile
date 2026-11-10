@@ -118,7 +118,7 @@ type SavedSets = {
 
 /**
  * Reads, from query keys alone, what each instance has saved. A project
- * counts once its traces list or sessions list is kept, a trace once its
+ * counts once its overview, traces list, or sessions list is kept, a trace once its
  * detail is, and a session once its detail is. Takes stored entries (through
  * `storageQueryKey`) and in-memory queries alike.
  */
@@ -139,9 +139,9 @@ export function summarizeSavedData(keys: Iterable<QueryKey>): Record<string, Sav
 
     if (section !== 'project' || !isJsonString(projectId)) continue;
 
-    // Keys: `traces/…` and `sessions/list` are the lists; `trace/<id>` and
-    // `sessions/session/<id>` are details.
-    if (area === 'traces' || (area === 'sessions' && part === 'list')) {
+    // Keys: `overview/…`, `traces/…`, and `sessions/list` are the project's
+    // views; `trace/<id>` and `sessions/session/<id>` are details.
+    if (area === 'overview' || area === 'traces' || (area === 'sessions' && part === 'list')) {
       entry.projectIds.add(projectId);
     }
 

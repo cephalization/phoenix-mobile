@@ -1,10 +1,11 @@
-import { router, Stack, useFocusEffect } from 'expo-router';
+import { router, Stack, useFocusEffect, useNavigation } from 'expo-router';
 import { useCallback, useEffect, useEffectEvent, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
   FlatList,
   Platform,
+  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
@@ -13,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { NativeStackHeaderItemMenu } from 'expo-router/native-stack';
+import type { NavigationProp, ParamListBase } from 'expo-router/react-navigation';
 
 import { DuoArrangement, useArrangementPane } from '@/components/duo/arrangement';
 import { ContentColumn } from '@/components/duo/content-column';
@@ -25,9 +27,10 @@ import { InlineChoice, ProjectViewPicker } from '@/components/traces/project-lis
 import { TraceFilterField } from '@/components/traces/trace-filter-field';
 import { TraceRow } from '@/components/traces/trace-row';
 import { EmptyState } from '@/components/ui/empty-state';
+import { RowInset } from '@/components/ui/list-row';
 import { SectionHeader } from '@/components/ui/section-header';
 import { StatStrip } from '@/components/ui/stat-strip';
-import { Type, useAppColors } from '@/constants/theme';
+import { AppFonts, Type, useAppColors } from '@/constants/theme';
 import { nativeHeaderTitle, useDuoLayout } from '@/features/duo/layout';
 import { isSplitDetail, useSplitDetail } from '@/features/duo/split-detail';
 import { selectDetail } from '@/features/duo/split-routes';
@@ -69,17 +72,25 @@ const StreamingOptions = [
 ] as const;
 
 /**
- * The project's Traces list: one of the two lists the project screen switches
+ * An exact span of time the overview hands over for one chart bin, with
+ * `errorsOnly` when it opened the bin's errors.
+ */
+export type TraceWindow = { from: string; to: string; errorsOnly: boolean };
+
+/**
+ * The project's Traces list: one of the views the project screen switches
  * between. The time range, streaming, and the Recent/Errors/Slowest view live
  * in one bar menu on iOS and in a line of choices above the list elsewhere.
  * The filter field above the statistics narrows both with a trace filter
- * expression, edited in the filter sheet.
+ * expression, edited in the filter sheet. A `window` from the overview
+ * replaces the range until it is cleared or another range is chosen.
  */
 export function ProjectTraces({
   active,
   id,
   projectId,
   query,
+  window,
 }: {
   /** False while the project shows its sessions; the list stays mounted but idle. */
   active: boolean;
@@ -87,18 +98,43 @@ export function ProjectTraces({
   projectId: string;
   /** A trace filter from the route's `query` parameter, applied when the list opens. */
   query?: string;
+  window?: TraceWindow;
 }) {
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
   const { isRegularWidth, systemBarEdge } = useDuoLayout();
   const splitDetail = useSplitDetail();
   const nativeBar = Platform.OS === 'ios';
+  const navigation = useNavigation<NavigationProp<ParamListBase>>();
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<PhoenixTraceFilter>(DefaultTraceView.filter);
 
-  const [range, setRange] = useState<TraceRangeSelection>(() =>
+  const [filter, setFilter] = useState<PhoenixTraceFilter>(
+    window?.errorsOnly ? 'errors' : DefaultTraceView.filter,
+  );
+
+  const [presetRange, setRange] = useState<TraceRangeSelection>(() =>
     createTraceRange(useSettingsStore.getState().traceRangePreset),
   );
+
+  // A window handed over from the overview sets the feed once per window, so
+  // the Show menu still works inside it.
+  const windowKey = window ? `${window.from}|${window.to}|${window.errorsOnly}` : null;
+  const [appliedWindowKey, setAppliedWindowKey] = useState(windowKey);
+
+  if (windowKey !== appliedWindowKey) {
+    setAppliedWindowKey(windowKey);
+
+    if (window) setFilter(window.errorsOnly ? 'errors' : DefaultTraceView.filter);
+  }
+
+  const range: TraceRangeSelection = window
+    ? {
+        cacheKey: `window:${window.from}:${window.to}`,
+        endTime: window.to,
+        preset: presetRange.preset,
+        startTime: window.from,
+      }
+    : presetRange;
 
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [screenFocused, setScreenFocused] = useState(true);
@@ -159,7 +195,8 @@ export function ProjectTraces({
     (activeTraces.isRefetching && !activeTraces.isFetchingNextPage) || summary.isRefetching;
 
   const pollRange = useEffectEvent(() => {
-    if (dataRefreshing) return;
+    // A handed-over window is a fixed span in the past; there is nothing new to poll.
+    if (dataRefreshing || window) return;
     setRange((current) => createTraceRange(current.preset, current.cacheKey));
     setPollTick((current) => current + 1);
   });
@@ -241,11 +278,16 @@ export function ProjectTraces({
     }
   };
 
+  const clearWindow = () =>
+    navigation.setParams({ from: undefined, show: undefined, to: undefined });
+
   const changeRange = (preset: TraceRangePreset) => {
-    if (preset === range.preset) return;
+    if (preset === range.preset && !window) return;
     haptics.selection();
     setTraceRangePreset(preset);
     setRange(createTraceRange(preset));
+
+    if (window) clearWindow();
   };
 
   const changeFilter = (next: PhoenixTraceFilter) => {
@@ -267,10 +309,11 @@ export function ProjectTraces({
 
   const filterRejected = activeTraces.error instanceof TraceFilterExpressionError;
 
-  const rangeLabel = traceRangePreset(range.preset).label;
+  const rangeLabel = window ? windowLabel(window) : traceRangePreset(range.preset).label;
   const filterLabel = traceFilterLabel(filter);
 
   const viewChanged =
+    window !== undefined ||
     range.preset !== DefaultTraceView.preset ||
     filter !== DefaultTraceView.filter ||
     streaming !== DefaultTraceView.streaming;
@@ -295,7 +338,7 @@ export function ProjectTraces({
           items: TraceRangePresets.map((option) => ({
             type: 'action',
             label: option.label,
-            state: option.value === range.preset ? 'on' : 'off',
+            state: !window && option.value === range.preset ? 'on' : 'off',
             onPress: () => changeRange(option.value),
           })),
         },
@@ -356,7 +399,6 @@ export function ProjectTraces({
                 symbol={{
                   android: 'filter_list_off',
                   ios: 'line.3.horizontal.decrease.circle',
-                  web: 'filter_list_off',
                 }}
                 title="Phoenix couldn’t use this filter"
               />
@@ -367,7 +409,6 @@ export function ProjectTraces({
                 symbol={{
                   android: 'error',
                   ios: 'exclamationmark.triangle',
-                  web: 'error',
                 }}
                 title="Couldn’t load traces"
               />
@@ -378,7 +419,6 @@ export function ProjectTraces({
                 symbol={{
                   android: 'filter_list',
                   ios: 'line.3.horizontal.decrease.circle',
-                  web: 'filter_list',
                 }}
                 title="No matching traces"
               />
@@ -389,7 +429,7 @@ export function ProjectTraces({
                     ? 'No root spans with an error status in this range.'
                     : 'New traces appear here as this project receives activity.'
                 }
-                symbol={{ android: 'inbox', ios: 'tray', web: 'inbox' }}
+                symbol={{ android: 'inbox', ios: 'tray' }}
                 title={filter === 'errors' ? 'No error traces' : 'No traces yet'}
               />
             )
@@ -439,6 +479,7 @@ export function ProjectTraces({
                   onPress={openFilter}
                 />
               ) : null}
+              {window ? <WindowBar label={windowLabel(window)} onClear={clearWindow} /> : null}
               <TraceStats isLoading={summary.isPending} summary={summary.data} />
               <SectionHeader label={sectionLabel} />
             </View>
@@ -530,6 +571,48 @@ export function ProjectTraces({
   );
 }
 
+/** `Today 2:00 PM – 3:00 PM` or `Tue 2:00 PM – 3:00 PM`: the span a chart bin covered. */
+function windowLabel(window: TraceWindow) {
+  const from = new Date(window.from);
+  const to = new Date(window.to);
+
+  const day =
+    from.toDateString() === new Date().toDateString()
+      ? 'Today'
+      : from.toLocaleDateString([], { weekday: 'short' });
+
+  const time = { hour: 'numeric', minute: '2-digit' } as const;
+
+  return `${day} ${from.toLocaleTimeString([], time)} – ${to.toLocaleTimeString([], time)}`;
+}
+
+/** The handed-over window in place of the range, with the way back to it. */
+function WindowBar({ label, onClear }: { label: string; onClear: () => void }) {
+  const colors = useAppColors();
+
+  return (
+    <View style={[styles.windowBar, { borderColor: colors.separator }]}>
+      <Text numberOfLines={1} style={[Type.mono, styles.windowLabel, { color: colors.text }]}>
+        {label}
+      </Text>
+      <Pressable
+        accessibilityHint="Returns to the time range"
+        accessibilityLabel="Show the whole range"
+        accessibilityRole="button"
+        onPress={() => {
+          haptics.selection();
+          onClear();
+        }}
+        style={styles.windowClear}
+      >
+        <Text style={[Type.label, styles.windowClearLabel, { color: colors.text }]}>
+          Whole range
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function TraceStats({
   isLoading,
   summary,
@@ -596,7 +679,7 @@ function TraceDetailPane({
       {traceId === null ? (
         <EmptyState
           message="Trace details appear here as you move through the list."
-          symbol={{ android: 'timeline', ios: 'list.bullet.indent', web: 'timeline' }}
+          symbol={{ android: 'timeline', ios: 'list.bullet.indent' }}
           title="Select a trace"
         />
       ) : (
@@ -636,6 +719,20 @@ function UnavailableState({ message, title }: { message: string; title: string }
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   list: { flex: 1 },
+  windowBar: {
+    alignItems: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+    minHeight: 48,
+    paddingLeft: RowInset,
+    paddingRight: RowInset - 12,
+  },
+  windowLabel: { flex: 1 },
+  windowClear: { justifyContent: 'center', minHeight: 48, paddingHorizontal: 12 },
+  windowClearLabel: { fontFamily: AppFonts.semibold },
   detailPane: { flex: 1, justifyContent: 'center' },
   content: { alignSelf: 'center', flexGrow: 1, width: '100%' },
   footer: { paddingVertical: 24 },

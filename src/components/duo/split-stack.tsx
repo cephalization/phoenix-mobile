@@ -32,6 +32,7 @@ import type {
 import type { NativeStackNavigationOptions } from 'expo-router/native-stack';
 
 import { PxiChat, type PxiChatHandle } from '@/components/chat/pxi-chat';
+import { ProjectOverviewBoard } from '@/components/overview/project-overview';
 import { EmptyState } from '@/components/ui/empty-state';
 import { type Surface, SurfaceContext, useAppColors } from '@/constants/theme';
 import { useDuoLayout } from '@/features/duo/layout';
@@ -48,7 +49,8 @@ import {
 } from '@/features/duo/split-routes';
 import { SplitDetailContext, type SplitDetail } from '@/features/duo/split-detail';
 import { usePxiPaneStore } from '@/features/pxi/pane-store';
-import { isJsonObject } from '@/lib/json';
+import { useMetricsSupported } from '@/hooks/use-phoenix-metrics';
+import { isJsonObject, isJsonString } from '@/lib/json';
 import { useInstanceStore } from '@/store/instances';
 
 import { barButton, ColumnHeader } from './column-header';
@@ -293,6 +295,15 @@ function SplitColumns({
   const sidebarKeys = new Set(sidebar.map((route) => route.key));
   const detailKeys = new Set(detail.map((route) => route.key));
   const placeholder = emptyDetail(sidebar.at(-1));
+  const overviewProject = overviewOf(sidebar.at(-1));
+
+  const overviewInstance = useInstanceStore((store) =>
+    store.instances.find((candidate) => candidate.id === overviewProject?.instanceId),
+  );
+
+  // The detail column draws a project's overview charts while its sidebar shows the overview.
+  const metricsSupported = useMetricsSupported(overviewInstance);
+  const showBoard = overviewProject !== null && metricsSupported === true;
   // Route objects keep their identity until the route changes, so the value
   // only changes when the detail column does; list screens read it, and a
   // fresh object on every render would re-render them and their header options.
@@ -364,11 +375,18 @@ function SplitColumns({
               >
                 <ColumnHeader canGoBack={false} options={{ title: '' }} />
                 <ColumnContent>
-                  <EmptyState
-                    message={placeholder.message}
-                    symbol={{ ios: placeholder.symbol }}
-                    title={placeholder.title}
-                  />
+                  {showBoard && overviewProject ? (
+                    <ProjectOverviewBoard
+                      instanceId={overviewProject.instanceId}
+                      projectId={overviewProject.projectId}
+                    />
+                  ) : (
+                    <EmptyState
+                      message={placeholder.message}
+                      symbol={{ ios: placeholder.symbol }}
+                      title={placeholder.title}
+                    />
+                  )}
                 </ColumnContent>
               </Split.Screen>
               {detailScreens.routes.map((route) =>
@@ -439,6 +457,24 @@ function SplitColumns({
   );
 }
 
+/**
+ * The project whose overview the sidebar shows: the project route with no
+ * view (and no link that asks for traces) or `view=overview`.
+ */
+function overviewOf(sidebarRoute: Route | undefined) {
+  if (sidebarRoute?.name !== 'instances/[id]/projects/[projectId]') return null;
+  const params = isJsonObject(sidebarRoute.params) ? sidebarRoute.params : {};
+  const view = params.view;
+
+  if (!isJsonString(params.id) || !isJsonString(params.projectId)) return null;
+
+  const overview =
+    view === 'overview' ||
+    (view === undefined && params.query === undefined && params.from === undefined);
+
+  return overview ? { instanceId: params.id, projectId: params.projectId } : null;
+}
+
 function emptyDetail(sidebarRoute: Route | undefined) {
   const view = isJsonObject(sidebarRoute?.params) ? sidebarRoute.params.view : undefined;
 
@@ -449,6 +485,14 @@ function emptyDetail(sidebarRoute: Route | undefined) {
           title: 'No session selected',
           message: 'Pick a session to read the conversation and review it.',
           symbol: 'bubble.left.and.text.bubble.right',
+        } as const;
+      }
+
+      if (view === undefined || view === 'overview') {
+        return {
+          title: 'Project overview',
+          message: 'Drag across a chart to inspect an hour, then open its traces or errors.',
+          symbol: 'chart.bar.xaxis',
         } as const;
       }
 

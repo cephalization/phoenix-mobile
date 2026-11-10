@@ -4,7 +4,7 @@ Phoenix Mobile is a native utility with a flat, mostly monochrome design. Its st
 
 ## Principles
 
-1. **Lists, not dashboards.** The sidebar holds lists people pick from. Figures go in one strip of numbers, never in a card grid.
+1. **Lists, not dashboards.** The sidebar holds lists people pick from. Figures go in one strip of numbers, never in a card grid. A project's Overview is the one chart page, and it is built from the same flat parts: a stat strip, then full-width charts under section headers (see Charts).
 2. **Flat and full width.** No cards around lists, no monogram tiles, no chevrons on rows, no shadows. Hierarchy comes from surface tint, hairlines, and type weight.
 3. **One accent, used rarely.**
    - The semantic primary is monochrome (`accent`).
@@ -29,22 +29,32 @@ Phoenix Mobile is a native utility with a flat, mostly monochrome design. Its st
 
 ## Primitives (`src/components/ui/`)
 
-| Component          | Use                                                                                                                  |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| `ListRow`          | Every tappable row. `variant="sidebar"` for gutter rows with a selection fill; `variant="flat"` for full-width rows. |
-| `RowSeparator`     | The hairline between flat rows, inset to the text.                                                                   |
-| `SectionHeader`    | A small label followed by a hairline. Pass `onToggle` to fold the section; a folded section shows its count.         |
-| `StatStrip`        | One row of figures divided by hairlines. Replaces stat cards.                                                        |
-| `StatusLabel`      | A symbol and a word: `ok`, `error`, `pending`, `neutral`.                                                            |
-| `EmptyState`       | Empty, loading, and error states. No card. One optional action button.                                               |
-| `SegmentedControl` | Native segmented picker on iOS, a matching control elsewhere.                                                        |
+| Component              | Use                                                                                                                  |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `ListRow`              | Every tappable row. `variant="sidebar"` for gutter rows with a selection fill; `variant="flat"` for full-width rows. |
+| `RowSeparator`         | The hairline between flat rows, inset to the text.                                                                   |
+| `SectionHeader`        | A small label followed by a hairline. Pass `onToggle` to fold the section; a folded section shows its count.         |
+| `StatStrip`            | One row of figures divided by hairlines. Replaces stat cards.                                                        |
+| `StatusLabel`          | A symbol and a word: `ok`, `error`, `pending`, `neutral`.                                                            |
+| `EmptyState`           | Empty, loading, and error states. No card. One optional action button.                                               |
+| `SegmentedControl`     | Native segmented picker on iOS, a matching control elsewhere.                                                        |
+| `Bars`, `Lines`        | Full-width charts (`charts/`), inside a `ChartSection` and a `ScrubSurface`.                                         |
+| `MiniBars`, `MiniLine` | Row-sized pulse and trend, as a row's trailing element.                                                              |
 
 Where a screen needs something these don't cover, build it from the same tokens. A code block or JSON payload may keep its `code` background: it is content, not chrome.
 
+## Charts
+
+Charts answer one question each, run the full content width, and follow the colour rules: bars and lines are monochrome (`textTertiary`, the headline line in `text`), only errors take `danger`, and nothing uses `brand`. A second series is a receded dashed line, not a second colour. Each chart sits in a `ChartSection`: the header, the figure the chart is about (the selected bin's, or the range's), the scale's top value, and the first bin's time and "now" beneath.
+
+Every chart on a page shares one selection. A horizontal drag scrubs and a tap selects a bin (tap it again to clear); vertical drags scroll the page. The selected bin is drawn in `text` over a `rowSelected` column and the rest recede. Screen readers get an adjustable element that steps through bins. The readout above the charts names the bin and opens it: **Traces** shows that span in the Traces view, and **N errors** shows only its errors there. Numbers are monospaced, as everywhere.
+
+Rows use `MiniBars` for a project's last day of traffic (errors on top in `danger`) and `MiniLine` for an eval's trend. A pulse has no axes; the row's label speaks the figures.
+
 ## Navigation
 
-- **Root:** the projects list for the active instance. The title is a native menu that switches instance, adds one, or opens Connections (`src/app/instances/index.tsx`). Connections holds the active instance's version, status, sign-in, and Remove.
-- **Project:** one route, `projects/[projectId]`, showing its Traces or Sessions list by the `view` parameter. The segmented control sets the parameter on the project's own navigation, so nothing is pushed; in split columns that also clears the detail column (`clearDetailAbove`), because a selection belongs to the list that made it. Each list stays mounted once shown and the other is hidden, so switching back neither reloads nor reflows, and only the visible list sets the bar items.
+- **Root:** the projects list for the active instance, read as a health list: a strip of the instance's last 24 hours (traces, error rate, cost, active projects), a **Needs attention** section for projects whose errors spiked, traffic stopped, or p95 slowed (rules in `src/features/metrics/health.ts`), and a 24-hour pulse on every row. The title is a native menu that switches instance, adds one, or opens Connections (`src/app/instances/index.tsx`). Connections holds the active instance's version, status, sign-in, and Remove.
+- **Project:** one route, `projects/[projectId]`, showing its Overview, Traces, or Sessions by the `view` parameter. Overview leads unless a link asks for traces (a `query` filter or a time window) or the server predates project metrics (Phoenix 11.11). In an expanded split (the open iPhone Duo, iPad) the Overview divides: the sidebar keeps the figures and lists, including the hours with errors as rows that select their hour, and the empty detail column draws the charts (`ProjectOverviewBoard`) with the readout; both share one range and selection through `useOverviewStore`. A chart bin opens Traces with `from`, `to`, and `show=errors`; the window replaces the range under a "Whole range" bar until it is cleared or another range is chosen. The segmented control sets the parameter on the project's own navigation, so nothing is pushed; in split columns that also clears the detail column (`clearDetailAbove`), because a selection belongs to the list that made it. Each list stays mounted once shown and the other is hidden, so switching back neither reloads nor reflows, and only the visible list sets the bar items.
 - **Detail column:** a trace, a session, or a page drilled into from one. List rows open details with `selectDetail(href)`. Pushing from a detail page drills deeper.
 - **Filtering traces:** a search-field-shaped row in the Traces list opens the Filter traces sheet (Expression with suggestions, recents, and field completions; Ask for plain English). The active expression shows in mono with a clear button, and the section header reads "Filtered · …". It is an in-content field, not a bar item, because it holds text.
 - **Rows say what was asked.** As T3 Code lists a thread by its prompt, a trace row is titled by its root span's input (`inputExcerpt` in `src/features/traces/excerpt.ts`) and a session row by its first trace's input (`usePhoenixTraceOpeners`); the span name or ID is the fallback. Only an error earns a status symbol, so a healthy list stays quiet.
@@ -52,11 +62,12 @@ Where a screen needs something these don't cover, build it from the same tokens.
 
 ## Bar items
 
-Build items with `barButton`, and menus with `barMenu`, from `src/components/duo/column-header.tsx`. Every item needs an SF Symbol, a label (shown in the overflow menu), and a `visibilityPriority`. Trailing items stack from the far end, so **the last item sits at the top of a vertical bar**: put PXI last. Fold rarely used actions into a `More` menu (`ellipsis.circle`, `visibilityPriority: 'low'`). A filter menu's icon switches to its `.fill` variant when the view differs from the default. Android and web keep pressables.
+Build items with `barButton`, and menus with `barMenu`, from `src/components/duo/column-header.tsx`. Every item needs an SF Symbol, a label (shown in the overflow menu), and a `visibilityPriority`. Trailing items stack from the far end, so **the last item sits at the top of a vertical bar**: put PXI last. Fold rarely used actions into a `More` menu (`ellipsis.circle`, `visibilityPriority: 'low'`). A filter menu's icon switches to its `.fill` variant when the view differs from the default. Android keeps pressables.
 
 | Screen                 | Items (first to last)                                    |
 | ---------------------- | -------------------------------------------------------- |
 | Projects               | Settings, PXI                                            |
+| Overview               | Time range, PXI                                          |
 | Traces                 | Range, streaming, and Show menu, PXI                     |
 | Sessions               | Review filter menu, review queue settings, PXI           |
 | Trace                  | More (copy trace or span ID, open in Phoenix), PXI       |

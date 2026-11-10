@@ -13,6 +13,15 @@ This is the project's living technical memory. Record discoveries that would oth
 
 ## Active Constraints
 
+### 2026-11-10 - The Web Build Is No Longer Supported
+
+**Status:** Decision
+**Area:** platforms, app config, dependencies, persistence
+
+The product owner dropped the web build: iOS is first-class and Android is best effort. `app.json` declares `"platforms": ["ios", "android"]` and no longer has a `web` block (static output, favicon, PWA theme and standalone metadata). The `web` script and the `react-native-web` and `react-dom` dependencies are gone. `react-dom` stays in `node_modules` and the lockfile as an auto-installed peer of `@radix-ui/react-tabs`, which `expo-router` depends on for its web tabs; Expo adds `web` to the default platforms whenever `react-dom` is installed, so the explicit `platforms` key is what keeps web out. Removed web-only code: `src/app/+html.tsx`, `src/global.css` (and its import in `src/constants/theme.ts`, along with the `web` font block), the `.web` variants of the OAuth login and session modules and of `useColorScheme`, the template's `animated-icon.web.tsx`, `animated-icon.module.css`, and `web-badge.tsx` with its Expo badge images, `favicon.png` (no longer rendered by `scripts/render-app-icons.mts`), and `tutorial-web.png`. Persisted stores, the outbox, and the offline query cache use AsyncStorage directly instead of a no-op storage for static rendering. `confirmAction` always uses `Alert`, the pending-uploads row always offers Retry and Discard, and every `web` key in `SymbolView` names is dropped (the key is optional in `expo-symbols`). The iOS context menu moved from `native-context-menu.native.tsx` into `native-context-menu.tsx`, replacing the web pass-through. The vendored react-native-screens tarball still carries its `.web` module stubs; they are inert on native.
+
+**Implication:** Do not add `.web` files, `Platform.OS === 'web'` branches, SSR-safe storage, or `web` symbol keys. Validate with `vp exec expo export --platform ios --platform android`. Older entries that describe web behaviour are history; those that were only about web are marked superseded.
+
 ### 2026-11-01 - Apple Signing Is Per Developer
 
 **Status:** Current
@@ -71,9 +80,20 @@ Phoenix 20.12.0 added `filter` expressions to the trace list (`error_count > 0`,
 
 **Implication:** Gate every new filter expression on `[20, 12, 0]` and keep the fallback path alive until that floor is the project minimum. The session list `filter` (annotation name and identifier comprehensions) can replace the review queue's client-side scan in a later change; `classifySessionReview` must stay the final authority because `annotator_kind` is not filterable.
 
-### 2026-11-10 - The App Icon Is An Icon Composer Bundle Of The Phoenix Bird
+### 2026-11-10 - Project Overview And Health Read Phoenix's GraphQL Time Series
 
 **Status:** Decision
+**Area:** projects, metrics, charts, testing
+
+The project Overview and the home health list read the time series behind Phoenix's own Metrics page: `traceCountByStatusTimeSeries`, `traceLatencyMsPercentileTimeSeries`, `traceTokenCostTimeSeries`, `span`/`traceAnnotationScoreTimeSeries`, `latencyMsQuantile`, `costSummary`, and `topModelsByCost` with `costSummary(projectId, timeRange)` on each model. Git history in the Phoenix repository dates the series and `TimeBinConfig.utcOffsetMinutes` to 11.8–11.9 and `topModelsByCost` to 11.11.0, so `MetricsMinimum` is 11.11.0 and older servers keep Traces as the default view. Measured on Phoenix 21.0.0: series come back dense (a zero count or a null percentile for empty bins), bins start on local boundaries when `utcOffsetMinutes` is set, REST project IDs are the GraphQL node IDs, and a comparison window totals cheaply with `scale: DAY`. The health list asks for every project in aliased `node(id:)` selections, 20 projects per request. Health rules live in `src/features/metrics/health.ts`: the last eighth of the window (at least three bins) is compared with the rest of the window plus the previous one, so a spike in the last hours shows even when the day's total is calm. A slower p95 needs at least 50 traces in both windows; without that floor a sparse project was flagged on a handful of traces.
+
+Verification used a throwaway local Phoenix seeded with a week of synthetic OTLP traces (an error spike, a stopped feed, steady and sparse projects, a drifting eval). Phoenix enables authentication by default when bound to a non-loopback host (`0.0.0.0`), so a LAN-reachable test server needs `PHOENIX_ENABLE_AUTH=false`; an OTLP `BatchSpanProcessor` drops spans silently past its default queue of 2048 unless `max_queue_size` is raised. On the iOS 27 simulator, `simctl openurl` always raises an "Open in" prompt that cannot be accepted without a tap, and Xcode 27 no longer ships `Simulator.app`. Screens were reached instead by setting `DEV_CLIENT_DEFAULT_LAUNCHER_URL` in the simulator build's `Info.plist`, writing `EXDevMenuIsOnboardingFinished` to the app's defaults, and seeding the instance store in `RCTAsyncLocalStorage_V1/manifest.json` in the app's data container.
+
+**Implication:** Keep metric reads on these fields and gate new ones by version. Tune the health thresholds against real instances before treating "Needs attention" as an alert. Charts follow the Charts section of `docs/design.md`.
+
+### 2026-11-10 - The App Icon Is An Icon Composer Bundle Of The Phoenix Bird
+
+**Status:** Decision (Web parts superseded 2026-11-10: web removed)
 **Area:** iOS, Android, web, assets
 
 The Expo template icon is replaced by `assets/phoenix.icon`, an Icon Composer document, so iOS renders it with Liquid Glass and generates the dark, clear, and tinted appearances itself. The artwork is one layer, `Assets/phoenix-bird.svg`: the bird from Phoenix's vector nav logo (`js/app/src/components/nav/Logo.tsx` in the Phoenix repository) flattened to a single silhouette and filled with the brand teal-to-cyan gradient. The logo's highlight and fade overlays are dropped because the system adds its own specular highlights and shadows. The background is a `fill-specializations` gradient: pale cyan in light appearance and near-black ink in dark. A top-level `fill` beside `fill-specializations` overrode the dark specialization in `ictool` renders, so the bundle has only the specializations. The bird layer is 760 pt tall on the 1024 pt canvas, nudged 12 pt left and 8 pt down to balance its weight toward the head. `icon.png`, the Android adaptive foreground, background, and monochrome images, `splash-icon.png`, and `favicon.png` are flat renders of the same silhouette.
@@ -225,7 +245,7 @@ Requests always set GraphQL mutations to disabled and edit permission to manual.
 
 ### 2026-07-14 - PXI Sessions Persist In Platform Storage
 
-**Status:** Decision
+**Status:** Decision (Web parts superseded 2026-11-10: web removed)
 **Area:** PXI, security, persistence
 
 PXI session metadata and complete ordered AI SDK messages persist in normalized `pxi_sessions` and `pxi_messages` tables through Expo SQLite on native. Web uses an IndexedDB implementation behind the same repository API. The app restores the most recently updated session for an instance, loads other message bodies only when selected from history, and sends restored history back to the server-agent endpoint when the conversation continues.
@@ -238,7 +258,7 @@ The native SQLite file is app-private but not encrypted. Web records are scoped 
 
 ### 2026-07-14 - Safari Web Uses IndexedDB Instead Of Expo SQLite
 
-**Status:** Resolved
+**Status:** Resolved (Superseded 2026-11-10: web removed)
 **Area:** persistence, web, Safari
 
 Expo SQLite web support uses a WASM worker and `SharedArrayBuffer`. Even with COEP/COOP headers, an iPhone loading Metro over a plain HTTP LAN address is not in a secure context, so Safari cannot initialize the worker. PXI storage now resolves to IndexedDB on web and remains Expo SQLite on native; the web repository preserves revisions, deletion barriers, and history generations without requiring isolation headers.
@@ -271,7 +291,7 @@ Refresh, replacement, revocation, and deletion are serialized per credential key
 
 ### 2026-07-14 - Web Static Rendering Needs Server-Safe Persistence
 
-**Status:** Active  
+**Status:** Active (Superseded 2026-11-10: web removed)  
 **Area:** Zustand, AsyncStorage, Expo Router web
 
 Expo Router statically renders routes in Node. AsyncStorage's web implementation accesses `window`, so eager persistence during SSR crashes the export.
@@ -293,7 +313,7 @@ Self-hosted Phoenix commonly runs at an HTTP LAN address. Android blocks clearte
 
 ### 2026-07-14 - Form Sheets Are Native-First
 
-**Status:** Decision
+**Status:** Decision (Web parts superseded 2026-11-10: web removed)
 **Area:** Navigation, UI
 
 Connection creation and settings use Expo Router `formSheet` presentations with detents, grabbers, and rounded corners. Web renders these routes as ordinary pages because native sheet presentation is unavailable.
@@ -311,7 +331,7 @@ The instance dashboard calls typed `GET /v1/projects` through `@arizeai/phoenix-
 
 ### 2026-07-14 - Browser Chrome Has Platform Limits
 
-**Status:** Active  
+**Status:** Active (Superseded 2026-11-10: web removed)  
 **Area:** Safari, PWA
 
 CSS can color the document but cannot remove normal iOS Safari toolbars. The app config and `+html.tsx` provide dark theme metadata, `black-translucent` standalone status styling, and `viewport-fit=cover`.
@@ -343,7 +363,7 @@ In split columns every screen builds its own header config, and the fork loads a
 
 ### 2026-10-30 - The Screens Fork Broke Web Static Rendering Until It Gained A Web Module Stub
 
-**Status:** Resolved
+**Status:** Resolved (Superseded 2026-11-10: web removed)
 **Area:** web, static rendering, react-native-screens fork
 
 `npx expo export --platform all` failed in static rendering with `Cannot read properties of undefined (reading 'get')`, reported at whichever module happened to load next (zod, Expo Router's toolbar, gesture handler). Loading the server render bundle in Node and requiring each `src/app` module in turn pinned it to `src/app/_layout.tsx` through the fork's `lib/commonjs/index.js`, which imports `fabric/NativeScreensModule`, whose native build calls `TurboModuleRegistry.get('RNSModule')`; react-native-web has no `TurboModuleRegistry`. Upstream ships a `.web` stub at that path, while the fork only has one under `fabric/legacy/`. The vendored tarball now carries web stubs at `src`, `lib/commonjs`, and `lib/module` `fabric/NativeScreensModule.web.*`, and the export passes on all three platforms.
@@ -535,7 +555,7 @@ Rows now animate with persistent shared opacity and translation values. Their fi
 
 ### 2026-07-14 - Expo Router Link Wrappers Broke Pressable Layout On Web
 
-**Status:** Resolved  
+**Status:** Resolved (Superseded 2026-11-10: web removed)  
 **Area:** Expo Router, React Native web
 
 `Link` with `asChild` caused styled Pressable connection rows and the primary add action to lose their expected web layout. Content rendered as unstyled vertical text.
@@ -546,7 +566,7 @@ The app now uses `router.push` from MotionPressable or Pressable components.
 
 ### 2026-07-14 - AsyncStorage Hydration Crashed Static Export
 
-**Status:** Resolved  
+**Status:** Resolved (Superseded 2026-11-10: web removed)  
 **Area:** SSR, persistence
 
 The Zustand hydration completion callback wrote to AsyncStorage while Expo Router rendered in Node, producing `ReferenceError: window is not defined`.
@@ -782,7 +802,7 @@ The Phoenix client declares the project-traces route and span status filters ava
 
 ### 2026-07-14 - Chat Overlays Use Expo UI Native Surfaces
 
-**Status:** Decision
+**Status:** Decision (Web parts superseded 2026-11-10: web removed)
 **Area:** chat, native UI, sheets, menus
 
 Model selection and chat history use the universal `@expo/ui` `BottomSheet`, which maps to SwiftUI presentation detents, Material 3 `ModalBottomSheet`, and a Vaul drawer on web. Their React Native list content is hosted through `RNHostView`. On iOS, the universal sheet adds native content margins around that host; applying the canvas color to `RNHostView` creates a rectangular surface inside the rounded sheet. The sheet instead sets its SwiftUI presentation background while leaving the hosted subtree transparent. Transcript long-press actions use `@expo/ui/community/menu` on iOS and Android, with a pass-through web implementation where text remains selectable.
