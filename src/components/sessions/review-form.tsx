@@ -350,7 +350,7 @@ function ReviewForm({
           action={{ label: 'Try again', onPress: () => void retry() }}
           fill={false}
           message={prepareError.message}
-          symbol={{ android: 'warning', ios: 'exclamationmark.triangle', web: 'warning' }}
+          symbol={{ android: 'warning', ios: 'exclamationmark.triangle' }}
           title="Couldn’t prepare this review"
         />
       ) : !configsSuccess || !annotationsSuccess || !viewerSuccess ? (
@@ -371,7 +371,7 @@ function ReviewForm({
               ? `${staleNames.join(', ')} no longer exist. Update the queue before reviewing.`
               : 'Choose one or more annotation configs to define a complete review.'
           }
-          symbol={{ android: 'checklist', ios: 'checklist', web: 'checklist' }}
+          symbol={{ android: 'checklist', ios: 'checklist' }}
           title={staleNames.length > 0 ? 'Queue configuration is stale' : 'Queue not configured'}
         />
       ) : (

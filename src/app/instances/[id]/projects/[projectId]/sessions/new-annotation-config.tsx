@@ -91,7 +91,7 @@ export default function NewAnnotationConfigScreen() {
       >
         <EmptyState
           message="This Phoenix connection is no longer on this device."
-          symbol={{ ios: 'questionmark.circle', android: 'help', web: 'help' }}
+          symbol={{ ios: 'questionmark.circle', android: 'help' }}
           title="Instance not found"
         />
       </ScrollView>
@@ -193,7 +193,7 @@ export default function NewAnnotationConfigScreen() {
         <EmptyState
           fill={false}
           message="Your Phoenix Viewer role can browse annotation configurations but cannot create them."
-          symbol={{ ios: 'lock', android: 'lock', web: 'lock' }}
+          symbol={{ ios: 'lock', android: 'lock' }}
           title="Read-only access"
         />
       ) : (
@@ -264,7 +264,6 @@ export default function NewAnnotationConfigScreen() {
                           name={{
                             ios: 'minus.circle',
                             android: 'remove_circle_outline',
-                            web: 'remove_circle_outline',
                           }}
                           size={18}
                           tintColor={colors.textTertiary}
@@ -277,7 +276,7 @@ export default function NewAnnotationConfigScreen() {
               <ListRow
                 leading={
                   <SymbolView
-                    name={{ ios: 'plus', android: 'add', web: 'add' }}
+                    name={{ ios: 'plus', android: 'add' }}
                     size={15}
                     tintColor={colors.text}
                     weight="semibold"

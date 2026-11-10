@@ -23,7 +23,7 @@ export function OfflineUnavailable({
       action={deviceOnline && onRetry ? { label: 'Try again', onPress: onRetry } : undefined}
       fill={fill}
       message={`${instanceName} isn’t reachable. This page wasn’t saved for offline use.`}
-      symbol={{ android: 'cloud_off', ios: 'icloud.slash', web: 'cloud_off' }}
+      symbol={{ android: 'cloud_off', ios: 'icloud.slash' }}
       title="Not available offline"
     />
   );

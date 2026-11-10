@@ -6,10 +6,10 @@ import { Type, useAppColors } from '@/constants/theme';
 export type StatusTone = 'ok' | 'error' | 'pending' | 'neutral';
 
 const Symbols = {
-  ok: { android: 'check_circle', ios: 'checkmark.circle', web: 'check_circle' },
-  error: { android: 'warning', ios: 'exclamationmark.triangle.fill', web: 'warning' },
-  pending: { android: 'pending', ios: 'circle.dashed', web: 'pending' },
-  neutral: { android: 'radio_button_unchecked', ios: 'circle', web: 'radio_button_unchecked' },
+  ok: { android: 'check_circle', ios: 'checkmark.circle' },
+  error: { android: 'warning', ios: 'exclamationmark.triangle.fill' },
+  pending: { android: 'pending', ios: 'circle.dashed' },
+  neutral: { android: 'radio_button_unchecked', ios: 'circle' },
 } as const;
 
 /**

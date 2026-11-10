@@ -171,7 +171,7 @@ export default function TraceFilterScreen() {
         </View>
       ) : null}
 
-      {/* Android and web have no native bar item for the sheet's action. */}
+      {/* Android has no native bar item for the sheet's action. */}
       {Platform.OS === 'ios' ? null : (
         <View style={styles.actions}>
           <MotionPressable

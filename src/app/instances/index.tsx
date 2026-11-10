@@ -76,7 +76,7 @@ export default function ConnectionsSheet() {
       <ListRow
         leading={
           <SymbolView
-            name={{ android: 'add', ios: 'plus', web: 'add' }}
+            name={{ android: 'add', ios: 'plus' }}
             size={16}
             tintColor={colors.text}
             weight="semibold"
@@ -118,7 +118,7 @@ function InstanceRow({ active, instance }: { active: boolean; instance: PhoenixI
       trailing={
         active ? (
           <SymbolView
-            name={{ android: 'check', ios: 'checkmark', web: 'check' }}
+            name={{ android: 'check', ios: 'checkmark' }}
             size={16}
             tintColor={colors.text}
             weight="semibold"

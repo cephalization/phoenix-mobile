@@ -21,7 +21,7 @@ export default function PxiChatScreen() {
         <EmptyState
           action={{ label: 'Return home', onPress: () => router.replace('/') }}
           message="This Phoenix connection is no longer on this device."
-          symbol={{ ios: 'questionmark.circle', android: 'help', web: 'help' }}
+          symbol={{ ios: 'questionmark.circle', android: 'help' }}
           title="Instance not found"
         />
       </SafeAreaView>

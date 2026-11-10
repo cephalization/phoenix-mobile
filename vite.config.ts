@@ -25,7 +25,6 @@ export default defineConfig({
       'node_modules/**',
       'package-lock.json',
       'tools/oxlint/anti-slop/**',
-      'web-build/**',
     ],
   },
   lint: {
@@ -63,7 +62,6 @@ export default defineConfig({
       'ios/**',
       'node_modules/**',
       'tools/oxlint/anti-slop/**',
-      'web-build/**',
     ],
     jsPlugins: [
       {

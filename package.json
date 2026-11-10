@@ -13,7 +13,6 @@
     "ios": "expo run:ios",
     "ios:device": "expo run:ios --device",
     "ios:device:clean": "./scripts/rebuild-ios-device.sh",
-    "web": "expo start --web",
     "test": "vp test run",
     "typecheck": "tsc --noEmit",
     "icons": "node scripts/render-app-icons.mts",
@@ -54,7 +53,6 @@
     "expo-web-browser": "~58.0.7",
     "prism-react-renderer": "^2.4.1",
     "react": "19.3.0",
-    "react-dom": "19.3.0",
     "react-hook-form": "^7.81.0",
     "react-native": "0.88.1",
     "react-native-gesture-handler": "~3.3.0",
@@ -62,7 +60,6 @@
     "react-native-safe-area-context": "~5.10.1",
     "react-native-screens": "file:deps/react-native-screens-5.0.0-t3.48-phoenix.1.tgz",
     "react-native-svg": "15.16.0",
-    "react-native-web": "^0.21.4",
     "react-native-worklets": "0.13.0",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"

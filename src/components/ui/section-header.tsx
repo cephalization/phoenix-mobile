@@ -32,7 +32,6 @@ export function SectionHeader({
           name={{
             android: expanded ? 'expand_more' : 'chevron_right',
             ios: expanded ? 'chevron.down' : 'chevron.right',
-            web: expanded ? 'expand_more' : 'chevron_right',
           }}
           size={10}
           tintColor={colors.textTertiary}

@@ -3,8 +3,6 @@
  * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
  */
 
-import '@/global.css';
-
 import { createContext, use } from 'react';
 import { Platform, type TextStyle, useColorScheme } from 'react-native';
 
@@ -112,13 +110,6 @@ export const Fonts = Platform.select({
     sans: 'normal',
     serif: 'serif',
     rounded: 'normal',
-    mono: 'GeistMono_400Regular',
-    monoMedium: 'GeistMono_500Medium',
-  },
-  web: {
-    sans: 'var(--font-display)',
-    serif: 'var(--font-serif)',
-    rounded: 'var(--font-rounded)',
     mono: 'GeistMono_400Regular',
     monoMedium: 'GeistMono_500Medium',
   },

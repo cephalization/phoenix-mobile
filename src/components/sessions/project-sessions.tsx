@@ -393,7 +393,7 @@ export function ProjectSessions({
                 accessibilityHint="Loads the next page of sessions"
                 leading={
                   <SymbolView
-                    name={{ android: 'expand_more', ios: 'arrow.down.circle', web: 'expand_more' }}
+                    name={{ android: 'expand_more', ios: 'arrow.down.circle' }}
                     size={16}
                     tintColor={colors.textSecondary}
                   />
@@ -482,7 +482,7 @@ export function ProjectSessions({
               ) : (
                 <EmptyState
                   message="Choose a session from the queue to read its conversation and review it here."
-                  symbol={{ android: 'forum', ios: 'bubble.left.and.bubble.right', web: 'forum' }}
+                  symbol={{ android: 'forum', ios: 'bubble.left.and.bubble.right' }}
                   title="Select a session"
                 />
               )}
@@ -567,7 +567,7 @@ function SessionListState({
       <EmptyState
         action={{ label: 'Try again', onPress: retry }}
         message={dataError.message}
-        symbol={{ android: 'error', ios: 'exclamationmark.triangle', web: 'error' }}
+        symbol={{ android: 'error', ios: 'exclamationmark.triangle' }}
         title="Couldn’t load sessions"
       />
     );
@@ -586,7 +586,7 @@ function SessionListState({
     return (
       <EmptyState
         message="Sessions appear when this project receives traces with session IDs."
-        symbol={{ android: 'forum', ios: 'bubble.left.and.bubble.right', web: 'forum' }}
+        symbol={{ android: 'forum', ios: 'bubble.left.and.bubble.right' }}
         title="No sessions yet"
       />
     );
@@ -607,7 +607,7 @@ function SessionListState({
           ? 'No loaded session has all required human annotations.'
           : 'Every available session has all required human annotations.'
       }
-      symbol={{ android: 'task_alt', ios: 'checkmark.circle', web: 'task_alt' }}
+      symbol={{ android: 'task_alt', ios: 'checkmark.circle' }}
       title={filter === 'reviewed' ? 'No reviewed sessions' : 'Queue is clear'}
     />
   );

@@ -2,6 +2,7 @@
   "expo": {
     "name": "Phoenix Mobile",
     "slug": "phoenix-mobile",
+    "platforms": ["ios", "android"],
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
@@ -34,14 +35,6 @@
       },
       "predictiveBackGestureEnabled": true,
       "package": "com.anonymous.phoenixmobile"
-    },
-    "web": {
-      "output": "static",
-      "favicon": "./assets/images/favicon.png",
-      "themeColor": "#0E0E0E",
-      "backgroundColor": "#0E0E0E",
-      "barStyle": "black-translucent",
-      "display": "standalone"
     },
     "plugins": [
       "expo-router",

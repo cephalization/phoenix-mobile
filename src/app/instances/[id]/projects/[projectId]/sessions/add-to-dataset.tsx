@@ -78,7 +78,7 @@ export default function AddSessionToDatasetScreen() {
       >
         <EmptyState
           message="This Phoenix connection is no longer on this device."
-          symbol={{ ios: 'questionmark.circle', android: 'help', web: 'help' }}
+          symbol={{ ios: 'questionmark.circle', android: 'help' }}
           title="Instance not found"
         />
       </ScrollView>
@@ -154,21 +154,21 @@ export default function AddSessionToDatasetScreen() {
           }}
           fill={false}
           message={loadError.message}
-          symbol={{ ios: 'exclamationmark.triangle', android: 'warning', web: 'warning' }}
+          symbol={{ ios: 'exclamationmark.triangle', android: 'warning' }}
           title="Couldn’t prepare this session"
         />
       ) : readOnly ? (
         <EmptyState
           fill={false}
           message="Your Phoenix Viewer role can browse datasets but cannot create them or add examples."
-          symbol={{ ios: 'lock', android: 'lock', web: 'lock' }}
+          symbol={{ ios: 'lock', android: 'lock' }}
           title="Read-only access"
         />
       ) : eligibleTurns.length === 0 ? (
         <EmptyState
           fill={false}
           message="None of this session’s turns have a root span, so there is nothing to save as an example."
-          symbol={{ ios: 'tray', android: 'inbox', web: 'inbox' }}
+          symbol={{ ios: 'tray', android: 'inbox' }}
           title="No turns to add"
         />
       ) : (
@@ -179,7 +179,7 @@ export default function AddSessionToDatasetScreen() {
               accessibilityLabel={`New dataset${creating ? ', selected' : ''}`}
               leading={
                 <SymbolView
-                  name={{ ios: 'plus', android: 'add', web: 'add' }}
+                  name={{ ios: 'plus', android: 'add' }}
                   size={15}
                   tintColor={colors.text}
                   weight="semibold"
@@ -282,7 +282,7 @@ function SelectedMark() {
 
   return (
     <SymbolView
-      name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+      name={{ ios: 'checkmark', android: 'check' }}
       size={15}
       tintColor={colors.text}
       weight="semibold"

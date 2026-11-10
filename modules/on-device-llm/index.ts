@@ -13,7 +13,7 @@ const onDeviceModel = createOnDeviceModel(
   requireOptionalNativeModule<OnDeviceLLMNativeModule>('OnDeviceLLM'),
 );
 
-/** Synchronous; 'unsupported' on Android, web, Expo Go (module missing), and iOS < 26. */
+/** Synchronous; 'unsupported' on Android, Expo Go (module missing), and iOS < 26. */
 export const onDeviceModelAvailability = onDeviceModel.availability;
 
 /** Free-text completion with greedy sampling. Rejects with OnDeviceModelError. */

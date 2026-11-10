@@ -79,7 +79,7 @@ function errorFromNative(error: Error): OnDeviceModelError {
 
 /**
  * Binds the JS contract to a native module, or to `null` where it is absent
- * (Expo Go, Android, web). The native module is the seam tests replace.
+ * (Expo Go, Android). The native module is the seam tests replace.
  */
 export function createOnDeviceModel(nativeModule: OnDeviceLLMNativeModule | null) {
   function availability(): OnDeviceModelAvailability {

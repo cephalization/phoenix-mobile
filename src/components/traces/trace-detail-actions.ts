@@ -26,7 +26,7 @@ export function openTraceInPhoenix(baseUrl: string, traceId: string) {
 
 /**
  * The trace's `More` bar item on iOS: copy the trace or selected span ID and
- * open the trace in Phoenix's web UI. Android and web show the same actions
+ * open the trace in Phoenix's web UI. Android shows the same actions
  * as rows at the end of the page.
  */
 export function traceMoreMenu({

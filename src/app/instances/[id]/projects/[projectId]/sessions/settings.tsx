@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MotionPressable } from '@/components/motion-pressable';
@@ -117,7 +117,7 @@ export default function SessionQueueSettingsScreen() {
           action={{ label: 'Try again', onPress: () => void configs.refetch() }}
           fill={false}
           message={configs.error?.message}
-          symbol={{ ios: 'exclamationmark.triangle', android: 'warning', web: 'warning' }}
+          symbol={{ ios: 'exclamationmark.triangle', android: 'warning' }}
           title="Couldn’t load annotation configurations"
         />
       ) : configs.data.length === 0 ? (
@@ -125,7 +125,7 @@ export default function SessionQueueSettingsScreen() {
           action={{ label: 'Create configuration', onPress: openNewConfig }}
           fill={false}
           message="This project has no annotation configurations yet. Create one to start reviewing sessions."
-          symbol={{ ios: 'checklist', android: 'checklist', web: 'checklist' }}
+          symbol={{ ios: 'checklist', android: 'checklist' }}
           title="No annotation configurations"
         />
       ) : (
@@ -146,7 +146,7 @@ export default function SessionQueueSettingsScreen() {
                   trailing={
                     selected ? (
                       <SymbolView
-                        name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                        name={{ ios: 'checkmark', android: 'check' }}
                         size={15}
                         tintColor={colors.text}
                         weight="semibold"
@@ -163,7 +163,7 @@ export default function SessionQueueSettingsScreen() {
             accessibilityHint="Creates and assigns another way to rate sessions"
             leading={
               <SymbolView
-                name={{ ios: 'plus', android: 'add', web: 'add' }}
+                name={{ ios: 'plus', android: 'add' }}
                 size={15}
                 tintColor={colors.text}
                 weight="semibold"
@@ -202,11 +202,6 @@ export default function SessionQueueSettingsScreen() {
             <Text style={[styles.saveLabel, { color: colors.accentForeground }]}>Save queue</Text>
           </MotionPressable>
         ) : null}
-        {Platform.OS === 'web' ? (
-          <Text style={[Type.label, styles.webHint, { color: colors.textTertiary }]}>
-            Queue settings are stored only on this device.
-          </Text>
-        ) : null}
       </View>
     </ScrollView>
   );
@@ -230,5 +225,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
   },
   saveLabel: { fontFamily: AppFonts.semibold, fontSize: 15 },
-  webHint: { textAlign: 'center' },
 });

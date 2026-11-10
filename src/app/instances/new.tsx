@@ -122,12 +122,6 @@ export default function NewInstanceScreen() {
 
       assertPhoenix19(version);
 
-      if (Platform.OS === 'web') {
-        throw new Error(
-          'This Phoenix server requires OAuth. Add it from the Phoenix Mobile iOS or Android app; web does not store tokens.',
-        );
-      }
-
       setConnectionStatus('authorizing');
       const metadata = await discoverOAuth(baseUrl, values.allowInsecureOAuth);
 
@@ -353,7 +347,7 @@ export default function NewInstanceScreen() {
             {busy && <ActivityIndicator color={colors.accentForeground} size="small" />}
             {connectionStatus === 'success' && (
               <SymbolView
-                name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                name={{ ios: 'checkmark', android: 'check' }}
                 size={15}
                 tintColor={colors.accentForeground}
                 weight="bold"

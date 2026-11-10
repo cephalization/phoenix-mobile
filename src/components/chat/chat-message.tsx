@@ -118,17 +118,17 @@ function getToolLabel(toolName: string, complete: boolean): string {
 type SymbolName = SymbolViewProps['name'];
 
 const Symbols = {
-  check: { ios: 'checkmark', android: 'check', web: 'check' },
-  failed: { ios: 'exclamationmark.triangle.fill', android: 'warning', web: 'warning' },
-  denied: { ios: 'minus.circle', android: 'block', web: 'block' },
-  approval: { ios: 'questionmark.circle', android: 'help', web: 'help' },
-  expand: { ios: 'chevron.down', android: 'keyboard_arrow_down', web: 'keyboard_arrow_down' },
-  collapsed: { ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' },
-  copy: { ios: 'doc.on.doc', android: 'content_copy', web: 'content_copy' },
-  trace: { ios: 'arrow.up.right', android: 'north_east', web: 'north_east' },
-  link: { ios: 'link', android: 'link', web: 'link' },
-  file: { ios: 'doc', android: 'description', web: 'description' },
-  update: { ios: 'arrow.triangle.2.circlepath', android: 'sync', web: 'sync' },
+  check: { ios: 'checkmark', android: 'check' },
+  failed: { ios: 'exclamationmark.triangle.fill', android: 'warning' },
+  denied: { ios: 'minus.circle', android: 'block' },
+  approval: { ios: 'questionmark.circle', android: 'help' },
+  expand: { ios: 'chevron.down', android: 'keyboard_arrow_down' },
+  collapsed: { ios: 'chevron.right', android: 'chevron_right' },
+  copy: { ios: 'doc.on.doc', android: 'content_copy' },
+  trace: { ios: 'arrow.up.right', android: 'north_east' },
+  link: { ios: 'link', android: 'link' },
+  file: { ios: 'doc', android: 'description' },
+  update: { ios: 'arrow.triangle.2.circlepath', android: 'sync' },
 } satisfies Record<string, SymbolName>;
 
 /**

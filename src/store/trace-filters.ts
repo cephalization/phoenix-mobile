@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
 import { create } from 'zustand';
-import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { normalizeTraceFilter, rememberTraceFilter } from '@/features/traces/filter';
 
@@ -19,15 +18,7 @@ type TraceFilterState = {
   forgetRecent: (key: string, expression: string) => void;
 };
 
-const serverStorage: StateStorage = {
-  getItem: () => null,
-  removeItem: () => undefined,
-  setItem: () => undefined,
-};
-
-const storage = createJSONStorage(() =>
-  Platform.OS === 'web' && typeof window === 'undefined' ? serverStorage : AsyncStorage,
-);
+const storage = createJSONStorage(() => AsyncStorage);
 
 /** One project's slot: filters are written against that project's spans and annotations. */
 export function traceFilterKey(instanceId: string, projectId: string) {

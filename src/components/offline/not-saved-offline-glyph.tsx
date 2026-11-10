@@ -13,7 +13,7 @@ export function NotSavedOfflineGlyph() {
   return (
     <SymbolView
       accessible={false}
-      name={{ android: 'cloud_off', ios: 'icloud.slash', web: 'cloud_off' }}
+      name={{ android: 'cloud_off', ios: 'icloud.slash' }}
       size={15}
       tintColor={colors.textTertiary}
     />

@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
 import { create } from 'zustand';
-import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
 import type { PhoenixInstance } from '@/types/instance';
 import { revokeAndDeleteCredentials } from '@/features/auth/session';
@@ -38,15 +37,7 @@ export type PendingOAuthRegistration = {
 
 const PENDING_REGISTRATION_TTL_MS = 6 * 24 * 60 * 60_000;
 
-const serverStorage: StateStorage = {
-  getItem: () => null,
-  removeItem: () => undefined,
-  setItem: () => undefined,
-};
-
-const storage = createJSONStorage(() =>
-  Platform.OS === 'web' && typeof window === 'undefined' ? serverStorage : AsyncStorage,
-);
+const storage = createJSONStorage(() => AsyncStorage);
 
 export const useInstanceStore = create<InstanceState>()(
   persist(

@@ -145,8 +145,8 @@ export function TraceFilterAsk({
             <SymbolView
               name={
                 assistant.kind === 'onDevice'
-                  ? { android: 'memory', ios: 'cpu', web: 'memory' }
-                  : { android: 'dns', ios: 'server.rack', web: 'dns' }
+                  ? { android: 'memory', ios: 'cpu' }
+                  : { android: 'dns', ios: 'server.rack' }
               }
               size={12}
               tintColor={colors.textTertiary}

@@ -74,8 +74,8 @@ Send some traces to the server so the app has projects to show; the [Phoenix tra
 - Pick PXI's model from a searchable list of every provider, or type any model name
 - Stream PXI conversations against persisted server-side agent sessions, with chat history shared across every PXI client (Phoenix 20.0.0+)
 - Run contextual PXI actions, like open coding a session into PXI notes that reviewers read before annotating (Phoenix 20.11.0+)
-- Support light, dark, mobile, tablet, and web layouts, with native split columns on iPhone Duo and iPad, trailing sheets, and PXI as the split's inspector (see [docs/iphone-duo.md](./docs/iphone-duo.md))
-- Connect to unauthenticated servers or Phoenix 19+ instances through native OAuth 2; web currently supports unauthenticated connections only
+- Support light, dark, phone, and tablet layouts on iOS (first-class) and Android (best effort), with native split columns on iPhone Duo and iPad, trailing sheets, and PXI as the split's inspector (see [docs/iphone-duo.md](./docs/iphone-duo.md))
+- Connect to unauthenticated servers or Phoenix 19+ instances through native OAuth 2
 
 ## Stack
 
@@ -96,7 +96,7 @@ vp install
 vp run start
 ```
 
-`vp run start` targets the installed development build. Use `vp run start:go` for Expo Go, and `vp run ios`, `vp run android`, or `vp run web` to build and launch a platform directly.
+`vp run start` targets the installed development build. Use `vp run start:go` for Expo Go, and `vp run ios` or `vp run android` to build and launch a platform directly. There is no web build.
 
 ```bash
 vp run check

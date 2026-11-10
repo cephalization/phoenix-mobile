@@ -345,7 +345,7 @@ function ActionRun({
           {failed && !isStreaming ? (
             <View accessibilityLiveRegion="polite" style={styles.notice}>
               <SymbolView
-                name={{ ios: 'exclamationmark.triangle', android: 'warning', web: 'warning' }}
+                name={{ ios: 'exclamationmark.triangle', android: 'warning' }}
                 size={13}
                 tintColor={run.status === 'stopped' ? colors.textSecondary : colors.danger}
               />

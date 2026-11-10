@@ -1,14 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import {
-  Alert,
-  type AlertButton,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Alert, type AlertButton, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { barButton } from '@/components/duo/column-header';
@@ -73,13 +65,6 @@ export default function PendingChangesScreen() {
     });
 
   const openRow = (operation: OutboxOperation) => {
-    // Web alerts have no button list; Upload now retries everything there.
-    if (Platform.OS === 'web') {
-      confirmDiscard(operation);
-
-      return;
-    }
-
     const buttons: AlertButton[] = [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Discard', style: 'destructive', onPress: () => confirmDiscard(operation) },
@@ -149,7 +134,7 @@ export default function PendingChangesScreen() {
       {operations.length === 0 ? (
         <EmptyState
           message={`Changes you make while ${instanceName} is out of reach wait here, then upload on their own.`}
-          symbol={{ android: 'cloud_done', ios: 'checkmark.icloud', web: 'cloud_done' }}
+          symbol={{ android: 'cloud_done', ios: 'checkmark.icloud' }}
           title="Nothing waiting"
         />
       ) : (
@@ -162,9 +147,7 @@ export default function PendingChangesScreen() {
             <View key={operation.id}>
               {index > 0 ? <RowSeparator /> : null}
               <ListRow
-                accessibilityHint={
-                  Platform.OS === 'web' ? 'Discards this change' : 'Retry or discard this change'
-                }
+                accessibilityHint="Retry or discard this change"
                 accessibilityLabel={`${describeOperation(operation)}, ${describeStatus(operation)}`}
                 leading={<StatusLabel tone={operation.status === 'failed' ? 'error' : 'pending'} />}
                 meta={formatRelativeTime(operation.createdAt)}

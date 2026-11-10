@@ -116,14 +116,14 @@ export function ConversationList({
               action={{ label: 'Try again', onPress: () => void turns.refetch() }}
               fill={false}
               message={turns.error.message}
-              symbol={{ android: 'warning', ios: 'exclamationmark.triangle', web: 'warning' }}
+              symbol={{ android: 'warning', ios: 'exclamationmark.triangle' }}
               title="Couldn’t load turns"
             />
           ) : !turns.data?.length ? (
             <EmptyState
               fill={false}
               message="This session has no traces to display."
-              symbol={{ android: 'forum', ios: 'bubble.left.and.bubble.right', web: 'forum' }}
+              symbol={{ android: 'forum', ios: 'bubble.left.and.bubble.right' }}
               title="No turns"
             />
           ) : null}
@@ -228,21 +228,13 @@ function SessionActionsRow({ actions }: { actions: SessionContentActions }) {
       />
       <TextAction
         accessibilityHint="Saves this session’s turns as dataset examples"
-        icon={
-          <ActionSymbol
-            name={{ android: 'move_to_inbox', ios: 'tray.and.arrow.down', web: 'move_to_inbox' }}
-          />
-        }
+        icon={<ActionSymbol name={{ android: 'move_to_inbox', ios: 'tray.and.arrow.down' }} />}
         label="Add to dataset"
         onPress={actions.onAddToDataset}
       />
       <TextAction
         accessibilityLabel="Copy session ID"
-        icon={
-          <ActionSymbol
-            name={{ android: 'content_copy', ios: 'doc.on.doc', web: 'content_copy' }}
-          />
-        }
+        icon={<ActionSymbol name={{ android: 'content_copy', ios: 'doc.on.doc' }} />}
         label="Copy ID"
         onPress={actions.onCopySessionId}
       />
@@ -365,7 +357,7 @@ function TurnItem({
         >
           <Text style={[Type.mono, { color: colors.text }]}>Trace</Text>
           <SymbolView
-            name={{ android: 'arrow_outward', ios: 'arrow.up.right', web: 'arrow_outward' }}
+            name={{ android: 'arrow_outward', ios: 'arrow.up.right' }}
             size={10}
             tintColor={colors.text}
             weight="semibold"

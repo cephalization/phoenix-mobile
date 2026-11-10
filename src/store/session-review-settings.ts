@@ -1,8 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
-import { Platform } from 'react-native';
 import { create } from 'zustand';
-import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { isJsonArray, isJsonString } from '@/lib/json';
 
@@ -32,15 +31,7 @@ type SessionReviewSettingsState = {
   setHasHydrated: (hasHydrated: boolean) => void;
 };
 
-const serverStorage: StateStorage = {
-  getItem: () => null,
-  removeItem: () => undefined,
-  setItem: () => undefined,
-};
-
-const storage = createJSONStorage(() =>
-  Platform.OS === 'web' && typeof window === 'undefined' ? serverStorage : AsyncStorage,
-);
+const storage = createJSONStorage(() => AsyncStorage);
 
 export function sessionReviewQueueKey(instanceId: string, projectId: string): string {
   return JSON.stringify([instanceId, projectId]);

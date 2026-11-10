@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
 import { create } from 'zustand';
-import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
 import { isJsonValue } from '@/lib/json';
@@ -43,15 +42,7 @@ type OutboxState = {
   dismissDropped: () => void;
 };
 
-const serverStorage: StateStorage = {
-  getItem: () => null,
-  removeItem: () => undefined,
-  setItem: () => undefined,
-};
-
-const storage = createJSONStorage(() =>
-  Platform.OS === 'web' && typeof window === 'undefined' ? serverStorage : AsyncStorage,
-);
+const storage = createJSONStorage(() => AsyncStorage);
 
 export const useOutboxStore = create<OutboxState>()(
   persist(

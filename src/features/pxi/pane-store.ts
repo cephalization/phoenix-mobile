@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 /**
  * The PXI companion: on a regular-width window (the iPhone Duo's inner
- * display, an iPad, a wide web window) the PXI chat opens in a column beside
+ * display, an iPad) the PXI chat opens in a column beside
  * the navigation stack instead of pushing the chat route. The shell publishes
  * whether the column is available; the header button decides between the
  * column and the route. Only the chat lives here: contextual actions such as

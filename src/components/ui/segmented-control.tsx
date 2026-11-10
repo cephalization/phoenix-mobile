@@ -9,7 +9,7 @@ export type SegmentedControlProps<T extends string> = {
   onChange: (value: T) => void;
 };
 
-/** A segmented control for Android and web; iOS uses the system one. */
+/** A segmented control for Android; iOS uses the system one. */
 export function SegmentedControl<T extends string>({
   onChange,
   options,

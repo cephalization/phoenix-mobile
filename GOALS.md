@@ -42,7 +42,7 @@ Core flows feel intentional on touch devices and remain accessible.
 
 Completion means navigation, sheets, keyboard handling, gestures, pull-to-refresh, haptics, loading states, error recovery, and reduced-motion behavior are coherent on iOS and Android. Important controls remain thumb reachable, long content remains legible, and animations never hide settled content or block work.
 
-Web remains functional and visually consistent while native interaction is the reference experience.
+iOS is the reference experience; Android is best effort. Web is not a supported platform.
 
 ## Priority 5 - Operational Readiness
 

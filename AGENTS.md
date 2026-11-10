@@ -29,7 +29,7 @@ Current product boundaries:
 - Connections without authentication are supported.
 - The domain model reserves space for OAuth 2 credentials, but OAuth is not implemented yet.
 - Phoenix server state currently includes server version and projects.
-- iOS, Android, and web are supported, but mobile interaction quality has priority.
+- iOS is first-class and Android is best effort. Web is not supported.
 
 ## Technology
 
@@ -107,7 +107,7 @@ Lint policy lives in the `lint` block of `vite.config.ts` and the vendored `tool
 - Use one visually dominant action per screen or sheet.
 - Support long instance names, URLs, project names, small screens, and dynamic text without destructive wrapping.
 - Preserve accessibility labels, roles, reduced-motion behavior, sufficient contrast, and native dismissal gestures.
-- Native form sheets should use Expo Router `formSheet`; web may use a full-route fallback.
+- Native form sheets should use Expo Router `formSheet`.
 
 ## Motion Guidelines
 
@@ -116,7 +116,7 @@ Lint policy lives in the `lint` block of `vite.config.ts` and the vendored `tool
 - Respect the system reduced-motion preference for every nonessential animation.
 - Keep frequent transitions short and restrained. Prefer approximately 120-300 ms or a well-damped spring.
 - Do not combine Reanimated entering/layout builders directly around Gesture Handler swipeables.
-- Do not use shared entering/layout builders for project or connection rows. These combinations previously caused rows to fade away after settling on web.
+- Do not use shared entering/layout builders for project or connection rows. These combinations previously caused rows to fade away after settling.
 - For animated rows, use persistent shared values whose settled opacity remains `1`.
 - Verify animated content after the animation has completed, not only during its entrance.
 
@@ -126,9 +126,7 @@ Lint policy lives in the `lint` block of `vite.config.ts` and the vendored `tool
 - Shared app config lives in `app.json`. Apple signing (team and iOS bundle identifier) is per developer: `app.config.ts` reads it from `.env.local`, so never commit a team ID or a personal bundle identifier.
 - Local Phoenix deployments often use HTTP. Android cleartext traffic and iOS local-network/transport settings are intentionally configured in `app.json`.
 - The Phoenix client currently imports Node-only configuration helpers. `metro.config.js` narrowly shims unused `node:fs` and `node:path` imports on native platforms.
-- Static web rendering runs in Node. Persisted stores must use a server-safe storage adapter and must not access browser globals during SSR.
-- Safari browser chrome cannot be fully controlled by page CSS. PWA metadata and standalone mode are configured, but normal Safari owns its toolbars.
-- Native form-sheet behavior cannot be judged solely from the web fallback.
+- `app.json` limits `platforms` to iOS and Android. Do not add `.web` files, `Platform.OS === 'web'` branches, `web` symbol names, or web-only dependencies.
 
 ## Validation
 
@@ -144,15 +142,15 @@ For changes involving routing, native modules, Metro, assets, or platform config
 
 ```bash
 vpx expo-doctor
-vp exec expo export --platform all --clear
+vp exec expo export --platform ios --platform android --clear
 ```
 
 For UI work:
 
-- Inspect a narrow mobile viewport in light and dark modes.
+- Inspect a phone-sized iOS simulator or device in light and dark modes.
 - Exercise populated, empty, loading, success, and error states when relevant.
 - Wait until animations settle and check for disappearing or collapsed content.
-- Verify native-only behavior on a simulator or device when web cannot represent it accurately.
+- Check Android when a change touches Android-specific code or layout.
 
 ## Documentation Updates
 

@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
 import { create } from 'zustand';
-import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
 export type Appearance = 'system' | 'light' | 'dark';
 
@@ -24,15 +23,7 @@ type SettingsState = {
 
 const RecentProjectLimit = 4;
 
-const serverStorage: StateStorage = {
-  getItem: () => null,
-  removeItem: () => undefined,
-  setItem: () => undefined,
-};
-
-const storage = createJSONStorage(() =>
-  Platform.OS === 'web' && typeof window === 'undefined' ? serverStorage : AsyncStorage,
-);
+const storage = createJSONStorage(() => AsyncStorage);
 
 export const useSettingsStore = create<SettingsState>()(
   persist(

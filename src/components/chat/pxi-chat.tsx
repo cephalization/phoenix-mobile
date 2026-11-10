@@ -113,7 +113,7 @@ export function PxiChat({
     [barMargin, paneInsets],
   );
 
-  // The full-screen chat on a regular-width window (a wide web window) shows
+  // The full-screen chat on a regular-width window (an iPad) shows
   // history as a persistent rail beside the conversation; the PXI column and
   // compact width keep the history button and bottom sheet.
   const { isRegularWidth } = useDuoLayout();
@@ -256,7 +256,7 @@ export function PxiChat({
     <EmptyState
       action={{ label: 'Check again', onPress: () => void version.refetch() }}
       message={`PXI chat requires Phoenix ${PXI_AGENT_SESSIONS_MINIMUM_VERSION.join('.')} or newer; this server is ${version.data}.`}
-      symbol={{ ios: 'arrow.up.circle', android: 'upgrade', web: 'upgrade' }}
+      symbol={{ ios: 'arrow.up.circle', android: 'upgrade' }}
       title="Phoenix upgrade required"
     />
   ) : sessions.isPending || sessionId === null ? (
@@ -376,14 +376,14 @@ export function PxiChat({
                 <HeaderIcon
                   accessibilityLabel="Close PXI"
                   onPress={onClose}
-                  symbol={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+                  symbol={{ ios: 'chevron.left', android: 'arrow_back' }}
                 />
               )}
               {!showRail && (
                 <HeaderIcon
                   accessibilityLabel="Open chat history"
                   onPress={() => setHistoryVisible(true)}
-                  symbol={{ ios: 'clock.arrow.circlepath', android: 'history', web: 'history' }}
+                  symbol={{ ios: 'clock.arrow.circlepath', android: 'history' }}
                 />
               )}
               <View
@@ -411,13 +411,13 @@ export function PxiChat({
                 <HeaderIcon
                   accessibilityLabel="Start new chat"
                   onPress={startNewChat}
-                  symbol={{ ios: 'square.and.pencil', android: 'edit_square', web: 'edit_square' }}
+                  symbol={{ ios: 'square.and.pencil', android: 'edit_square' }}
                 />
                 {presentation === 'pane' && (
                   <HeaderIcon
                     accessibilityLabel="Close PXI"
                     onPress={onClose}
-                    symbol={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                    symbol={{ ios: 'checkmark', android: 'check' }}
                     weight="semibold"
                   />
                 )}
@@ -731,7 +731,7 @@ function ChatSession({
           ]}
         >
           <SymbolView
-            name={{ ios: 'arrow.down', android: 'arrow_downward', web: 'arrow_downward' }}
+            name={{ ios: 'arrow.down', android: 'arrow_downward' }}
             size={11}
             tintColor={colors.text}
             weight="semibold"
@@ -754,7 +754,7 @@ function ChatSession({
         {offline && !isStreaming ? (
           <View accessibilityLiveRegion="polite" style={styles.notice}>
             <SymbolView
-              name={{ ios: 'wifi.slash', android: 'cloud_off', web: 'cloud_off' }}
+              name={{ ios: 'wifi.slash', android: 'cloud_off' }}
               size={13}
               tintColor={colors.textSecondary}
             />
@@ -767,11 +767,7 @@ function ChatSession({
         {!offline && (error || wasStopped) && (
           <View accessibilityLiveRegion="polite" style={styles.notice}>
             <SymbolView
-              name={
-                error
-                  ? WarningSymbol
-                  : { ios: 'stop.circle', android: 'stop_circle', web: 'stop_circle' }
-              }
+              name={error ? WarningSymbol : { ios: 'stop.circle', android: 'stop_circle' }}
               size={13}
               tintColor={error ? colors.danger : colors.textSecondary}
             />
@@ -829,8 +825,8 @@ function ChatSession({
             <SymbolView
               name={
                 isStreaming
-                  ? { ios: 'stop.fill', android: 'stop', web: 'stop' }
-                  : { ios: 'arrow.up', android: 'arrow_upward', web: 'arrow_upward' }
+                  ? { ios: 'stop.fill', android: 'stop' }
+                  : { ios: 'arrow.up', android: 'arrow_upward' }
               }
               size={isStreaming ? 12 : 16}
               tintColor={isStreaming || canSend ? colors.accentForeground : colors.textTertiary}
@@ -856,7 +852,7 @@ function ChatSession({
               {modelLabel}
             </Text>
             <SymbolView
-              name={{ ios: 'chevron.down', android: 'expand_more', web: 'expand_more' }}
+              name={{ ios: 'chevron.down', android: 'expand_more' }}
               size={9}
               tintColor={colors.textTertiary}
               weight="bold"
@@ -872,10 +868,9 @@ function ChatSession({
 const WarningSymbol: SymbolViewProps['name'] = {
   ios: 'exclamationmark.triangle',
   android: 'warning',
-  web: 'warning',
 };
 
-const ModelSymbol: SymbolViewProps['name'] = { ios: 'cpu', android: 'memory', web: 'memory' };
+const ModelSymbol: SymbolViewProps['name'] = { ios: 'cpu', android: 'memory' };
 
 function HeaderIcon({
   accessibilityLabel,

@@ -424,13 +424,13 @@ export function SessionDetailView({
         <EmptyState
           action={{ label: 'Try again', onPress: () => void session.refetch() }}
           message={session.error.message}
-          symbol={{ android: 'warning', ios: 'exclamationmark.triangle', web: 'warning' }}
+          symbol={{ android: 'warning', ios: 'exclamationmark.triangle' }}
           title="Couldn’t load this session"
         />
       ) : !session.data ? (
         <EmptyState
           message="Phoenix returned no session data."
-          symbol={{ android: 'search_off', ios: 'questionmark.circle', web: 'search_off' }}
+          symbol={{ android: 'search_off', ios: 'questionmark.circle' }}
           title="Session not found"
         />
       ) : (
@@ -509,7 +509,7 @@ function UnavailableState({ message, title }: { message: string; title: string }
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <EmptyState
         message={message}
-        symbol={{ android: 'search_off', ios: 'questionmark.circle', web: 'search_off' }}
+        symbol={{ android: 'search_off', ios: 'questionmark.circle' }}
         title={title}
       />
     </View>

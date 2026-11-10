@@ -12,8 +12,8 @@ export type ScoreSliderProps = {
   value: number;
 };
 
-// iOS and web: the SwiftUI slider and the HTML range input draw their own
-// visible tracks in both color schemes; only the tint needs theming.
+// iOS: the SwiftUI slider draws its own visible track in both color schemes;
+// only the tint needs theming.
 export function ScoreSlider({ disabled, max, min, onValueChange, step, value }: ScoreSliderProps) {
   const colors = useAppColors();
 

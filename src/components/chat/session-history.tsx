@@ -90,7 +90,7 @@ export function SessionHistoryRail({
           style={styles.railNewButton}
         >
           <SymbolView
-            name={{ ios: 'square.and.pencil', android: 'edit_square', web: 'edit_square' }}
+            name={{ ios: 'square.and.pencil', android: 'edit_square' }}
             size={18}
             tintColor={colors.text}
           />
@@ -142,7 +142,7 @@ export function SessionHistoryList({
         ) : (
           <EmptyState
             message="Chats appear here after you send a message. They’re stored on this Phoenix server."
-            symbol={{ ios: 'clock', android: 'history', web: 'history' }}
+            symbol={{ ios: 'clock', android: 'history' }}
             title="No chats yet"
           />
         )
@@ -162,7 +162,7 @@ export function SessionHistoryList({
             trailing={
               variant === 'flat' && active ? (
                 <SymbolView
-                  name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                  name={{ ios: 'checkmark', android: 'check' }}
                   size={15}
                   tintColor={colors.text}
                   weight="semibold"

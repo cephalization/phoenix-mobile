@@ -84,7 +84,7 @@ export function TraceDetailView({
     return (
       <EmptyState
         message="This Phoenix connection is no longer on this device."
-        symbol={{ android: 'cloud_off', ios: 'externaldrive.badge.xmark', web: 'cloud_off' }}
+        symbol={{ android: 'cloud_off', ios: 'externaldrive.badge.xmark' }}
         title="Instance not found"
       />
     );
@@ -94,7 +94,7 @@ export function TraceDetailView({
     return (
       <EmptyState
         message="This project is no longer available on the connected instance."
-        symbol={{ android: 'folder_off', ios: 'folder.badge.questionmark', web: 'folder_off' }}
+        symbol={{ android: 'folder_off', ios: 'folder.badge.questionmark' }}
         title="Project not found"
       />
     );
@@ -112,7 +112,7 @@ export function TraceDetailView({
       <EmptyState
         action={{ label: 'Try again', onPress: () => void trace.refetch() }}
         message={trace.error.message}
-        symbol={{ android: 'wifi_off', ios: 'wifi.exclamationmark', web: 'wifi_off' }}
+        symbol={{ android: 'wifi_off', ios: 'wifi.exclamationmark' }}
         title="Couldn’t load this trace"
       />
     );
@@ -123,7 +123,7 @@ export function TraceDetailView({
       <EmptyState
         action={{ label: 'Refresh', onPress: () => void trace.refetch() }}
         message="Phoenix returned no spans for this trace. Recent traces can take a moment to arrive."
-        symbol={{ android: 'search_off', ios: 'magnifyingglass', web: 'search_off' }}
+        symbol={{ android: 'search_off', ios: 'magnifyingglass' }}
         title="Trace not found"
       />
     );
@@ -352,7 +352,7 @@ function detailRows(
   return rows;
 }
 
-/** Android, web, and the project feed's split pane keep the bar's actions as rows. */
+/** Android and the project feed's split pane keep the bar's actions as rows. */
 function TraceActions({
   baseUrl,
   selectedSpanId,
@@ -372,7 +372,7 @@ function TraceActions({
     <>
       <SectionHeader label="Actions" />
       <ListRow
-        leading={glyph({ android: 'content_copy', ios: 'doc.on.doc', web: 'content_copy' })}
+        leading={glyph({ android: 'content_copy', ios: 'doc.on.doc' })}
         meta={shortId(traceId)}
         onPress={() => copyId(traceId)}
         title="Copy trace ID"
@@ -382,7 +382,7 @@ function TraceActions({
         <>
           <RowSeparator inset={RowInset + 30} />
           <ListRow
-            leading={glyph({ android: 'tag', ios: 'number', web: 'tag' })}
+            leading={glyph({ android: 'tag', ios: 'number' })}
             meta={shortId(selectedSpanId)}
             onPress={() => copyId(selectedSpanId)}
             title="Copy span ID"
@@ -393,7 +393,7 @@ function TraceActions({
       <RowSeparator inset={RowInset + 30} />
       <ListRow
         accessibilityLabel="Open trace in Phoenix"
-        leading={glyph({ android: 'open_in_new', ios: 'safari', web: 'open_in_new' })}
+        leading={glyph({ android: 'open_in_new', ios: 'safari' })}
         onPress={() => openTraceInPhoenix(baseUrl, traceId)}
         title="Open in Phoenix"
         variant="flat"

@@ -102,7 +102,7 @@ export function ListRow({
       {trailing}
       {checked ? (
         <SymbolView
-          name={{ android: 'check', ios: 'checkmark', web: 'check' }}
+          name={{ android: 'check', ios: 'checkmark' }}
           size={16}
           tintColor={colors.text}
           weight="semibold"

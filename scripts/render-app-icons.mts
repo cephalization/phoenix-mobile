@@ -6,7 +6,7 @@
  * it with Liquid Glass and derives its dark, clear, and tinted appearances.
  * Its one layer, `Assets/phoenix-bird.svg`, is the source for every flat
  * fallback this script writes: `icon.png`, the Android adaptive icon images,
- * `splash-icon.png`, and `favicon.png`.
+ * and `splash-icon.png`.
  *
  *   vp run icons
  *   vp run icons --from-phoenix ~/repos/phoenix   rebuild the bird layer first
@@ -95,18 +95,13 @@ function main() {
     placeBird(bird, { canvas: 432, height: 432 * AdaptiveBirdHeight, nudge: centered }, '#FFFFFF'),
   ]);
 
-  writePng('favicon.png', 48, [
-    rect(48, 10, 'url(#background)'),
-    placeBird(bird, { canvas: 48, height: 40, nudge: centered }, 'url(#bird)'),
-  ]);
-
   // The splash screen draws the bird alone on its dark background.
   writeFileSync(
     path.join(Images, 'splash-icon.png'),
     render(svgDocument(bird.width, bird.height, [colored(bird.paths, 'url(#bird)')]), 229),
   );
 
-  console.log(`Wrote icon.png, the Android adaptive icon, splash-icon.png, and favicon.png.`);
+  console.log(`Wrote icon.png, the Android adaptive icon, and splash-icon.png.`);
 
   if (values.preview !== undefined) exportPreviews(path.resolve(values.preview));
 }

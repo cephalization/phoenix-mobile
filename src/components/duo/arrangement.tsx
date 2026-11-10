@@ -13,7 +13,7 @@ import { insetsForPane, useDuoLayout, type DivisionRegion } from '@/features/duo
 
 /**
  * A JavaScript rendition of Apple's `ArrangementView` for screens that are not
- * in native split columns (Android, web, and wide windows without the native
+ * in native split columns (Android, and wide windows without the native
  * split). It holds a primary and a secondary pane and lays them out from the
  * container size and the fold:
  *

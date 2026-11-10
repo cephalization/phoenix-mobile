@@ -39,7 +39,6 @@ export function TraceFilterField({
           name={{
             android: 'filter_list',
             ios: active ? 'line.3.horizontal.decrease.circle.fill' : 'line.3.horizontal.decrease',
-            web: 'filter_list',
           }}
           size={15}
           tintColor={active ? colors.text : colors.textTertiary}
@@ -68,7 +67,7 @@ export function TraceFilterField({
             style={styles.clear}
           >
             <SymbolView
-              name={{ android: 'cancel', ios: 'xmark.circle.fill', web: 'cancel' }}
+              name={{ android: 'cancel', ios: 'xmark.circle.fill' }}
               size={17}
               tintColor={colors.textTertiary}
             />

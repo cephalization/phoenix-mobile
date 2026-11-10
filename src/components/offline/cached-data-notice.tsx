@@ -42,7 +42,7 @@ export function CachedDataNotice({
   const content = (
     <>
       <SymbolView
-        name={{ android: 'cloud_off', ios: 'icloud.slash', web: 'cloud_off' }}
+        name={{ android: 'cloud_off', ios: 'icloud.slash' }}
         size={14}
         tintColor={colors.textSecondary}
         weight="medium"

@@ -10,7 +10,7 @@ import { useNativeMetrics, type NativeLayoutMetrics } from './native-metrics';
  * Layout model for iPhone Duo and other resizable windows. On iOS the size
  * class, the vertical system bar, and the fold come from UIKit through the
  * `duo-native` metrics view, measured for the native split column the reader
- * sits in. Where that view is unavailable (Android, web, Expo Go) the width
+ * sits in. Where that view is unavailable (Android, Expo Go) the width
  * decides the size class and there is no fold.
  */
 

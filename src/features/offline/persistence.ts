@@ -41,20 +41,17 @@ import { useReachabilityStore } from './reachability';
  * validation are never written (`isPersistableQueryKey`).
  *
  * AsyncStorage is shared with the app's own stores and is small on Android
- * (6 MB) and on web (localStorage), so the cache keeps a size index and drops
- * its oldest entries past a per-platform budget.
+ * (6 MB), so the cache keeps a size index and drops its oldest entries past a
+ * per-platform budget.
  */
 
 /** Total stored characters the cache may use. */
-const OfflineBudget = Platform.select({ android: 3_000_000, web: 2_000_000, default: 12_000_000 });
+const OfflineBudget = Platform.select({ android: 3_000_000, default: 12_000_000 });
 
 /** A single page larger than this is not worth crowding out everything else for. */
 const MaxEntrySize = Math.floor(OfflineBudget / 4);
 
 const IndexSaveDelayMs = 1_000;
-
-// Static web rendering runs in Node, where there is no storage to read.
-const serverRendering = Platform.OS === 'web' && typeof window === 'undefined';
 
 const index = new Map<string, OfflineIndex[string]>();
 const forgottenInstances = new Set<string>();
@@ -132,7 +129,7 @@ const offlineStorage: PersisterStorage = {
 };
 
 const persister = experimental_createQueryPersister({
-  storage: serverRendering ? undefined : offlineStorage,
+  storage: offlineStorage,
   buster: OfflineCacheBuster,
   maxAge: OfflineCacheMaxAgeMs,
   prefix: OfflineCachePrefix,
@@ -211,7 +208,7 @@ async function writeEntry(key: string, value: string) {
 }
 
 async function removeEntries(keys: readonly string[]) {
-  if (keys.length === 0 || serverRendering) return;
+  if (keys.length === 0) return;
 
   for (const key of keys) index.delete(key);
 
@@ -293,27 +290,25 @@ export async function clearOfflineData(instanceId?: string): Promise<void> {
     attachedClient?.removeQueries({ queryKey: ['phoenix', 'instance', instanceId] });
   }
 
-  if (!serverRendering) {
-    await loadIndex();
+  await loadIndex();
 
-    let keys: readonly string[];
+  let keys: readonly string[];
 
-    try {
-      keys = await AsyncStorage.getAllKeys();
-    } catch {
-      // Unreadable storage: what is indexed can still go.
-      keys = [...index.keys()];
-    }
-
-    await removeEntries(
-      keys.filter(
-        (key) =>
-          isOfflineStorageKey(key) &&
-          (instanceId === undefined || storageKeyInstanceId(key) === instanceId),
-      ),
-    );
-    await saveIndex();
+  try {
+    keys = await AsyncStorage.getAllKeys();
+  } catch {
+    // Unreadable storage: what is indexed can still go.
+    keys = [...index.keys()];
   }
+
+  await removeEntries(
+    keys.filter(
+      (key) =>
+        isOfflineStorageKey(key) &&
+        (instanceId === undefined || storageKeyInstanceId(key) === instanceId),
+    ),
+  );
+  await saveIndex();
 
   // After storage is empty, so a refetch cannot restore what was just removed.
   // Not awaited: offline, the refetches pause until a network returns.

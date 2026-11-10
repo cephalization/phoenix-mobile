@@ -80,7 +80,7 @@ export function useInstanceSwitcherItem(
   };
 }
 
-/** The same switcher for Android and web: the name opens Connections. */
+/** The same switcher for Android: the name opens Connections. */
 export function InstanceTitleButton({ instance }: { instance: PhoenixInstance }) {
   const colors = useAppColors();
 
@@ -99,7 +99,7 @@ export function InstanceTitleButton({ instance }: { instance: PhoenixInstance })
         {instance.name}
       </Text>
       <SymbolView
-        name={{ android: 'expand_more', ios: 'chevron.down', web: 'expand_more' }}
+        name={{ android: 'expand_more', ios: 'chevron.down' }}
         size={14}
         tintColor={colors.textSecondary}
         weight="semibold"

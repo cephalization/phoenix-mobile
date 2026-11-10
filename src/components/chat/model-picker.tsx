@@ -115,7 +115,7 @@ export function ModelPicker({
         <>
           <View style={[styles.search, { backgroundColor: colors.backgroundSelected }]}>
             <SymbolView
-              name={{ android: 'search', ios: 'magnifyingglass', web: 'search' }}
+              name={{ android: 'search', ios: 'magnifyingglass' }}
               size={15}
               tintColor={colors.textSecondary}
             />
@@ -136,13 +136,13 @@ export function ModelPicker({
           {sections.length === 0 ? (
             query.trim() ? (
               <EmptyState
-                symbol={{ android: 'search_off', ios: 'magnifyingglass', web: 'search_off' }}
+                symbol={{ android: 'search_off', ios: 'magnifyingglass' }}
                 title="No models match"
               />
             ) : (
               <EmptyState
                 message="Type a model name to search every provider, or to use your own."
-                symbol={{ android: 'memory', ios: 'cpu', web: 'memory' }}
+                symbol={{ android: 'memory', ios: 'cpu' }}
                 title="Search for a model"
               />
             )
@@ -167,7 +167,7 @@ export function ModelPicker({
                     accessibilityHint="Lists the providers this name can be sent to"
                     leading={
                       <SymbolView
-                        name={{ android: 'edit', ios: 'pencil', web: 'edit' }}
+                        name={{ android: 'edit', ios: 'pencil' }}
                         size={15}
                         tintColor={colors.textSecondary}
                       />
@@ -333,7 +333,7 @@ function ProviderList({
         style={({ pressed }) => [styles.back, pressed && { opacity: 0.6 }]}
       >
         <SymbolView
-          name={{ android: 'arrow_back', ios: 'chevron.left', web: 'arrow_back' }}
+          name={{ android: 'arrow_back', ios: 'chevron.left' }}
           size={14}
           tintColor={colors.textSecondary}
           weight="semibold"

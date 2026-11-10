@@ -43,7 +43,7 @@ const nativeModule = requireOptionalNativeModule<DuoNativeModule>('DuoNative');
 export const supportsSplitColumns = nativeModule?.supportsSplitColumns === true;
 
 /**
- * The native metrics view, or null in Expo Go, on Android, and on web. It
+ * The native metrics view, or null in Expo Go and on Android. It
  * reports its own frame, so place it where the geometry should be measured.
  */
 export const LayoutMetricsView: ComponentType<LayoutMetricsViewProps> | null =
