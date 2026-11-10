@@ -127,7 +127,7 @@ function SplitStackContent(props: SplitContentProps) {
         descriptors={descriptors}
         detail={detail}
         dispatch={props.dispatch}
-        emit={props.emitter.emit}
+        emit={props.emitter.emit.bind(props.emitter)}
         routerState={props.routerState}
         sidebar={sidebar}
       />

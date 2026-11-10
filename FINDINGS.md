@@ -21,16 +21,16 @@ This is the project's living technical memory. Record discoveries that would oth
 
 A team ID in `app.json` makes every clone sign as that team, and a bundle identifier can only be registered to one Apple team, so a shared value breaks physical-device builds for everyone else. `app.config.ts` takes `PHOENIX_APPLE_TEAM_ID` and `PHOENIX_IOS_BUNDLE_ID` from the environment; Expo CLI loads them from the gitignored `.env.local`. Without them, the config falls back to `app.json`'s identifier and sets no team, which is all Expo Go and simulators need.
 
-**Implication:** `npm run ios:device:clean` stops early without `PHOENIX_IOS_BUNDLE_ID`. An existing `ios/` folder keeps its old values until the next prebuild. A published app will need one fixed identifier, which is still undecided.
+**Implication:** `vp run ios:device:clean` stops early without `PHOENIX_IOS_BUNDLE_ID`. An existing `ios/` folder keeps its old values until the next prebuild. A published app will need one fixed identifier, which is still undecided.
 
 ### 2026-10-27 - Expo Go Runs The App; Trailing Sheets And OAuth Need A Development Build
 
 **Status:** Decision
 **Area:** Expo Go, onboarding, iOS, OAuth
 
-The App Store Expo Go (58.0.5, released about 5 days after SDK 58) runs this project: `@expo/ui`, `expo-glass-effect`, SecureStore, Reanimated, and the rest of the dependency list are bundled in Expo Go. Because `expo-dev-client` is installed, plain `npx expo start` serves the development build and an Expo Go scan hands off to an app the collaborator does not have, so `npm run start:go` (`expo start --go`) is the Expo Go entry point. Two features stay dev-build only: `modules/duo-native` (then `modules/duo-sheets`) is loaded with `requireOptionalNativeModule` and is a no-op in Expo Go, so form sheets dock to the leading edge of the open Duo, and OAuth returns through the exact private `phoenixmobile://oauth/callback` redirect (see the 2026-07-24 OAuth entry), which Expo Go cannot own. Deriving the redirect from `Linking.createURL` was considered and rejected: it would register an `exp://<dev-machine>:8081/--/...` redirect with the Phoenix client, relax the exact-callback check that the OAuth entry relies on, and the registered client would stop matching when the same person switches between Expo Go and a development build.
+The App Store Expo Go (58.0.5, released about 5 days after SDK 58) runs this project: `@expo/ui`, `expo-glass-effect`, SecureStore, Reanimated, and the rest of the dependency list are bundled in Expo Go. Because `expo-dev-client` is installed, plain `npx expo start` serves the development build and an Expo Go scan hands off to an app the collaborator does not have, so `vp run start:go` (`expo start --go`) is the Expo Go entry point. Two features stay dev-build only: `modules/duo-native` (then `modules/duo-sheets`) is loaded with `requireOptionalNativeModule` and is a no-op in Expo Go, so form sheets dock to the leading edge of the open Duo, and OAuth returns through the exact private `phoenixmobile://oauth/callback` redirect (see the 2026-07-24 OAuth entry), which Expo Go cannot own. Deriving the redirect from `Linking.createURL` was considered and rejected: it would register an `exp://<dev-machine>:8081/--/...` redirect with the Phoenix client, relax the exact-callback check that the OAuth entry relies on, and the registered client would stop matching when the same person switches between Expo Go and a development build.
 
-The connection sheet reads optional `host` and `name` search params, so `exp://<computer>:8081/--/instances/new?host=192.168.1.20:6006` (Expo Go) or `phoenixmobile://instances/new?host=...` (dev build) opens the sheet prefilled; verification still runs before anything is saved. The root layout declares `unstable_settings.anchor = "index"` so a cold deep link to a sheet or the OAuth callback keeps the instance list underneath. `@expo/ngrok` is a devDependency so `npm run start:go -- --tunnel` works without an install step, `packageManager` names npm (it previously named yarn while the repository commits `package-lock.json`), and the create-expo-app `reset-project` script is gone.
+The connection sheet reads optional `host` and `name` search params, so `exp://<computer>:8081/--/instances/new?host=192.168.1.20:6006` (Expo Go) or `phoenixmobile://instances/new?host=...` (dev build) opens the sheet prefilled; verification still runs before anything is saved. The root layout declares `unstable_settings.anchor = "index"` so a cold deep link to a sheet or the OAuth callback keeps the instance list underneath. `@expo/ngrok` is a devDependency so `vp run start:go -- --tunnel` works without an install step, `packageManager` names npm (it previously named yarn while the repository commits `package-lock.json`), and the create-expo-app `reset-project` script is gone.
 
 **Implication:** Point new collaborators at the README quick start and Expo Go first; the development build is for trailing sheets, OAuth, and native changes. Keep the OAuth redirect private and exact; do not make it environment-dependent for Expo Go. The prefill link and the anchor were verified by typecheck, lint, and tests only; exercise a cold deep link on a device when touching the root stack.
 
@@ -49,7 +49,7 @@ The connection sheet reads optional `host` and `name` search params, so `exp://<
 
 `ios/` was regenerated with `npx expo prebuild --clean --platform ios --no-install`, `DEV_CLIENT_DEFAULT_LAUNCHER_URL` re-added to `Info.plist`, pods installed, and the app rebuilt for the iPhone Duo simulator; the `modules/duo-sheets` module compiles unchanged against the SDK 58 modules core. `npx expo export --platform all --clear` passes. `expo-hinge` and `ArrangementView` are available but not yet adopted (see the 2026-10-15 Duo decision below).
 
-**Implication:** Regenerate every native build after this upgrade (`npm run ios:device:clean`, `npm run android:device:clean`), start Metro with `--clear` once, and prefer `undefined` over `null` for optional list slots and read-only React Native prop objects. Keep `tsconfig.json` pointing at the `.json` base. Android has not been rebuilt or exercised on SDK 58 yet; the gesture-handler 3 and R8-by-default changes still need a device pass there.
+**Implication:** Regenerate every native build after this upgrade (`vp run ios:device:clean`, `vp run android:device:clean`), start Metro with `--clear` once, and prefer `undefined` over `null` for optional list slots and read-only React Native prop objects. Keep `tsconfig.json` pointing at the `.json` base. Android has not been rebuilt or exercised on SDK 58 yet; the gesture-handler 3 and R8-by-default changes still need a device pass there.
 
 ### 2026-10-14 - Phoenix 20.11 Removed write_span_note; PXI Notes Go Through createSpanNote
 
@@ -71,14 +71,31 @@ Phoenix 20.12.0 added `filter` expressions to the trace list (`error_count > 0`,
 
 **Implication:** Gate every new filter expression on `[20, 12, 0]` and keep the fallback path alive until that floor is the project minimum. The session list `filter` (annotation name and identifier comprehensions) can replace the review queue's client-side scan in a later change; `classifySessionReview` must stay the final authority because `annotator_kind` is not filterable.
 
-### 2026-10-14 - Lint Policy Is oxlint Plus Vendored anti-slop; ESLint Is Gone
+### 2026-11-10 - The JavaScript Toolchain Runs Through Vite+
 
 **Status:** Decision
+**Area:** tooling, code quality, tests
+
+`vp migrate` (Vite+ 1.5.1) replaced the direct `oxlint`, `oxfmt`, and `vitest` dependencies with `vite-plus`, which bundles oxlint 1.91.0 with `oxlint-tsgolint`, oxfmt 0.76.0, and Vitest 5.1.0. It also folded `.oxlintrc.json`, `.oxfmtrc.json`, and `vitest.config.ts` into `vite.config.ts`, and rewrote test imports from `vitest` to `vite-plus/test`. npm still installs packages underneath, so `package-lock.json` stays, and Metro and Expo CLI still serve and build the app; `vp dev` and `vp build` do not apply. `package.json` gains an `overrides` entry that maps `vite` to `@voidzero-dev/vite-plus-core`; nothing in the Expo build uses Vite.
+
+Things the migration got wrong or changed silently:
+
+- It reported stripping the `react-hooks` plugin, but `react-hooks/rules-of-hooks` and `exhaustive-deps` still fire (verified with a probe file).
+- It rewrote the vendored anti-slop imports. That was reverted, and `@oxlint/plugins` was bumped to the bundled oxlint version instead.
+- anti-slop's `no-module-mocking` only recognized `vi` from `vitest`, so after the import rewrite it checked nothing. The rule now also accepts `vite-plus/test` (recorded in `UPSTREAM.md`).
+- It enabled `typeAware` and `typeCheck`. The new type-aware rules found 21 errors, all fixed in code. Real ones: `requestAgentSessionJson` spread `HeadersInit` as an object, so tuple-array headers would have been lost; and `extractIO` printed object-valued span input/output as `[object Object]` instead of JSON. The rest were unhandled promises and tests stringifying `Request | URL` and `BodyInit`, which now go through `src/test/fetch-calls.ts`. 15 warnings remain, mostly `consistent-return` on exhaustive switches.
+- Vitest 5 clears mock history by default; the suite passes without the `clearMocks: false` shim the migration added.
+
+**Implication:** `vp run check` (`vp check && vp test run`) is the validation command, and `vp check` includes the TypeScript type check. Use `vp install`, `vp add`, `vp run <script>`, and `vp exec <bin>` instead of `npm`/`npx`. Upgrading `vite-plus` moves oxlint, oxfmt, and Vitest together; bump `@oxlint/plugins` to match the bundled oxlint.
+
+### 2026-10-14 - Lint Policy Is oxlint Plus Vendored anti-slop; ESLint Is Gone
+
+**Status:** Decision (toolchain superseded by the 2026-11-10 Vite+ entry; the policy still applies)
 **Area:** tooling, code quality
 
 The repository replaced `eslint-config-expo` with oxlint 1.88.0 and `@oxlint/plugins` pinned together, oxfmt 0.73.0 (single quotes, 100 columns, sorted `package.json`), and the vendored anti-slop ruleset at `tools/oxlint/anti-slop` (upstream commit recorded in its UPSTREAM.md, installable skill under `.claude/skills/install-anti-slop`). The config is `.oxlintrc.json` (the TypeScript config format is still marked experimental by the CLI) with every generic anti-slop rule at error and the eslint-config-expo rules mapped onto their oxlint equivalents. Intentional policy deviations: `no-module-mocking` gained an `allowedModules` option so tests may mock native Expo modules with no Node implementation; `no-runtime-typeof` runs with `allowInTypeGuards`; `eslint/no-await-in-loop` is off because cursor pagination is inherently sequential; `react/immutability` is off because Reanimated shared values are assigned by design. The migration removed every `unknown` parameter and unjustified assertion from app code by narrowing untyped JSON through `src/lib/json.ts`, and the remaining tests exercise the real AI SDK transport and `Chat` against a mocked `expo/fetch`. `tools/` is excluded from the app `tsconfig.json` because the vendored rules import `.ts` extensions.
 
-**Implication:** `npm run check` is the validation command. Fix findings in code rather than disabling rules; record any further policy change in `tools/oxlint/anti-slop/UPSTREAM.md`. The spacing rule and oxfmt must agree, so run `lint:fix`, then `fmt`, then lint again.
+**Implication:** `vp run check` is the validation command. Fix findings in code rather than disabling rules; record any further policy change in `tools/oxlint/anti-slop/UPSTREAM.md`. The spacing rule and oxfmt must agree, so run `lint:fix`, then `fmt`, then lint again.
 
 ### 2026-10-14 - Expo SDK 57 Patch Alignment Fixes A Hermes V1 Memory Regression
 
@@ -87,7 +104,7 @@ The repository replaced `eslint-config-expo` with oxlint 1.88.0 and `@oxlint/plu
 
 `npx expo-doctor` flagged `expo@57.0.6` with Hermes V1 250829098.0.14, which carries a known memory regression fixed in 250829098.0.16; expo 57.0.9+ and React Native 0.86.2+ include the fix. `npx expo install --fix` moved the project to expo 57.0.29, React Native 0.86.3, react-native-screens 4.26, and current patches of every Expo module; `@arizeai/phoenix-client` moved to 7.16.1 (first release with generated agent-session schemas, which now back `src/features/pxi/sessions.ts`) and the AI SDK to `ai@7.0.140` / `@ai-sdk/react@4.0.143` (abort and `stop()` cleanup fixes). Typecheck, tests, lint, `expo-doctor` (21/21), and `expo export --platform all` pass after the upgrade without code changes beyond the type adoption.
 
-**Implication:** Re-run `expo-doctor` before each release; it catches runtime regressions that `npm outdated` does not explain. Native device builds must be regenerated (`npm run ios:device:clean`, `npm run android:device:clean`) because React Native and `react-native-screens` changed.
+**Implication:** Re-run `expo-doctor` before each release; it catches runtime regressions that `npm outdated` does not explain. Native device builds must be regenerated (`vp run ios:device:clean`, `vp run android:device:clean`) because React Native and `react-native-screens` changed.
 
 ### 2026-08-11 - PXI Chats Are Persisted Server-Side Agent Sessions
 
@@ -834,6 +851,6 @@ The local `with-ios-scene-lifecycle` config plugin moves React startup into `Sce
 
 The App Store version of Expo Go does not yet include SDK 57. `eas go` and EAS physical-device builds require a paid Apple Developer membership, so local Xcode builds signed by the configured Personal Team are the available no-cost device workflow.
 
-**Implication:** Keep the local scene plugin and regenerate iOS through `npm run ios:device:clean` until Expo resolves the accepted lifecycle issue. Revalidate React mounting, Expo Dev Launcher, initial URLs, and deep links whenever the generated AppDelegate changes.
+**Implication:** Keep the local scene plugin and regenerate iOS through `vp run ios:device:clean` until Expo resolves the accepted lifecycle issue. Revalidate React mounting, Expo Dev Launcher, initial URLs, and deep links whenever the generated AppDelegate changes.
 
 **Superseded on 2026-10-16:** Expo SDK 58 generates `SceneDelegate.swift` and the `UIApplicationSceneManifest` itself (`ExpoAppSceneDelegate` creates the window and starts React Native), so the local plugin was deleted; see the 2026-10-16 upgrade entry under Active Constraints.

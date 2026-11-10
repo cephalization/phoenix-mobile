@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import type { JsonValue } from '@/lib/json';
 import type { PhoenixInstance } from '@/types/instance';
+import { requestBodyText, requestUrl } from '@/test/fetch-calls';
 
 import {
   createAgentSession,
@@ -66,7 +67,7 @@ describe('agent session API', () => {
     const [url, init] = fetchMock.mock.calls.at(-1)!;
     expect(url).toBe('http://phoenix.local:6006/v1/agent_sessions');
     expect(init?.method).toBe('POST');
-    expect(JSON.parse(String(init?.body))).toEqual({ title: '', is_ephemeral: true, model });
+    expect(JSON.parse(requestBodyText(init))).toEqual({ title: '', is_ephemeral: true, model });
   });
 
   it('pages through the session listing until the cursor is exhausted', async () => {
@@ -84,7 +85,7 @@ describe('agent session API', () => {
     expect(sessions.map((session) => session.id)).toEqual(['s1', 's2']);
     expect(sessions[1].isEphemeral).toBe(true);
     const [secondUrl] = fetchMock.mock.calls.at(-1)!;
-    expect(String(secondUrl)).toContain('cursor=cursor-2');
+    expect(requestUrl(secondUrl)).toContain('cursor=cursor-2');
   });
 
   it('assembles a session with its full transcript across message pages', async () => {

@@ -951,10 +951,10 @@ function extractIO(
 
   if (value == null) return undefined;
 
-  const io: SessionTurnIO = { value: String(value) };
+  const io: SessionTurnIO = { value: isJsonString(value) ? value : JSON.stringify(value) };
   const mimeType = span.attributes?.[mimeTypeKey];
 
-  if (mimeType != null) io.mimeType = String(mimeType);
+  if (isJsonString(mimeType)) io.mimeType = mimeType;
 
   return io;
 }

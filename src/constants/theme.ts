@@ -64,7 +64,7 @@ export const Colors = {
   },
 } as const;
 
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+export type ThemeColor = keyof typeof Colors.light;
 
 /**
  * The surface a screen is drawn on. Inside an expanded split's sidebar column

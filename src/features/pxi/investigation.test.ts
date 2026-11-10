@@ -1,9 +1,10 @@
 import type * as ExpoCrypto from 'expo-crypto';
 import type * as ExpoHaptics from 'expo-haptics';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import type { JsonValue } from '@/lib/json';
 import type { PhoenixInstance } from '@/types/instance';
+import { requestBodyText } from '@/test/fetch-calls';
 
 import type { ResolvedPxiAction } from './actions';
 import { createPxiInvestigationKey, usePxiInvestigationStore } from './investigation';
@@ -93,7 +94,7 @@ describe('pxi investigation runs', () => {
 
   afterEach(() => {
     for (const [key, run] of Object.entries(usePxiInvestigationStore.getState().runs)) {
-      run.chat.stop();
+      void run.chat.stop();
       usePxiInvestigationStore.getState().clearRun(key);
     }
 
@@ -124,16 +125,16 @@ describe('pxi investigation runs', () => {
     expect(run.model).toEqual(model);
 
     await vi.waitFor(() => expect(expoFetch).toHaveBeenCalledTimes(1));
-    expect(JSON.parse(String(expoFetch.mock.calls.at(0)?.[1]?.body))).toMatchObject({
+    expect(JSON.parse(requestBodyText(expoFetch.mock.calls.at(0)?.[1]))).toMatchObject({
       contexts: expect.arrayContaining(action.contexts),
       message: { parts: [{ type: 'text', text: 'perform open coding' }], role: 'user' },
     });
-    expect(JSON.parse(String(fetchMock.mock.calls.at(0)?.[1]?.body))).toMatchObject({
+    expect(JSON.parse(requestBodyText(fetchMock.mock.calls.at(0)?.[1]))).toMatchObject({
       is_ephemeral: true,
       model,
     });
 
-    run.chat.stop();
+    void run.chat.stop();
     await vi.waitFor(() => expect(runStatus(key)).toBe('stopped'));
     expect(onSettled).not.toHaveBeenCalled();
 

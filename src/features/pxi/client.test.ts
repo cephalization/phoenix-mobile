@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import type { JsonValue } from '@/lib/json';
 import type { PhoenixInstance } from '@/types/instance';
+import { requestBodyText, requestUrl } from '@/test/fetch-calls';
 
 import {
   buildAgentSessionChatUrl,
@@ -65,10 +66,6 @@ function send(transport: ReturnType<typeof createPxiTransport>, messages: PxiMes
     messages,
     trigger: 'submit-message',
   });
-}
-
-function requestUrl(mock: typeof expoFetch, call: number): string {
-  return String(mock.mock.calls.at(call)?.[0]);
 }
 
 describe('agent session chat requests', () => {
@@ -149,7 +146,7 @@ describe('agent session chat requests', () => {
     const [creationUrl, creationInit] = fetchMock.mock.calls.at(0)!;
     expect(creationUrl).toBe('http://phoenix.local:6006/v1/agent_sessions');
     expect(creationInit?.method).toBe('POST');
-    expect(JSON.parse(String(creationInit?.body))).toEqual({
+    expect(JSON.parse(requestBodyText(creationInit))).toEqual({
       title: '',
       is_ephemeral: true,
       model,
@@ -157,9 +154,9 @@ describe('agent session chat requests', () => {
 
     const chatUrl = 'http://phoenix.local:6006/v1/agent_sessions/QWdlbnRTZXNzaW9uOjc%3D/chat';
     expect(expoFetch).toHaveBeenCalledTimes(2);
-    expect(requestUrl(expoFetch, 0)).toBe(chatUrl);
-    expect(requestUrl(expoFetch, 1)).toBe(chatUrl);
-    expect(JSON.parse(String(expoFetch.mock.calls.at(1)?.[1]?.body))).toMatchObject({
+    expect(requestUrl(expoFetch.mock.calls.at(0)?.[0])).toBe(chatUrl);
+    expect(requestUrl(expoFetch.mock.calls.at(1)?.[0])).toBe(chatUrl);
+    expect(JSON.parse(requestBodyText(expoFetch.mock.calls.at(1)?.[1]))).toMatchObject({
       lastMessageId: 'm1',
       message: { id: 'm2' },
     });
@@ -179,7 +176,7 @@ describe('agent session chat requests', () => {
     await send(transport, [userMessage('m1', 'hello')]);
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(requestUrl(expoFetch, 0)).toContain('QWdlbnRTZXNzaW9uOjg%3D');
+    expect(requestUrl(expoFetch.mock.calls.at(0)?.[0])).toContain('QWdlbnRTZXNzaW9uOjg%3D');
   });
 
   it('continues an existing server session without creating a new one', async () => {
@@ -193,7 +190,7 @@ describe('agent session chat requests', () => {
     await send(transport, [userMessage('m1', 'hello')]);
 
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(requestUrl(expoFetch, 0)).toContain('QWdlbnRTZXNzaW9uOjk%3D');
+    expect(requestUrl(expoFetch.mock.calls.at(0)?.[0])).toContain('QWdlbnRTZXNzaW9uOjk%3D');
   });
 
   it('formats agent session conflicts ahead of generic error heuristics', () => {

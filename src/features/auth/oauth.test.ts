@@ -1,5 +1,5 @@
 import type * as ExpoCrypto from 'expo-crypto';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import type { JsonObject, JsonValue } from '@/lib/json';
 

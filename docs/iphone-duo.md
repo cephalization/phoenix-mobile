@@ -62,7 +62,7 @@ Every tap is one of three verbs, and the window's size class decides how each ve
 
 ```bash
 COPYFILE_DISABLE=1 tar --no-xattrs -czf deps/<name>.tgz package
-npm install ./deps/<name>.tgz
+vp add ./deps/<name>.tgz
 (cd ios && pod install)
 ```
 
@@ -78,7 +78,7 @@ xcodebuild -workspace ios/PhoenixMobile.xcworkspace -scheme PhoenixMobile -confi
   -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone Duo' \
   -derivedDataPath ios/build CODE_SIGNING_ALLOWED=NO build
 xcrun simctl install booted ios/build/Build/Products/Debug-iphonesimulator/PhoenixMobile.app
-npx expo start --dev-client
+vp exec expo start --dev-client
 ```
 
 Add `DEV_CLIENT_DEFAULT_LAUNCHER_URL = http://localhost:8081` to the generated `ios/PhoenixMobile/Info.plist` to skip the dev launcher. Device Hub's bezel controls open, close, rotate, and fold the device; T3 Code's `agent-device fold closed|half-open|open` does the same from a script. The open inner window is 951 × 669 pt and the closed outer one 466 × 678 pt, both with the vertical bar inset `{ right: 84, bottom: 34 }`.

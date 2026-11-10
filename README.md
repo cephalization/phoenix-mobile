@@ -11,8 +11,8 @@ The fastest way to run the app on your own phone. No Xcode or Android Studio is 
 3. Put the phone and the computer on the same Wi-Fi network, then on the computer:
 
    ```bash
-   npm ci
-   npm run start:go
+   vp install
+   vp run start:go
    ```
 
 4. Scan the QR code that Metro prints: with the Camera app on iOS, or from inside Expo Go on Android. Accept the local-network prompt the first time; iOS asks because Expo Go loads the JavaScript bundle from your computer.
@@ -26,10 +26,10 @@ exp://<computer-ip>:8081/--/instances/new?host=<computer-ip>:6006
 
 On a development build the same link is `phoenixmobile://instances/new?host=<computer-ip>:6006`. An optional `name` parameter sets the display name. Nothing is saved until the server is verified.
 
-`npm run start:go` serves Metro over the LAN. If the phone cannot reach the computer (guest Wi-Fi, client isolation, a strict firewall), start a tunnel instead; it is slower but works from any network:
+`vp run start:go` serves Metro over the LAN. If the phone cannot reach the computer (guest Wi-Fi, client isolation, a strict firewall), start a tunnel instead; it is slower but works from any network:
 
 ```bash
-npm run start:go -- --tunnel
+vp run start:go -- --tunnel
 ```
 
 macOS may ask whether Node can accept incoming connections the first time Metro starts. Allow it, or the phone cannot fetch the bundle.
@@ -89,20 +89,20 @@ Send some traces to the server so the app has projects to show; the [Phoenix tra
 
 ## Development
 
-Node 22 or newer is required; `.nvmrc` pins the version used for development. The repository commits `package-lock.json`, so use `npm` for every install and script.
+Node 22 or newer and [Vite+](https://viteplus.dev) (`vp`) are required; `.nvmrc` pins the Node version used for development. `vp` is the entry point for every install, script, and check. It drives npm underneath (`packageManager` in `package.json`), so the committed `package-lock.json` stays authoritative.
 
 ```bash
-npm ci
-npm start
+vp install
+vp run start
 ```
 
-`npm start` targets the installed development build. Use `npm run start:go` for Expo Go, and `npm run ios`, `npm run android`, or `npm run web` to build and launch a platform directly.
+`vp run start` targets the installed development build. Use `vp run start:go` for Expo Go, and `vp run ios`, `vp run android`, or `vp run web` to build and launch a platform directly.
 
 ```bash
-npm run check
+vp run check
 ```
 
-That runs the TypeScript typecheck, oxlint (with the vendored anti-slop rules in `tools/oxlint/anti-slop`), the oxfmt format check, and the Vitest suite. `npm run lint:fix` and `npm run fmt` apply autofixes. The oxc VS Code extension is recommended in `.vscode/extensions.json`.
+That runs `vp check` (oxfmt, then type-aware oxlint with the vendored anti-slop rules in `tools/oxlint/anti-slop`, plus the TypeScript type check) and `vp test run` (Vitest). All of it is configured in `vite.config.ts`. `vp check --fix` applies lint and format autofixes. The oxc VS Code extension is recommended in `.vscode/extensions.json`.
 
 Before contributing, read:
 
@@ -128,18 +128,18 @@ cp .env.example .env.local
 For the first development build on a connected iPhone, or after native dependency and app-config changes, enable Developer Mode on the phone and run:
 
 ```bash
-npm run ios:device:clean
+vp run ios:device:clean
 ```
 
 Pass a device name or UDID to skip Expo's device prompt:
 
 ```bash
-npm run ios:device:clean -- "My iPhone"
+vp run ios:device:clean -- "My iPhone"
 ```
 
 The clean script selects `/Applications/Xcode.app`, completes Xcode's first-launch setup, installs locked JavaScript dependencies, regenerates the iOS project, installs CocoaPods dependencies, and builds and installs Phoenix Mobile. It stops early if `PHOENIX_IOS_BUNDLE_ID` isn't set. Signing uses `PHOENIX_APPLE_TEAM_ID`, or otherwise a team you set up in Xcode; a free Personal Team is enough, and no team identifier is stored in the repository. Set `XCODE_APP` when Xcode is installed elsewhere.
 
-For normal JavaScript and TypeScript development, leave the installed development client on the phone and run `npm start` for Fast Refresh. Use `npm run ios:device` only when an incremental native rebuild is needed.
+For normal JavaScript and TypeScript development, leave the installed development client on the phone and run `vp run start` for Fast Refresh. Use `vp run ios:device` only when an incremental native rebuild is needed.
 
 ## Connecting locally
 

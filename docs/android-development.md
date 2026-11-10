@@ -13,7 +13,7 @@ This guide covers the Expo development build, which is needed for the trailing-s
 On macOS, run:
 
 ```bash
-npm run android:device:clean
+vp run android:device:clean
 ```
 
 The clean script:
@@ -21,14 +21,14 @@ The clean script:
 - Installs Homebrew JDK 17 and Android command-line tools when missing.
 - Accepts Android SDK licenses and installs platform tools, Android SDK 36, and Build Tools 36.0.0.
 - Shows connected ADB devices and requires an authorized phone.
-- Installs locked JavaScript dependencies with `npm ci`.
+- Installs locked JavaScript dependencies with `vp install --frozen-lockfile`.
 - Regenerates `android/` from Expo app configuration.
 - Builds and installs the debug development client without starting Metro.
 
 Pass the ADB model name when more than one Android device is connected:
 
 ```bash
-npm run android:device:clean -- Pixel_9_Pro_XL
+vp run android:device:clean -- Pixel_9_Pro_XL
 ```
 
 Set `JAVA_HOME` or `ANDROID_HOME` before running the script to use an existing JDK 17 or Android SDK installation.
@@ -38,7 +38,7 @@ Set `JAVA_HOME` or `ANDROID_HOME` before running the script to use an existing J
 Keep the phone connected and run:
 
 ```bash
-npm run android:device:start
+vp run android:device:start
 ```
 
 This establishes `adb reverse tcp:8081 tcp:8081` and starts Metro on the computer's localhost interface. Open the installed Phoenix Mobile app on the phone after Metro is ready. USB reversal avoids LAN discovery, firewall, and changing Wi-Fi address issues.
@@ -46,16 +46,16 @@ This establishes `adb reverse tcp:8081 tcp:8081` and starts Metro on the compute
 When multiple phones are connected, pass the desired ADB serial:
 
 ```bash
-npm run android:device:start -- DEVICE_SERIAL
+vp run android:device:start -- DEVICE_SERIAL
 ```
 
 For an incremental native rebuild after app-config or native dependency changes, run:
 
 ```bash
-npm run android:device
+vp run android:device
 ```
 
-Then restart Metro with `npm run android:device:start`. JavaScript and TypeScript changes normally need only the running Metro process and Fast Refresh.
+Then restart Metro with `vp run android:device:start`. JavaScript and TypeScript changes normally need only the running Metro process and Fast Refresh.
 
 ## Useful Checks
 

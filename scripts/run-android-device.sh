@@ -24,6 +24,6 @@ if [[ -z "${DEVICE_NAME}" ]]; then
 fi
 
 cd "${ROOT_DIR}"
-npx expo run:android --device "${DEVICE_NAME}" --no-bundler
+vp exec expo run:android --device "${DEVICE_NAME}" --no-bundler
 
-printf '\nNative app installed. Run npm run android:device:start and open Phoenix Mobile.\n'
+printf '\nNative app installed. Run vp run android:device:start and open Phoenix Mobile.\n'

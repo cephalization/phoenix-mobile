@@ -51,7 +51,7 @@ export function AnimatedSplashOverlay() {
   ) : (
     <View
       onLayout={() => {
-        SplashScreen.hideAsync().finally(() => {
+        void SplashScreen.hideAsync().finally(() => {
           setAnimate(true);
         });
       }}

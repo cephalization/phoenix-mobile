@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vite-plus/test';
 
 import { parseServerVersion, resolvePxiAction } from './actions';
 import { buildPxiRequest } from './client';

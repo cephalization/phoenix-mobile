@@ -446,7 +446,7 @@ export function ProjectTraces({
           maxToRenderPerBatch={12}
           onEndReached={() => {
             if (activeTraces.hasNextPage && !activeTraces.isFetchingNextPage)
-              activeTraces.fetchNextPage();
+              void activeTraces.fetchNextPage();
           }}
           onEndReachedThreshold={0.35}
           refreshControl={

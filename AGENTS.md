@@ -43,9 +43,9 @@ Current product boundaries:
 - React Hook Form and Zod for forms and validation
 - Reanimated 4, Gesture Handler, and Expo Haptics for interaction
 - Geist typography and Phoenix design tokens
-- oxlint with the vendored anti-slop ruleset, and oxfmt for formatting
+- Vite+ (`vp`) for installs, scripts, linting (type-aware oxlint with the vendored anti-slop ruleset), formatting (oxfmt), and tests (Vitest)
 
-Use `npm` for dependency and script commands because this repository commits `package-lock.json`.
+Use `vp` for dependency and script commands (`vp install`, `vp add`, `vp run <script>`, `vp exec <bin>`). It drives npm underneath, so the committed `package-lock.json` stays authoritative; do not introduce another lockfile.
 
 ## Repository Map
 
@@ -62,6 +62,7 @@ src/hooks/                TanStack Query hooks and query keys
 src/lib/                  Phoenix client, haptics, and infrastructure
 src/store/                Persisted local state
 src/types/                Domain models
+src/test/                 Shared test helpers
 src/features/duo/         iPhone Duo layout model and split-column routing
 src/features/offline/     Reachability, offline query persistence, and the write outbox
 modules/duo-native/       Local Expo module: layout metrics and trailing sheets
@@ -87,11 +88,11 @@ tools/oxlint/anti-slop/   Vendored lint rules (see its UPSTREAM.md before editin
 
 ## Code Quality Rules
 
-Lint policy lives in `.oxlintrc.json` and the vendored `tools/oxlint/anti-slop` plugin. Fix the code rather than the rule: never add `oxlint-disable` comments, lower a severity, or launder a type to make lint pass. Policy changes go through `.oxlintrc.json` and `tools/oxlint/anti-slop/UPSTREAM.md`, where intentional deviations are recorded.
+Lint policy lives in the `lint` block of `vite.config.ts` and the vendored `tools/oxlint/anti-slop` plugin. Fix the code rather than the rule: never add `oxlint-disable` comments, lower a severity, or launder a type to make lint pass. Policy changes go through `vite.config.ts` and `tools/oxlint/anti-slop/UPSTREAM.md`, where intentional deviations are recorded.
 
 - Narrow untyped JSON (AI SDK tool payloads, span attributes, `JSON.parse` output) with the predicates in `src/lib/json.ts` and type it as `JsonValue`. Do not add ad hoc `typeof` checks or `unknown` parameters outside type predicates.
 - A type assertion needs a `// SAFETY:` comment stating the invariant that makes it sound. Prefer fixing the types so no assertion is needed.
-- Tests replace dependencies through real seams. Module mocking is allowed only for the native Expo modules listed in `.oxlintrc.json`.
+- Tests replace dependencies through real seams. Module mocking is allowed only for the native Expo modules listed in `vite.config.ts`.
 - Build request objects explicitly instead of spreading conditional empty objects; the Phoenix client drops `undefined` fields.
 
 ## UI Guidelines
@@ -134,16 +135,16 @@ Lint policy lives in `.oxlintrc.json` and the vendored `tools/oxlint/anti-slop` 
 Run these checks after code changes:
 
 ```bash
-npm run check
+vp run check
 ```
 
-`npm run check` runs `typecheck`, `lint` (oxlint), `fmt:check` (oxfmt), and `test` (Vitest). Use `npm run lint:fix` and `npm run fmt` to apply autofixes and formatting; run lint again afterwards because the spacing rule and the formatter must agree.
+`vp run check` runs `vp check` (oxfmt format check, type-aware oxlint, and the TypeScript type check) and `vp test run` (Vitest). Use `vp check --fix` to apply autofixes and formatting, then run `vp check` again because the spacing rule and the formatter must agree.
 
 For changes involving routing, native modules, Metro, assets, or platform configuration, also run:
 
 ```bash
-npx expo-doctor
-npx expo export --platform all --clear
+vpx expo-doctor
+vp exec expo export --platform all --clear
 ```
 
 For UI work:

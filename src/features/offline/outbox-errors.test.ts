@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vite-plus/test';
 
 import { PhoenixAuthError } from '@/features/auth/oauth';
 import { SessionReviewApiError, SessionReviewValidationError } from '@/features/session-review/api';

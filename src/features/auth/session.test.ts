@@ -1,8 +1,9 @@
 import type * as ExpoCrypto from 'expo-crypto';
 import type * as ExpoSecureStore from 'expo-secure-store';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import type { PhoenixInstance } from '@/types/instance';
+import { requestUrl } from '@/test/fetch-calls';
 
 import {
   authenticatedFetch,
@@ -166,7 +167,7 @@ describe('OAuth credential sessions', () => {
     storeCredential(target);
 
     const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
-      const url = String(input);
+      const url = requestUrl(input);
 
       if (url.endsWith('/oauth/token')) return tokenResponse();
       expect(init?.redirect).toBe('error');
@@ -206,7 +207,7 @@ describe('OAuth credential sessions', () => {
     });
 
     const fetchMock = vi.fn<typeof fetch>((input) => {
-      if (String(input).endsWith('/oauth/token')) return pendingRefresh;
+      if (requestUrl(input).endsWith('/oauth/token')) return pendingRefresh;
 
       return Promise.resolve(new Response(null, { status: 200 }));
     });

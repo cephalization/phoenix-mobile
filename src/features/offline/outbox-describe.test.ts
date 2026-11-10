@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vite-plus/test';
 
 import { describeOperation, describeStatus, shortSessionId } from './outbox-describe';
 import type { OutboxOperation } from './outbox-model';

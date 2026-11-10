@@ -66,17 +66,13 @@ async function requestAgentSessionJson<Payload>(
   init?: RequestInit,
 ): Promise<Payload> {
   const method = init?.method ?? 'GET';
-  const headers: Record<string, string> = {};
-  headers.Accept = 'application/json';
+  const headers = new Headers({ Accept: 'application/json' });
 
-  if (init?.body) headers['Content-Type'] = 'application/json';
+  if (init?.body) headers.set('Content-Type', 'application/json');
 
-  const response = await authenticatedFetch(
-    instance,
-    url,
-    { ...init, headers: { ...headers, ...init?.headers } },
-    method === 'GET',
-  );
+  new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
+
+  const response = await authenticatedFetch(instance, url, { ...init, headers }, method === 'GET');
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '');

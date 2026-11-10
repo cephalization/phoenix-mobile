@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import type { JsonValue } from '@/lib/json';
 import type { PhoenixInstance } from '@/types/instance';
+import { requestBodyText } from '@/test/fetch-calls';
 
 import { fetchPxiModelCatalog } from './model-catalog';
 
@@ -76,7 +77,7 @@ describe('fetchPxiModelCatalog', () => {
     const [url, init] = fetchMock.mock.calls[1] ?? [];
 
     expect(url).toBe('http://phoenix.local:6006/graphql');
-    expect(JSON.parse(String(init?.body)).variables).toEqual({ after: 'c1' });
+    expect(JSON.parse(requestBodyText(init)).variables).toEqual({ after: 'c1' });
 
     expect(
       catalog.rows.map((row) => [row.providerName, row.modelName, row.credentialState]),

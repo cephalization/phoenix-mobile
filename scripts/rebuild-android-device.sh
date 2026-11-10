@@ -19,8 +19,8 @@ if ! command -v brew >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
-  printf 'Node.js and npm are required. Install an active Node.js LTS release first.\n' >&2
+if ! command -v node >/dev/null 2>&1 || ! command -v vp >/dev/null 2>&1; then
+  printf 'Node.js and Vite+ (vp) are required. Install them from https://viteplus.dev first.\n' >&2
   exit 1
 fi
 
@@ -62,9 +62,9 @@ fi
 
 cd "${ROOT_DIR}"
 printf 'Installing locked JavaScript dependencies...\n'
-npm ci
+vp install --frozen-lockfile
 
 printf 'Regenerating the Android project from app config...\n'
-npx expo prebuild --clean --platform android --no-install
+vp exec expo prebuild --clean --platform android --no-install
 
 "${ROOT_DIR}/scripts/run-android-device.sh" "$@"

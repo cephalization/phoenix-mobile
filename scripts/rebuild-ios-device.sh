@@ -17,8 +17,8 @@ if [[ ! -d "${DEVELOPER_DIR}" ]]; then
   exit 1
 fi
 
-if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
-  printf 'Node.js and npm are required. Install an active Node.js LTS release first.\n' >&2
+if ! command -v node >/dev/null 2>&1 || ! command -v vp >/dev/null 2>&1; then
+  printf 'Node.js and Vite+ (vp) are required. Install them from https://viteplus.dev first.\n' >&2
   exit 1
 fi
 
@@ -45,11 +45,11 @@ sudo xcodebuild -runFirstLaunch
 
 cd "${ROOT_DIR}"
 printf 'Installing locked JavaScript dependencies...\n'
-npm ci
+vp install --frozen-lockfile
 IOS_DEPLOYMENT_TARGET="$(node --print "require('./app.json').expo.ios.deploymentTarget")"
 
 printf 'Regenerating the iOS project from app config...\n'
-npx expo prebuild --clean --platform ios --no-install
+vp exec expo prebuild --clean --platform ios --no-install
 
 printf 'Installing iOS CocoaPods dependencies...\n'
 (
@@ -72,7 +72,7 @@ if [[ $# -gt 1 ]]; then
 fi
 
 if [[ $# -eq 1 ]]; then
-  npx expo run:ios --device "$1"
+  vp exec expo run:ios --device "$1"
 else
-  npx expo run:ios --device
+  vp exec expo run:ios --device
 fi

@@ -30,7 +30,7 @@ import { ReachabilityMonitor } from '@/features/offline/reachability-monitor';
 import { usePxiPaneStore } from '@/features/pxi/pane-store';
 import { useSettingsStore } from '@/store/settings';
 
-SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync();
 
 featureFlags.experiment.synchronousScreenUpdatesEnabled = true;
 
@@ -75,7 +75,7 @@ export default function RootLayout() {
   useEffect(() => attachOfflineCache(queryClient), [queryClient]);
 
   useEffect(() => {
-    if (fontsLoaded || fontError) SplashScreen.hideAsync();
+    if (fontsLoaded || fontError) void SplashScreen.hideAsync();
   }, [fontError, fontsLoaded]);
 
   // Native surfaces outside React (Alert, native sheets, Material menus) read the

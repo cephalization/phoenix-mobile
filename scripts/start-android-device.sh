@@ -22,4 +22,4 @@ adb -s "${DEVICE_SERIAL}" reverse tcp:8081 tcp:8081
 
 cd "${ROOT_DIR}"
 printf 'Open Phoenix Mobile on the connected phone after Metro is ready.\n\n'
-npx expo start --dev-client --localhost
+vp exec expo start --dev-client --localhost
