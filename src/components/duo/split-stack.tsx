@@ -31,9 +31,10 @@ import type {
 } from 'expo-router/react-navigation';
 import type { NativeStackNavigationOptions } from 'expo-router/native-stack';
 
-import { PxiChat } from '@/components/chat/pxi-chat';
+import { PxiChat, type PxiChatHandle } from '@/components/chat/pxi-chat';
 import { EmptyState } from '@/components/ui/empty-state';
 import { type Surface, SurfaceContext, useAppColors } from '@/constants/theme';
+import { useDuoLayout } from '@/features/duo/layout';
 import {
   ColumnMetricsContext,
   LayoutMetricsObserver,
@@ -50,7 +51,7 @@ import { usePxiPaneStore } from '@/features/pxi/pane-store';
 import { isJsonObject } from '@/lib/json';
 import { useInstanceStore } from '@/store/instances';
 
-import { ColumnHeader } from './column-header';
+import { barButton, ColumnHeader } from './column-header';
 import { PxiFloatingPanel } from './pxi-floating-panel';
 
 const NativeStackContent = createStandardNativeStackNavigator.NavigatorContent;
@@ -173,6 +174,8 @@ function SplitColumns({
 }) {
   const colors = useAppColors();
   const hostRef = useRef<SplitHostCommands>(null);
+  const pxiChat = useRef<PxiChatHandle>(null);
+  const { systemBarEdge } = useDuoLayout();
   // Native callbacks can outlive the render that created them, so they read
   // the latest router state from here.
   const liveState = useRef(routerState);
@@ -308,6 +311,10 @@ function SplitColumns({
     [shownDetail],
   );
 
+  // Only the collapsed split (the closed Duo) shows PXI as a sheet with a vertical bar.
+  const inspectorBarActions =
+    collapsedState && pxiInstance !== undefined && systemBarEdge !== 'top';
+
   return (
     <SplitDetailContext value={splitDetail}>
       <View style={styles.fill}>
@@ -375,10 +382,49 @@ function SplitColumns({
             </Split.Stack>
           </Split.Column>
           <Split.Inspector>
-            <Split.HeaderConfig hidden />
+            {/* On the closed Duo the sheet's vertical bar holds the chat's actions,
+              so the chat keeps only a title line; a top bar keeps the chat's own header. */}
+            <ColumnHeader
+              canGoBack={false}
+              options={{
+                headerShown: inspectorBarActions,
+                title: '',
+                unstable_headerRightItems: () => [
+                  // The last item sits at the top of a vertical bar, nearest the status cluster.
+                  barButton({
+                    type: 'button',
+                    label: 'History',
+                    icon: { type: 'sfSymbol', name: 'clock.arrow.circlepath' },
+                    onPress: () => pxiChat.current?.openHistory(),
+                    visibilityPriority: 'standard',
+                  }),
+                  barButton({
+                    type: 'button',
+                    label: 'New Chat',
+                    icon: { type: 'sfSymbol', name: 'square.and.pencil' },
+                    onPress: () => pxiChat.current?.startNewChat(),
+                    visibilityPriority: 'standard',
+                  }),
+                  barButton({
+                    type: 'button',
+                    label: 'Done',
+                    icon: { type: 'sfSymbol', name: 'checkmark' },
+                    onPress: closePxi,
+                    variant: 'done',
+                    visibilityPriority: 'high',
+                  }),
+                ],
+              }}
+            />
             <ColumnContent>
               {pxiInstance && collapsedState ? (
-                <PxiChat instance={pxiInstance} onClose={closePxi} presentation="pane" />
+                <PxiChat
+                  headerActions={inspectorBarActions ? 'bar' : 'inline'}
+                  instance={pxiInstance}
+                  onClose={closePxi}
+                  presentation="pane"
+                  ref={pxiChat}
+                />
               ) : (
                 <View style={{ flex: 1, backgroundColor: colors.background }} />
               )}

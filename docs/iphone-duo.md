@@ -17,7 +17,7 @@ The choice never changes while the app runs, so screens never remount. The split
 | --------- | ------------------------------------------------------------------------------------- | ------------------------------------- |
 | Sidebar   | Projects, then a project's traces or sessions (a native stack), on the `sidebar` tint | Horizontal, above the column          |
 | Detail    | The selected trace or session, and pages drilled into from it                         | The vertical bar on the trailing edge |
-| Inspector | PXI chat, while open; a full-height sheet while collapsed                             | The chat's own header                 |
+| Inspector | PXI chat, while open; a full-height sheet while collapsed                             | The sheet's vertical bar (collapsed)  |
 
 Route roles live in `src/features/duo/split-columns.ts`. One router history projects into the columns, ordered as sidebar pages followed by detail pages:
 
@@ -25,7 +25,7 @@ Route roles live in `src/features/duo/split-columns.ts`. One router history proj
 - `selectDetail(href)` opens a page the way a list row does: it replaces the detail column, so Back returns to the list.
 - `router.push` from a detail page drills in on top, so Back returns to that page.
 
-List screens mark the row the detail column shows with `useSplitDetail()`. A session page selects the next session after "Submit & next" from the order the sessions list publishes (`useSessionQueueOrder`). With room for it, PXI floats over the columns beside the vertical bar and the columns keep their layout; on the closed Duo it is a sheet. Done, the PXI bar item, or swiping the sheet away closes it.
+List screens mark the row the detail column shows with `useSplitDetail()`. A session page selects the next session after "Submit & next" from the order the sessions list publishes (`useSessionQueueOrder`). With room for it, PXI floats over the columns beside the vertical bar and the columns keep their layout; on the closed Duo it is a sheet. Done, the PXI bar item, or swiping the sheet away closes it. On the closed Duo the sheet's vertical bar holds Done, New Chat, and History (`ColumnHeader` on the inspector, driving `PxiChat` through its `PxiChatHandle` ref) and the chat keeps only a title line; the floating panel on the open Duo keeps the chat's own header, because the window's bar belongs to the page beside it.
 
 ## Measuring a column
 

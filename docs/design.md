@@ -54,14 +54,15 @@ Where a screen needs something these don't cover, build it from the same tokens.
 
 Build items with `barButton`, and menus with `barMenu`, from `src/components/duo/column-header.tsx`. Every item needs an SF Symbol, a label (shown in the overflow menu), and a `visibilityPriority`. Trailing items stack from the far end, so **the last item sits at the top of a vertical bar**: put PXI last. Fold rarely used actions into a `More` menu (`ellipsis.circle`, `visibilityPriority: 'low'`). A filter menu's icon switches to its `.fill` variant when the view differs from the default. Android and web keep pressables.
 
-| Screen   | Items (first to last)                                    |
-| -------- | -------------------------------------------------------- |
-| Projects | Settings, PXI                                            |
-| Traces   | Range, streaming, and Show menu, PXI                     |
-| Sessions | Review filter menu, review queue settings, PXI           |
-| Trace    | More (copy trace or span ID, open in Phoenix), PXI       |
-| Session  | More (copy session ID), Add to dataset, Investigate, PXI |
-| Sheets   | Done (`checkmark`, `variant: 'done'`, high priority)     |
+| Screen                 | Items (first to last)                                    |
+| ---------------------- | -------------------------------------------------------- |
+| Projects               | Settings, PXI                                            |
+| Traces                 | Range, streaming, and Show menu, PXI                     |
+| Sessions               | Review filter menu, review queue settings, PXI           |
+| Trace                  | More (copy trace or span ID, open in Phoenix), PXI       |
+| Session                | More (copy session ID), Add to dataset, Investigate, PXI |
+| PXI sheet (closed Duo) | History, New Chat, Done                                  |
+| Sheets                 | Done (`checkmark`, `variant: 'done'`, high priority)     |
 
 ## Offline
 

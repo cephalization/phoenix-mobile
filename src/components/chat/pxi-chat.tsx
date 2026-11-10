@@ -1,7 +1,15 @@
 import { useChat } from '@ai-sdk/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
+import {
+  type Ref,
+  useEffect,
+  useEffectEvent,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   ActivityIndicator,
   AppState,
@@ -62,20 +70,33 @@ const agentSessionKeys = {
     [...phoenixQueryKeys.instance(instanceId), 'agent-session', sessionId] as const,
 };
 
+/** The chat actions a native bar can trigger when the chat does not draw its own header. */
+export type PxiChatHandle = {
+  openHistory: () => void;
+  startNewChat: () => void;
+};
+
 /**
  * The PXI conversation: session history, model choice, transcript, and
  * composer. The chat route renders it as a `screen`; the PXI shell renders it
  * as a `pane` beside the navigation stack on regular-width windows, where the
  * leading control closes the pane instead of going back.
+ *
+ * With `headerActions="bar"` the chat leaves History, New chat, and Done to the
+ * host's native bar (reached through `ref`) and keeps only a slim title line.
  */
 export function PxiChat({
+  headerActions = 'inline',
   instance,
   onClose,
   presentation,
+  ref,
 }: {
+  headerActions?: 'inline' | 'bar';
   instance: PhoenixInstance;
   onClose: () => void;
   presentation: 'screen' | 'pane';
+  ref?: Ref<PxiChatHandle>;
 }) {
   const id = instance.id;
   const colors = useAppColors();
@@ -184,6 +205,11 @@ export function PxiChat({
     setReplacementApprovedSessionId(null);
     setHistoryVisible(false);
   };
+
+  useImperativeHandle(ref, () => ({
+    openHistory: () => setHistoryVisible(true),
+    startNewChat,
+  }));
 
   const selectSession = (session: PxiServerSessionSummary) => {
     setSessionChoice({ id: session.id, restore: true });
@@ -310,68 +336,94 @@ export function PxiChat({
     <View pointerEvents="box-none" style={[styles.screen, { paddingRight: barMargin }]}>
       <SafeAreaInsetsContext.Provider value={insets}>
         <View style={[styles.screen, { backgroundColor: colors.background }, paneDivider]}>
-          <View
-            style={[
-              styles.header,
-              {
-                borderBottomColor: colors.separator,
-                marginTop: insets.top,
-                paddingLeft: 4 + insets.left,
-                paddingRight: 4 + insets.right,
-              },
-            ]}
-          >
-            {presentation === 'screen' && (
-              <HeaderIcon
-                accessibilityLabel="Close PXI"
-                onPress={onClose}
-                symbol={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
-              />
-            )}
-            {!showRail && (
-              <HeaderIcon
-                accessibilityLabel="Open chat history"
-                onPress={() => setHistoryVisible(true)}
-                symbol={{ ios: 'clock.arrow.circlepath', android: 'history', web: 'history' }}
-              />
-            )}
+          {headerActions === 'bar' ? (
             <View
-              pointerEvents="none"
+              accessibilityRole="header"
               style={[
-                styles.headerTitleGroup,
-                { left: 100 + insets.left, right: 100 + insets.right },
+                styles.captionHeader,
+                {
+                  borderBottomColor: colors.separator,
+                  marginTop: insets.top,
+                  paddingLeft: RowInset + insets.left,
+                  paddingRight: RowInset + insets.right,
+                },
               ]}
             >
-              <View style={styles.headerTitleRow}>
-                <PxiGlyph color={colors.brand} size={14} />
-                <Text
-                  accessibilityRole="header"
-                  numberOfLines={1}
-                  style={[styles.headerTitle, { color: colors.text }]}
-                >
-                  PXI
-                </Text>
-              </View>
-              <Text numberOfLines={1} style={[Type.label, { color: colors.textSecondary }]}>
+              <PxiGlyph color={colors.brand} size={12} />
+              <Text numberOfLines={1} style={[styles.captionTitle, { color: colors.text }]}>
+                PXI
+              </Text>
+              <Text
+                numberOfLines={1}
+                style={[Type.label, styles.captionInstance, { color: colors.textSecondary }]}
+              >
                 {instance.name}
               </Text>
             </View>
-            <View style={styles.headerTrailing}>
-              <HeaderIcon
-                accessibilityLabel="Start new chat"
-                onPress={startNewChat}
-                symbol={{ ios: 'square.and.pencil', android: 'edit_square', web: 'edit_square' }}
-              />
-              {presentation === 'pane' && (
+          ) : (
+            <View
+              style={[
+                styles.header,
+                {
+                  borderBottomColor: colors.separator,
+                  marginTop: insets.top,
+                  paddingLeft: 4 + insets.left,
+                  paddingRight: 4 + insets.right,
+                },
+              ]}
+            >
+              {presentation === 'screen' && (
                 <HeaderIcon
                   accessibilityLabel="Close PXI"
                   onPress={onClose}
-                  symbol={{ ios: 'checkmark', android: 'check', web: 'check' }}
-                  weight="semibold"
+                  symbol={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
                 />
               )}
+              {!showRail && (
+                <HeaderIcon
+                  accessibilityLabel="Open chat history"
+                  onPress={() => setHistoryVisible(true)}
+                  symbol={{ ios: 'clock.arrow.circlepath', android: 'history', web: 'history' }}
+                />
+              )}
+              <View
+                pointerEvents="none"
+                style={[
+                  styles.headerTitleGroup,
+                  { left: 100 + insets.left, right: 100 + insets.right },
+                ]}
+              >
+                <View style={styles.headerTitleRow}>
+                  <PxiGlyph color={colors.brand} size={14} />
+                  <Text
+                    accessibilityRole="header"
+                    numberOfLines={1}
+                    style={[styles.headerTitle, { color: colors.text }]}
+                  >
+                    PXI
+                  </Text>
+                </View>
+                <Text numberOfLines={1} style={[Type.label, { color: colors.textSecondary }]}>
+                  {instance.name}
+                </Text>
+              </View>
+              <View style={styles.headerTrailing}>
+                <HeaderIcon
+                  accessibilityLabel="Start new chat"
+                  onPress={startNewChat}
+                  symbol={{ ios: 'square.and.pencil', android: 'edit_square', web: 'edit_square' }}
+                />
+                {presentation === 'pane' && (
+                  <HeaderIcon
+                    accessibilityLabel="Close PXI"
+                    onPress={onClose}
+                    symbol={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                    weight="semibold"
+                  />
+                )}
+              </View>
             </View>
-          </View>
+          )}
 
           {showRail ? (
             <DuoArrangement
@@ -893,6 +945,15 @@ const styles = StyleSheet.create({
   headerTitleGroup: { alignItems: 'center', position: 'absolute' },
   headerTitleRow: { alignItems: 'center', flexDirection: 'row', gap: 6 },
   headerTitle: { fontFamily: AppFonts.semibold, fontSize: 16, lineHeight: 20 },
+  captionHeader: {
+    alignItems: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: 6,
+    minHeight: 36,
+  },
+  captionTitle: { fontFamily: AppFonts.semibold, fontSize: 14, lineHeight: 18 },
+  captionInstance: { flexShrink: 1 },
   transcript: { gap: 24, paddingBottom: 16, paddingTop: 20 },
   emptyTranscript: { flexGrow: 1 },
   pending: { alignItems: 'center', flexDirection: 'row', gap: 6, minHeight: 24 },
