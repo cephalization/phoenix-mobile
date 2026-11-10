@@ -183,7 +183,7 @@ export function ProjectTraces({
   }, []);
 
   useEffect(() => {
-    if (!active || !streaming || !screenFocused || appState !== 'active') return;
+    if (!active || !streaming || !screenFocused || appState !== 'active') return undefined;
     const initialPoll = setTimeout(pollRange, 0);
     const interval = setInterval(pollRange, 10_000);
 

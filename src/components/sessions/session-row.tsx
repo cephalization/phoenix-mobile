@@ -62,31 +62,28 @@ export function SessionRow({
   );
 }
 
+type ReviewStatus = SessionReviewClassification['status'];
+
+const ReviewLabels: Record<ReviewStatus, string> = {
+  'not-configured': 'Not configured',
+  complete: 'Reviewed',
+  partial: 'Partial',
+  stale: 'Needs attention',
+  unreviewed: 'Needs review',
+};
+
+const ReviewTones: Record<ReviewStatus, StatusTone> = {
+  complete: 'ok',
+  stale: 'error',
+  partial: 'pending',
+  'not-configured': 'neutral',
+  unreviewed: 'neutral',
+};
+
 function reviewLabel(classification: SessionReviewClassification) {
-  switch (classification.status) {
-    case 'not-configured':
-      return 'Not configured';
-    case 'complete':
-      return 'Reviewed';
-    case 'partial':
-      return 'Partial';
-    case 'stale':
-      return 'Needs attention';
-    case 'unreviewed':
-      return 'Needs review';
-  }
+  return ReviewLabels[classification.status];
 }
 
 function reviewTone(classification: SessionReviewClassification): StatusTone {
-  switch (classification.status) {
-    case 'complete':
-      return 'ok';
-    case 'stale':
-      return 'error';
-    case 'partial':
-      return 'pending';
-    case 'not-configured':
-    case 'unreviewed':
-      return 'neutral';
-  }
+  return ReviewTones[classification.status];
 }

@@ -39,7 +39,7 @@ export function OutboxReplayer() {
   }, [queryClient]);
 
   useEffect(() => {
-    if (!instancesHydrated) return;
+    if (!instancesHydrated) return undefined;
 
     const flushWaiting = () => {
       const waiting = new Set(

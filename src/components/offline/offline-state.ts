@@ -1,4 +1,4 @@
-import { type FetchStatus, onlineManager } from '@tanstack/react-query';
+import { onlineManager, type QueryObserverBaseResult } from '@tanstack/react-query';
 
 import { causedByNetworkFailure } from '@/features/offline/reachability';
 import { formatRelativeTime } from '@/lib/format';
@@ -32,8 +32,8 @@ export function pendingChangesText(count: number): string | null {
  * was loaded or saved. Any other error is the server's answer and keeps its
  * own error state.
  */
-export function isUnavailableOffline<TData>(
-  query: { data: TData | undefined; error: Error | null; fetchStatus: FetchStatus },
+export function isUnavailableOffline(
+  query: Pick<QueryObserverBaseResult, 'data' | 'error' | 'fetchStatus'>,
   offline: boolean,
 ): boolean {
   if (query.data !== undefined) return false;

@@ -1,9 +1,13 @@
 import type { Types } from '@arizeai/phoenix-client';
+import { validateUIMessages } from 'ai';
+import { z } from 'zod';
 
 import { authenticatedFetch } from '@/features/auth/session';
+import { isJsonString } from '@/lib/json';
 import type { PhoenixInstance } from '@/types/instance';
 
-import type { ModelSelection, PxiMessage } from './types';
+import { isBuiltInProvider } from './model-search';
+import type { BuiltInProvider, ModelSelection, PxiMessage } from './types';
 
 /**
  * PXI conversations are persisted server-side as agent sessions since Phoenix
@@ -38,7 +42,42 @@ export type PxiServerSession = PxiServerSessionSummary & {
 
 type AgentSessionSummaryWire = AgentSessionSchemas['AgentSessionSummary'];
 
-type AgentSessionDataWire = AgentSessionSchemas['AgentSessionData'];
+// Response schemas check the fields this module reads; zod drops the rest.
+const modelSelectionSchema: z.ZodType<ModelSelection> = z.discriminatedUnion('providerType', [
+  z.object({
+    providerType: z.literal('builtin'),
+    provider: z.custom<BuiltInProvider>((value) => isJsonString(value) && isBuiltInProvider(value)),
+    modelName: z.string(),
+  }),
+  z.object({ providerType: z.literal('custom'), providerId: z.string(), modelName: z.string() }),
+]);
+
+const sessionSummarySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  is_ephemeral: z.boolean(),
+});
+
+const sessionDataSchema = sessionSummarySchema.extend({
+  model: modelSelectionSchema,
+  is_active: z.boolean(),
+});
+
+const createdSessionSchema = z.object({ data: z.object({ id: z.string() }).optional() });
+
+const sessionResponseSchema = z.object({ data: sessionDataSchema.optional() });
+
+const sessionPageSchema = z.object({
+  data: z.array(sessionSummarySchema).optional(),
+  next_cursor: z.string().nullish(),
+});
+
+const messagePageSchema = z.object({
+  data: z.array(z.unknown()).optional(),
+  next_cursor: z.string().nullish(),
+});
 
 /** Whether an error message carries an agent-session HTTP 409 conflict code. */
 export function isAgentSessionConflict(error: Error, code: AgentSessionConflictCode): boolean {
@@ -63,6 +102,7 @@ async function requestAgentSessionJson<Payload>(
   instance: PhoenixInstance,
   url: string,
   operation: string,
+  schema: z.ZodType<Payload>,
   init?: RequestInit,
 ): Promise<Payload> {
   const method = init?.method ?? 'GET';
@@ -91,10 +131,13 @@ async function requestAgentSessionJson<Payload>(
     );
   }
 
-  // SAFETY: the content-type check above guarantees a JSON body from an
-  // agent-session route, and `Payload` is the wire type this module declares
-  // for that route; every caller checks the `data` envelope before reading it.
-  return (await response.json()) as Payload;
+  const parsed = schema.safeParse(await response.json());
+
+  if (!parsed.success) {
+    throw new Error(`${operation}: Phoenix sent an unexpected response. ${parsed.error.message}`);
+  }
+
+  return parsed.data;
 }
 
 /** Create a persisted agent session and return its id. */
@@ -102,10 +145,11 @@ export async function createAgentSession(
   instance: PhoenixInstance,
   { ephemeral, model }: { ephemeral: boolean; model: ModelSelection },
 ): Promise<string> {
-  const payload = await requestAgentSessionJson<{ data?: { id?: string } }>(
+  const payload = await requestAgentSessionJson(
     instance,
     buildAgentSessionUrl(instance.baseUrl),
     'Phoenix could not create a PXI chat session',
+    createdSessionSchema,
     { body: JSON.stringify({ title: '', is_ephemeral: ephemeral, model }), method: 'POST' },
   );
 
@@ -139,13 +183,11 @@ export async function listAgentSessions(
 
     if (cursor) query.cursor = cursor;
 
-    const payload = await requestAgentSessionJson<{
-      data?: AgentSessionSummaryWire[];
-      next_cursor?: string | null;
-    }>(
+    const payload = await requestAgentSessionJson(
       instance,
       buildAgentSessionUrl(instance.baseUrl, '', query),
       'Phoenix could not load PXI chat sessions',
+      sessionPageSchema,
     );
 
     if (!payload.data) throw new Error('Phoenix returned an empty PXI sessions response.');
@@ -163,21 +205,19 @@ export async function getAgentSession(
 ): Promise<PxiServerSession> {
   const encodedId = encodeURIComponent(sessionId);
 
-  const payload = await requestAgentSessionJson<{ data?: AgentSessionDataWire }>(
+  const payload = await requestAgentSessionJson(
     instance,
     buildAgentSessionUrl(instance.baseUrl, `/${encodedId}`),
     'Phoenix could not open this PXI chat',
+    sessionResponseSchema,
   );
 
   if (!payload.data) throw new Error('Phoenix returned an empty PXI session response.');
-  const messages: PxiMessage[] = [];
+  const transcript: unknown[] = [];
   let cursor: string | undefined;
 
   do {
-    const page = await requestAgentSessionJson<{
-      data?: PxiMessage[];
-      next_cursor?: string | null;
-    }>(
+    const page = await requestAgentSessionJson(
       instance,
       buildAgentSessionUrl(
         instance.baseUrl,
@@ -185,17 +225,22 @@ export async function getAgentSession(
         cursor ? { cursor } : undefined,
       ),
       'Phoenix could not load this PXI chat transcript',
+      messagePageSchema,
     );
 
     if (!page.data) throw new Error('Phoenix returned an empty PXI transcript response.');
-    messages.push(...page.data);
+    transcript.push(...page.data);
     cursor = page.next_cursor ?? undefined;
   } while (cursor);
+
+  // The AI SDK validator rejects an empty array, and a new session has no messages yet.
+  const messages =
+    transcript.length > 0 ? await validateUIMessages<PxiMessage>({ messages: transcript }) : [];
 
   return {
     ...toSummary(payload.data),
     model: payload.data.model,
-    isActive: payload.data.is_active === true,
+    isActive: payload.data.is_active,
     messages,
   };
 }
@@ -206,10 +251,11 @@ export async function patchAgentSessionModel(
   sessionId: string,
   model: ModelSelection,
 ): Promise<void> {
-  await requestAgentSessionJson<{ data?: AgentSessionDataWire }>(
+  await requestAgentSessionJson(
     instance,
     buildAgentSessionUrl(instance.baseUrl, `/${encodeURIComponent(sessionId)}`),
     'Phoenix could not change this chat’s model',
+    sessionResponseSchema,
     { body: JSON.stringify({ model }), method: 'PATCH' },
   );
 }

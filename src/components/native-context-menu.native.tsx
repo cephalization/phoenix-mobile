@@ -1,4 +1,4 @@
-import { Button, type ButtonProps, ContextMenu, Host, RNHostView } from '@expo/ui/swift-ui';
+import { Button, ContextMenu, Host, RNHostView } from '@expo/ui/swift-ui';
 import { type ReactElement, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -40,9 +40,7 @@ export function NativeContextMenu({
                   label={action.title}
                   onPress={() => onAction(action.id)}
                   role={action.destructive ? 'destructive' : undefined}
-                  // SAFETY: systemImage values are SF Symbol names authored in this app's static
-                  // action tables, so they satisfy the SF Symbol string union.
-                  systemImage={action.systemImage as ButtonProps['systemImage']}
+                  systemImage={action.systemImage}
                 />
               ))}
             </ContextMenu.Items>

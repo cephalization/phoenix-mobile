@@ -113,6 +113,36 @@ describe('agent session API', () => {
     expect(session.messages.map((message) => message.id)).toEqual(['m1', 'm2']);
   });
 
+  it('opens a session with an empty transcript', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: { ...summaryWire, id: 's1', is_active: true, last_message_id: null, model },
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ data: [], next_cursor: null }));
+    const session = await getAgentSession(instance, 's1');
+    expect(session.isActive).toBe(true);
+    expect(session.messages).toEqual([]);
+  });
+
+  it('rejects a session whose model names an unknown provider', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        data: {
+          ...summaryWire,
+          id: 's1',
+          is_active: false,
+          last_message_id: null,
+          model: { ...model, provider: 'NOT_A_PROVIDER' },
+        },
+      }),
+    );
+    await expect(getAgentSession(instance, 's1')).rejects.toThrow(
+      'Phoenix sent an unexpected response',
+    );
+  });
+
   it('rejects HTML responses from servers without the agent session routes', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response('<!DOCTYPE html>', {

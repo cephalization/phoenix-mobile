@@ -377,7 +377,7 @@ export function ProjectSessions({
                 isUnavailableOffline(configsQuery, offline)
               }
               filter={filter}
-              hasNextPage={Boolean(sessionsQuery.hasNextPage)}
+              hasNextPage={sessionsQuery.hasNextPage}
               hasSessions={sessions.length > 0}
               loading={loading}
               queueConfigured={queueConfigured}

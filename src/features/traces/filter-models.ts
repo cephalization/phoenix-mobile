@@ -12,6 +12,7 @@ import { isJsonObject, isJsonString, isJsonValue, type JsonValue } from '@/lib/j
 import { createPhoenixClient } from '@/lib/phoenix';
 import { useInstanceStore } from '@/store/instances';
 import type { PhoenixInstance } from '@/types/instance';
+import { unreachable } from '@/lib/unreachable';
 
 import {
   generateOnDevice,
@@ -94,6 +95,8 @@ function onDeviceMessage(error: OnDeviceModelError) {
       return 'Apple Intelligence is not available right now.';
     case 'failed':
       return error.message || 'The on-device model could not write a filter.';
+    default:
+      return unreachable(error.code);
   }
 }
 

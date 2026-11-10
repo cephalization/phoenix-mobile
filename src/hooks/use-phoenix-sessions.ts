@@ -55,6 +55,7 @@ import type {
 import { phoenixQueryKeys, type PhoenixViewer } from '@/hooks/use-phoenix-data';
 import { isJsonArray } from '@/lib/json';
 import type { PhoenixInstance } from '@/types/instance';
+import { unreachable } from '@/lib/unreachable';
 
 const missing = 'missing';
 const initialSessionCursor: string | null = null;
@@ -709,6 +710,9 @@ export function invalidateAfterReplay(queryClient: QueryClient, operation: Outbo
 
     case 'createAnnotationConfig':
       return invalidateAnnotationConfigs(queryClient, instanceId, operation.projectId);
+
+    default:
+      return unreachable(operation);
   }
 }
 

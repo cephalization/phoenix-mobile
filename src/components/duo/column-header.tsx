@@ -10,6 +10,7 @@ import {
 
 import { SurfaceContext, useAppColors } from '@/constants/theme';
 import { isJsonString } from '@/lib/json';
+import { unreachable } from '@/lib/unreachable';
 
 import type {
   NativeStackHeaderItem,
@@ -159,6 +160,8 @@ function convertItems(items: NativeStackHeaderItem[], prefix: string): HeaderIte
           tintColor: item.tintColor,
           hidesSharedBackground: item.hidesSharedBackground,
         };
+      default:
+        return unreachable(item);
     }
   });
 }

@@ -1,9 +1,10 @@
+import type { SFSymbol } from 'expo-symbols';
 import type { ReactElement } from 'react';
 
 export type NativeContextMenuAction = {
   destructive?: boolean;
   id: string;
-  systemImage?: string;
+  systemImage?: SFSymbol;
   title: string;
 };
 

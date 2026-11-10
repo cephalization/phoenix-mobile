@@ -1,5 +1,7 @@
 import type { OutboxOperation } from './outbox-model';
 
+import { unreachable } from '@/lib/unreachable';
+
 /** The tail of a session ID, which is how people recognise one in a list. */
 export function shortSessionId(sessionId: string): string {
   return sessionId.length > 8 ? `…${sessionId.slice(-8)}` : sessionId;
@@ -43,6 +45,9 @@ export function describeOperation(operation: OutboxOperation): string {
 
     case 'createAnnotationConfig':
       return `Annotation config “${operation.payload.name.trim()}”`;
+
+    default:
+      return unreachable(operation);
   }
 }
 

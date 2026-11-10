@@ -58,7 +58,7 @@ export function NativeMetricsProvider({
   const [columns, setColumns] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (timedOut) return;
+    if (timedOut) return undefined;
     const timeout = setTimeout(() => setTimedOut(true), MetricsTimeoutMs);
 
     return () => clearTimeout(timeout);
@@ -78,9 +78,7 @@ export function NativeMetricsProvider({
 }
 
 function columnsFor(metrics: NativeLayoutMetrics) {
-  return (
-    Platform.OS === 'ios' && supportsSplitColumns && (Platform.isPad || metrics.hasHinge === true)
-  );
+  return Platform.OS === 'ios' && supportsSplitColumns && (Platform.isPad || metrics.hasHinge);
 }
 
 export function useWindowMetrics() {
