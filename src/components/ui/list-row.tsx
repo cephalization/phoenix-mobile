@@ -1,9 +1,18 @@
 import { SymbolView } from 'expo-symbols';
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  type AccessibilityActionEvent,
+  type AccessibilityActionInfo,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { Type, useAppColors } from '@/constants/theme';
 import { haptics } from '@/lib/haptics';
+
+import { useSwipingRef } from './swipe-action-row';
 
 /** Horizontal inset shared by rows, section headers, and stat strips. */
 export const RowInset = 20;
@@ -39,6 +48,9 @@ type ListRowProps = {
   onLongPress?: () => void;
   accessibilityHint?: string;
   accessibilityLabel?: string;
+  /** Actions a swipe offers, repeated for assistive technologies. */
+  accessibilityActions?: readonly AccessibilityActionInfo[];
+  onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
 };
 
 /**
@@ -46,12 +58,14 @@ type ListRowProps = {
  * line, and a monospaced trailing value. Selection is a fill, not a colour.
  */
 export function ListRow({
+  accessibilityActions,
   accessibilityHint,
   accessibilityLabel,
   checked,
   dimmed = false,
   leading,
   meta,
+  onAccessibilityAction,
   onLongPress,
   onPress,
   selected = false,
@@ -65,6 +79,7 @@ export function ListRow({
   variant = 'sidebar',
 }: ListRowProps) {
   const colors = useAppColors();
+  const swiping = useSwipingRef();
 
   const content = (
     <>
@@ -128,13 +143,16 @@ export function ListRow({
 
   return (
     <Pressable
+      accessibilityActions={accessibilityActions}
       accessibilityHint={accessibilityHint}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole={checked === undefined ? 'button' : 'radio'}
       accessibilityState={checked === undefined ? { selected } : { checked }}
       android_ripple={{ color: colors.ripple }}
+      onAccessibilityAction={onAccessibilityAction}
       onLongPress={onLongPress}
       onPress={() => {
+        if (swiping.current) return;
         haptics.selection();
         onPress();
       }}

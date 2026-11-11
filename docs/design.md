@@ -29,17 +29,18 @@ Phoenix Mobile is a native utility with a flat, mostly monochrome design. Its st
 
 ## Primitives (`src/components/ui/`)
 
-| Component              | Use                                                                                                                  |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `ListRow`              | Every tappable row. `variant="sidebar"` for gutter rows with a selection fill; `variant="flat"` for full-width rows. |
-| `RowSeparator`         | The hairline between flat rows, inset to the text.                                                                   |
-| `SectionHeader`        | A small label followed by a hairline. Pass `onToggle` to fold the section; a folded section shows its count.         |
-| `StatStrip`            | One row of figures divided by hairlines. Replaces stat cards.                                                        |
-| `StatusLabel`          | A symbol and a word: `ok`, `error`, `pending`, `neutral`.                                                            |
-| `EmptyState`           | Empty, loading, and error states. No card. One optional action button.                                               |
-| `SegmentedControl`     | Native segmented picker on iOS, a matching control elsewhere.                                                        |
-| `Bars`, `Lines`        | Full-width charts (`charts/`), inside a `ChartSection` and a `ScrubSurface`.                                         |
-| `MiniBars`, `MiniLine` | Row-sized pulse and trend, as a row's trailing element.                                                              |
+| Component              | Use                                                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `ListRow`              | Every tappable row. `variant="sidebar"` for gutter rows with a selection fill; `variant="flat"` for full-width rows.     |
+| `SwipeActionRow`       | Wraps a flat row whose item can be removed: swipe left for one destructive action. Repeat it as an accessibility action. |
+| `RowSeparator`         | The hairline between flat rows, inset to the text.                                                                       |
+| `SectionHeader`        | A small label followed by a hairline. Pass `onToggle` to fold the section; a folded section shows its count.             |
+| `StatStrip`            | One row of figures divided by hairlines. Replaces stat cards.                                                            |
+| `StatusLabel`          | A symbol and a word: `ok`, `error`, `pending`, `neutral`.                                                                |
+| `EmptyState`           | Empty, loading, and error states. No card. One optional action button.                                                   |
+| `SegmentedControl`     | Native segmented picker on iOS, a matching control elsewhere.                                                            |
+| `Bars`, `Lines`        | Full-width charts (`charts/`), inside a `ChartSection` and a `ScrubSurface`.                                             |
+| `MiniBars`, `MiniLine` | Row-sized pulse and trend, as a row's trailing element.                                                                  |
 
 Where a screen needs something these don't cover, build it from the same tokens. A code block or JSON payload may keep its `code` background: it is content, not chrome.
 

@@ -13,6 +13,15 @@ This is the project's living technical memory. Record discoveries that would oth
 
 ## Active Constraints
 
+### 2026-11-10 - Swipe Actions In A Form Sheet Do Not Cancel The Row's Press
+
+**Status:** Resolved
+**Area:** Gesture Handler, Connections sheet, `ListRow`
+
+Swipe-to-remove on connection rows was lost in the October redesign and is back as `SwipeActionRow` (Gesture Handler's `ReanimatedSwipeable`, one destructive action on the right, the same confirmation as the Remove connection button). On device, releasing a swipe in the Connections sheet also fired the row's `onPress` and selected the instance: inside a native form sheet, the activated pan does not cancel React Native's touch responder, so the `Pressable` still sees a tap on release. `SwipeActionRow` sets a ref from drag start until the row settles open or closed, shares it through context, and `ListRow` ignores a press while it is set.
+
+**Implication:** Put swipeable rows in `SwipeActionRow` rather than using `ReanimatedSwipeable` directly, and verify on a device that a swipe release does not also press the row. Offer the swipe's action as an accessibility action on the row.
+
 ### 2026-11-10 - The Web Build Is No Longer Supported
 
 **Status:** Decision

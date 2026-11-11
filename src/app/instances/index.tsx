@@ -12,6 +12,7 @@ import { ListRow, RowInset, RowSeparator } from '@/components/ui/list-row';
 import { SectionHeader } from '@/components/ui/section-header';
 import { StatStrip } from '@/components/ui/stat-strip';
 import { StatusLabel } from '@/components/ui/status-label';
+import { SwipeActionRow } from '@/components/ui/swipe-action-row';
 import { Type, useAppColors } from '@/constants/theme';
 import { runOAuthLogin } from '@/features/auth/login';
 import { useContentColumnStyle } from '@/features/duo/layout';
@@ -97,38 +98,45 @@ function InstanceRow({ active, instance }: { active: boolean; instance: PhoenixI
   const status = useInstanceStatus(instance);
   const saved = useSavedOfflineData(instance.id);
   const setActiveInstanceId = useInstanceStore((state) => state.setActiveInstanceId);
+  const remove = useRemoveInstance();
   // Offline, an instance with nothing saved would open to an empty list.
   const unsaved = status.offline && !hasSavedData(saved);
   const statusText = status.offline ? offlineInstanceText(saved) : status.label;
 
   return (
-    <ListRow
-      accessibilityHint={active ? undefined : 'Shows this instance’s projects'}
-      accessibilityLabel={`${instance.name}, ${statusText}${active ? ', current' : ''}`}
-      dimmed={unsaved}
-      leading={<StatusLabel tone={status.tone} />}
-      onPress={() => {
-        setActiveInstanceId(instance.id);
-        router.back();
-      }}
-      subtitle={status.tone === 'error' || status.offline ? statusText : instance.baseUrl}
-      subtitleMono={status.tone !== 'error' && !status.offline}
-      subtitleTone={status.tone === 'error' ? 'danger' : 'default'}
-      title={instance.name}
-      trailing={
-        active ? (
-          <SymbolView
-            name={{ android: 'check', ios: 'checkmark' }}
-            size={16}
-            tintColor={colors.text}
-            weight="semibold"
-          />
-        ) : unsaved ? (
-          <NotSavedOfflineGlyph />
-        ) : null
-      }
-      variant="flat"
-    />
+    <SwipeActionRow actionLabel="Remove" onAction={(close) => remove(instance, close)}>
+      <ListRow
+        accessibilityActions={[{ name: 'delete', label: 'Remove connection' }]}
+        accessibilityHint={active ? undefined : 'Shows this instance’s projects'}
+        accessibilityLabel={`${instance.name}, ${statusText}${active ? ', current' : ''}`}
+        dimmed={unsaved}
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === 'delete') remove(instance);
+        }}
+        leading={<StatusLabel tone={status.tone} />}
+        onPress={() => {
+          setActiveInstanceId(instance.id);
+          router.back();
+        }}
+        subtitle={status.tone === 'error' || status.offline ? statusText : instance.baseUrl}
+        subtitleMono={status.tone !== 'error' && !status.offline}
+        subtitleTone={status.tone === 'error' ? 'danger' : 'default'}
+        title={instance.name}
+        trailing={
+          active ? (
+            <SymbolView
+              name={{ android: 'check', ios: 'checkmark' }}
+              size={16}
+              tintColor={colors.text}
+              weight="semibold"
+            />
+          ) : unsaved ? (
+            <NotSavedOfflineGlyph />
+          ) : null
+        }
+        variant="flat"
+      />
+    </SwipeActionRow>
   );
 }
 
@@ -138,7 +146,7 @@ function ActiveInstanceDetails({ instance }: { instance: PhoenixInstance }) {
   const status = useInstanceStatus(instance);
   const version = usePhoenixVersion(instance);
   const projects = usePhoenixProjects(instance);
-  const removeInstance = useInstanceStore((state) => state.removeInstance);
+  const remove = useRemoveInstance();
   const [signingIn, setSigningIn] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
   const viewer = status.viewer.data;
@@ -158,23 +166,6 @@ function ActiveInstanceDetails({ instance }: { instance: PhoenixInstance }) {
     } finally {
       setSigningIn(false);
     }
-  };
-
-  const remove = () => {
-    confirmAction({
-      title: 'Remove connection?',
-      message: `${instance.name} and the data saved for offline use will be removed from this device. PXI chats stay on the server.`,
-      confirmLabel: 'Remove',
-      onConfirm: async () => {
-        try {
-          await removeInstance(instance.id);
-          queryClient.removeQueries({ queryKey: phoenixQueryKeys.instance(instance.id) });
-          haptics.success();
-        } catch {
-          haptics.error();
-        }
-      },
-    });
   };
 
   return (
@@ -216,7 +207,7 @@ function ActiveInstanceDetails({ instance }: { instance: PhoenixInstance }) {
         <RowSeparator inset={0} />
         <ListRow
           accessibilityHint="Removes this instance and its offline data"
-          onPress={remove}
+          onPress={() => remove(instance)}
           title="Remove connection"
           titleTone="danger"
           variant="flat"
@@ -224,6 +215,34 @@ function ActiveInstanceDetails({ instance }: { instance: PhoenixInstance }) {
       </View>
     </View>
   );
+}
+
+/**
+ * Removes a connection after confirming, from its row's swipe action or the
+ * active instance's details. `close` slides a swiped row back on cancel.
+ */
+function useRemoveInstance() {
+  const queryClient = useQueryClient();
+  const removeInstance = useInstanceStore((state) => state.removeInstance);
+
+  return (instance: PhoenixInstance, close?: () => void) => {
+    confirmAction({
+      title: 'Remove connection?',
+      message: `${instance.name} and the data saved for offline use will be removed from this device. PXI chats stay on the server.`,
+      confirmLabel: 'Remove',
+      onCancel: close,
+      onConfirm: async () => {
+        try {
+          await removeInstance(instance.id);
+          queryClient.removeQueries({ queryKey: phoenixQueryKeys.instance(instance.id) });
+          haptics.success();
+        } catch {
+          close?.();
+          haptics.error();
+        }
+      },
+    });
+  };
 }
 
 const styles = StyleSheet.create({
