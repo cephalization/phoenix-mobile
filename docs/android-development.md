@@ -1,6 +1,6 @@
 # Android Device Development
 
-This guide covers the Expo development build, which is needed for the trailing-sheet native module and OAuth sign-in. For a first look at the app, Expo Go is faster: see [Quick start with Expo Go](../README.md#quick-start-with-expo-go) in the README. The repository generates `android/` locally from `app.json`; the native directory is intentionally ignored by Git.
+This guide covers the Expo development build, which is needed for the trailing-sheet native module and OAuth sign-in. For a first look at the app, Expo Go is faster: see [Try it in Expo Go](../README.md#try-it-in-expo-go) in the README. The repository generates `android/` locally from `app.json`; the native directory is intentionally ignored by Git.
 
 ## Phone Preparation
 
@@ -28,7 +28,7 @@ The clean script:
 Pass the ADB model name when more than one Android device is connected:
 
 ```bash
-vp run android:device:clean -- Pixel_9_Pro_XL
+vp run android:device:clean Pixel_9_Pro_XL
 ```
 
 Set `JAVA_HOME` or `ANDROID_HOME` before running the script to use an existing JDK 17 or Android SDK installation.
@@ -46,7 +46,7 @@ This establishes `adb reverse tcp:8081 tcp:8081` and starts Metro on the compute
 When multiple phones are connected, pass the desired ADB serial:
 
 ```bash
-vp run android:device:start -- DEVICE_SERIAL
+vp run android:device:start DEVICE_SERIAL
 ```
 
 For an incremental native rebuild after app-config or native dependency changes, run:

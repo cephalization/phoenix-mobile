@@ -26,9 +26,8 @@ Phoenix Mobile is a companion for self-hosted Arize Phoenix instances. It should
 Current product boundaries:
 
 - Multiple Phoenix instances can be stored locally.
-- Connections without authentication are supported.
-- The domain model reserves space for OAuth 2 credentials, but OAuth is not implemented yet.
-- Phoenix server state currently includes server version and projects.
+- Connections without authentication and Phoenix OAuth 2 connections are supported.
+- Phoenix server state covers the server version, projects, traces, sessions, project metrics, and PXI sessions.
 - iOS is first-class and Android is best effort. Web is not supported.
 
 ## Technology

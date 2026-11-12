@@ -1,159 +1,61 @@
 # Phoenix Mobile
 
-A mobile companion for connecting to and monitoring self-hosted [Arize Phoenix](https://github.com/Arize-ai/phoenix) instances.
+Your [Arize Phoenix](https://github.com/Arize-ai/phoenix) instances, in your pocket. A native companion for self-hosted Phoenix that shows which projects need attention, charts their traffic, errors, latency, and cost, while letting you deep dive any traces. It also brings PXI along so you can ask about them. iOS is first-class and Android is best effort.
 
-## Quick start with Expo Go
+## What you get
 
-The fastest way to run the app on your own phone. No Xcode or Android Studio is needed.
+- **Health at a glance.** Every project gets a traffic pulse, and error spikes, projects gone quiet, and slower p95 latency rise to "Needs attention".
+- **Project Overview.** Traces, errors, latency, cost, top models, and eval scores over the last hour, day, week, or month. Scrub a chart and tap a bar to open its traces.
+- **Traces and sessions.** Filter with Phoenix expressions or plain English, using Apple Intelligence on the device or the instance's PXI model.
+- **PXI.** Stream chats that live in server-side agent sessions, shared with every other PXI client.
+- **Offline.** Read anything you have opened. Annotations, notes, and dataset adds queue until the server is back.
+- **Big screens.** Native split columns on iPad and the iPhone Duo, in light and dark.
+- **Sign-in.** Connect to open servers, or sign in to authenticated ones with OAuth 2.
 
-1. Install [Expo Go](https://expo.dev/go) from the App Store or Google Play. The store build must support Expo SDK 58 (version 58 or newer).
-2. Have a Phoenix server the phone can reach. If you do not have one, see [Run Phoenix locally](#run-phoenix-locally).
-3. Put the phone and the computer on the same Wi-Fi network, then on the computer:
+The Overview and health list need Phoenix 11.11.0 or newer, OAuth needs 19, and PXI chats need 20.
 
-   ```bash
-   vp install
-   vp run start:go
-   ```
+## Try it in Expo Go
 
-4. Scan the QR code that Metro prints: with the Camera app on iOS, or from inside Expo Go on Android. Accept the local-network prompt the first time; iOS asks because Expo Go loads the JavaScript bundle from your computer.
-5. Tap **Add instance** and enter the computer's LAN address and Phoenix port, such as `192.168.1.20:6006`. `localhost` on the phone is the phone itself.
-
-To hand someone a connection instead of making them type it, open a link that prefills the sheet. In Expo Go the link is:
-
-```text
-exp://<computer-ip>:8081/--/instances/new?host=<computer-ip>:6006
-```
-
-On a development build the same link is `phoenixmobile://instances/new?host=<computer-ip>:6006`. An optional `name` parameter sets the display name. Nothing is saved until the server is verified.
-
-`vp run start:go` serves Metro over the LAN. If the phone cannot reach the computer (guest Wi-Fi, client isolation, a strict firewall), start a tunnel instead; it is slower but works from any network:
-
-```bash
-vp run start:go -- --tunnel
-```
-
-macOS may ask whether Node can accept incoming connections the first time Metro starts. Allow it, or the phone cannot fetch the bundle.
-
-### What Expo Go cannot show
-
-Everything the app uses is bundled in Expo Go except three things that need a [development build](#development-builds):
-
-- **iPhone Duo and iPad columns.** The native split columns and the trailing sheets need the vendored react-native-screens fork and the local `modules/duo-native` module, so Expo Go shows the single-stack layout and sheets dock to the leading edge on the open Duo.
-- **On-device Ask for trace filters.** Turning plain English into a filter on the phone uses Apple Intelligence through the local `modules/on-device-llm` module. In Expo Go, Ask uses the instance's PXI model instead, or is hidden when none is selected.
-- **OAuth sign-in.** Authenticated Phoenix servers return to the app through the private `phoenixmobile://oauth/callback` redirect, which Expo Go does not own. Use unauthenticated instances in Expo Go.
-
-## Run Phoenix locally
-
-Phoenix runs on the development computer and the phone connects over the LAN. Either of these starts a server on port 6006 with no authentication:
-
-```bash
-# with uv (https://docs.astral.sh/uv/)
-uvx --from 'arize-phoenix[pg]' phoenix serve
-
-# with Docker
-docker run -p 6006:6006 -p 4317:4317 arizephoenix/phoenix:latest
-```
-
-Find the address to enter on the phone:
-
-```bash
-ipconfig getifaddr en0   # macOS, Wi-Fi
-hostname -I              # Linux
-```
-
-Send some traces to the server so the app has projects to show; the [Phoenix tracing quickstart](https://arize.com/docs/phoenix/tracing/llm-traces-1) covers the few lines of setup.
-
-## Current scope
-
-- Save multiple Phoenix server connections on-device
-- Verify a server before saving it
-- Browse a server's projects, traces, and sessions in a flat, native layout (see [docs/design.md](./docs/design.md)), with the server version and status in Connections
-- Filter traces with Phoenix's filter expressions, suggested filters, or plain English turned into a filter on device (Apple Intelligence) or by the instance's PXI model
-- Read previously opened servers, projects, traces, and sessions offline, with a quiet notice, and queue reviews, notes, configs, and dataset adds to upload when the server is back
-- Refresh server data through TanStack Query
-- Pick PXI's model from a searchable list of every provider, or type any model name
-- Stream PXI conversations against persisted server-side agent sessions, with chat history shared across every PXI client (Phoenix 20.0.0+)
-- Run contextual PXI actions, like open coding a session into PXI notes that reviewers read before annotating (Phoenix 20.11.0+)
-- Support light, dark, phone, and tablet layouts on iOS (first-class) and Android (best effort), with native split columns on iPhone Duo and iPad, trailing sheets, and PXI as the split's inspector (see [docs/iphone-duo.md](./docs/iphone-duo.md))
-- Connect to unauthenticated servers or Phoenix 19+ instances through native OAuth 2
-
-## Stack
-
-- Expo SDK 58 and Expo Router
-- React Native and strict TypeScript
-- TanStack Query for Phoenix server state
-- Zustand and AsyncStorage for persisted instance metadata
-- Native Markdown rendering for streamed PXI responses
-- React Hook Form and Zod for connection validation
-- Expo SecureStore for native OAuth access and rotating refresh tokens
-
-## Development
-
-Node 22 or newer and [Vite+](https://viteplus.dev) (`vp`) are required; `.nvmrc` pins the Node version used for development. `vp` is the entry point for every install, script, and check. It drives npm underneath (`packageManager` in `package.json`), so the committed `package-lock.json` stays authoritative.
+No Xcode or Android Studio needed. Put the phone and the computer on the same Wi-Fi network, install [Expo Go](https://expo.dev/go) (SDK 58), then:
 
 ```bash
 vp install
-vp run start
+vp run start:go   # add --tunnel if the phone can't reach the computer
 ```
 
-`vp run start` targets the installed development build. Use `vp run start:go` for Expo Go, and `vp run ios` or `vp run android` to build and launch a platform directly. There is no web build.
+Scan the QR code, tap **Add instance**, and enter the computer's LAN address, such as `192.168.1.20:6006`. On the phone, `localhost` is the phone itself.
+
+Need a Phoenix server? Start one with `uvx --from 'arize-phoenix[pg]' phoenix serve` or `docker run -p 6006:6006 arizephoenix/phoenix:latest`, then send it traces with the [tracing quickstart](https://arize.com/docs/phoenix/tracing/llm-traces-1).
+
+Expo Go can't show the iPad and Duo split columns, on-device Ask, or OAuth sign-in. Those need a development build.
+
+## Develop
+
+You need Node 22 or newer (`.nvmrc` pins it) and [Vite+](https://viteplus.dev) (`vp`), which runs every install, script, and check over npm.
 
 ```bash
-vp run check
+vp install
+vp run start   # Metro for the installed development build
+vp run check   # format, type-aware lint, type check, and tests
 ```
 
-That runs `vp check` (oxfmt, then type-aware oxlint with the vendored anti-slop rules in `tools/oxlint/anti-slop`, plus the TypeScript type check) and `vp test run` (Vitest). All of it is configured in `vite.config.ts`. `vp check --fix` applies lint and format autofixes. The oxc VS Code extension is recommended in `.vscode/extensions.json`.
+Extra arguments go straight after the script name, as in `vp run start:go --tunnel`. A `--` separator would be passed to the script as an argument.
 
-Before contributing, read:
-
-- [`AGENTS.md`](./AGENTS.md) for development and collaboration guidelines
-- [`FINDINGS.md`](./FINDINGS.md) for current technical knowledge and constraints
-- [`GOALS.md`](./GOALS.md) for ordered product priorities
-
-### Development builds
-
-A development build is the app compiled with its native modules plus the Expo dev client. It is needed for the three features listed under [What Expo Go cannot show](#what-expo-go-cannot-show), and for anything that changes native code or `app.json`.
-
-- [iOS physical device](#ios-physical-device) below
-- [Android device development](./docs/android-development.md)
-
-### iOS physical device
-
-A bundle identifier can only be registered to one Apple team, so a physical iPhone needs one of your own. Copy the example file and set `PHOENIX_IOS_BUNDLE_ID`, plus `PHOENIX_APPLE_TEAM_ID` if you want to name your team. Git ignores `.env.local`, and `app.config.ts` reads it. Expo Go and simulators need neither.
+**iPhone.** Copy `.env.example` to `.env.local`, set `PHOENIX_IOS_BUNDLE_ID` (and `PHOENIX_APPLE_TEAM_ID` if you like), and turn on Developer Mode. Then build and install:
 
 ```bash
-cp .env.example .env.local
+vp run ios:device:clean "My iPhone"
 ```
 
-For the first development build on a connected iPhone, or after native dependency and app-config changes, enable Developer Mode on the phone and run:
+After that, `vp run start` gives you Fast Refresh. For a standalone build that runs without Metro, use `vp exec expo run:ios --device "My iPhone" --configuration Release --no-bundler`.
 
-```bash
-vp run ios:device:clean
-```
+**Android.** See [docs/android-development.md](./docs/android-development.md).
 
-Pass a device name or UDID to skip Expo's device prompt:
+**Hosted Phoenix.** Behind a TLS-terminating proxy such as Railway, Render, or a load balancer, set `PHOENIX_ROOT_URL` to the server's public `https://` address. Otherwise Phoenix advertises an `http://` OAuth issuer, and the app refuses to sign in.
 
-```bash
-vp run ios:device:clean -- "My iPhone"
-```
+## Read next
 
-The clean script selects `/Applications/Xcode.app`, completes Xcode's first-launch setup, installs locked JavaScript dependencies, regenerates the iOS project, installs CocoaPods dependencies, and builds and installs Phoenix Mobile. It stops early if `PHOENIX_IOS_BUNDLE_ID` isn't set. Signing uses `PHOENIX_APPLE_TEAM_ID`, or otherwise a team you set up in Xcode; a free Personal Team is enough, and no team identifier is stored in the repository. Set `XCODE_APP` when Xcode is installed elsewhere.
-
-For normal JavaScript and TypeScript development, leave the installed development client on the phone and run `vp run start` for Fast Refresh. Use `vp run ios:device` only when an incremental native rebuild is needed.
-
-## Connecting locally
-
-Enter a full URL or a host and port, such as `192.168.1.20:6006`. When using a physical device, `localhost` refers to the phone, not the computer running Phoenix, so use the computer's LAN address instead.
-
-The native configuration permits HTTP connections because local Phoenix deployments commonly do not use TLS. Prefer HTTPS for remotely accessible servers.
-
-## Structure
-
-```text
-src/app/                 Expo Router screens
-src/components/          Shared UI components
-src/hooks/               TanStack Query data hooks
-src/lib/                 Phoenix client and URL utilities
-src/store/               Persisted client-side state
-src/types/               Connection domain types
-```
+- [`AGENTS.md`](./AGENTS.md): how to work in this repository and where things live. Start here.
+- [`FINDINGS.md`](./FINDINGS.md): technical constraints and decisions.
+- [`GOALS.md`](./GOALS.md): product priorities.
+- [`docs/design.md`](./docs/design.md) and [`docs/iphone-duo.md`](./docs/iphone-duo.md): the design system and the split-column layout.
