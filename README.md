@@ -2,6 +2,13 @@
 
 Your [Arize Phoenix](https://github.com/Arize-ai/phoenix) instances, in your pocket. A native companion for self-hosted Phoenix that shows which projects need attention, charts their traffic, errors, latency, and cost, while letting you deep dive any traces. It also brings PXI along so you can ask about them. iOS is first-class and Android is best effort.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/duo-overview-dark.png">
+    <img alt="Phoenix Mobile on a half-open iPhone Duo: a project's figures and hours with errors beside its traces, latency, and cost charts" src="docs/images/duo-overview-light.png" width="800">
+  </picture>
+</p>
+
 ## What you get
 
 - **Health at a glance.** Every project gets a traffic pulse, and error spikes, projects gone quiet, and slower p95 latency rise to "Needs attention".
@@ -13,6 +20,13 @@ Your [Arize Phoenix](https://github.com/Arize-ai/phoenix) instances, in your poc
 - **Sign-in.** Connect to open servers, or sign in to authenticated ones with OAuth 2.
 
 The Overview and health list need Phoenix 11.11.0 or newer, OAuth needs 19, and PXI chats need 20.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/duo-trace-dark.png">
+    <img alt="Phoenix Mobile on a half-open iPhone Duo: a project's traces beside a selected trace, its question and Markdown answer with a numbered list and a code block" src="docs/images/duo-trace-light.png" width="800">
+  </picture>
+</p>
 
 ## Try it in Expo Go
 
