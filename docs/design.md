@@ -63,7 +63,7 @@ Rows use `MiniBars` for a project's last day of traffic (errors on top in `dange
 
 ## Bar items
 
-Build items with `barButton`, and menus with `barMenu`, from `src/components/duo/column-header.tsx`. Every item needs an SF Symbol, a label (shown in the overflow menu), and a `visibilityPriority`. Trailing items stack from the far end, so **the last item sits at the top of a vertical bar**: put PXI last. Fold rarely used actions into a `More` menu (`ellipsis.circle`, `visibilityPriority: 'low'`). A filter menu's icon switches to its `.fill` variant when the view differs from the default. Android keeps pressables.
+Build items with `barButton`, and menus with `barMenu`, from `src/components/duo/column-header.tsx`. Every item needs an SF Symbol, a label (shown in the overflow menu), and a `visibilityPriority`. Trailing items stack from the far end, so **the last item sits at the top of a vertical bar**: put PXI last. Fold rarely used actions into a `More` menu (`ellipsis.circle`, `visibilityPriority: 'low'`). In an expanded split (the open Duo, iPad), PXI lives only in the detail column's bar, including while nothing is selected; the sidebar's bar keeps the list's own controls. Screens still add PXI to their items, and the split drops it from sidebar bars by its `PxiBarItemId` identifier. A filter menu's icon switches to its `.fill` variant when the view differs from the default. Android keeps pressables.
 
 | Screen                 | Items (first to last)                                    |
 | ---------------------- | -------------------------------------------------------- |

@@ -174,16 +174,26 @@ function convertItems(items: NativeStackHeaderItem[], prefix: string): HeaderIte
  */
 export function ColumnHeader({
   canGoBack,
+  omitItem,
   options,
 }: {
   canGoBack: boolean;
+  /** The identifier of a trailing item another column's bar shows instead. */
+  omitItem?: string;
   options: NativeStackNavigationOptions;
 }) {
   const colors = useAppColors();
   const surface = use(SurfaceContext);
   const itemProps = { tintColor: options.headerTintColor, canGoBack };
   const leading = convertItems(options.unstable_headerLeftItems?.(itemProps) ?? [], 'leading');
-  const trailing = convertItems(options.unstable_headerRightItems?.(itemProps) ?? [], 'trailing');
+
+  const trailing = convertItems(
+    (options.unstable_headerRightItems?.(itemProps) ?? []).filter(
+      (item) => omitItem === undefined || !('identifier' in item) || item.identifier !== omitItem,
+    ),
+    'trailing',
+  );
+
   const left = options.headerLeft?.(itemProps);
   const right = options.headerRight?.(itemProps);
 

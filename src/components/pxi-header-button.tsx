@@ -13,6 +13,12 @@ import { PxiGlyph } from './pxi-glyph';
 
 const pxiGlyphTemplate = require('@/assets/images/pxi-glyph.png');
 
+/**
+ * Identifies the PXI bar item, so the open split can keep it in one place:
+ * the trailing column's bar, beside the edge the PXI panel opens from.
+ */
+export const PxiBarItemId = 'pxi';
+
 type ScreenOptions = Exclude<
   NonNullable<ComponentProps<typeof Stack.Screen>['options']>,
   (...args: never[]) => object
@@ -77,6 +83,7 @@ export function usePxiHeaderOptions(
       unstable_headerRightItems: () => [
         barButton({
           type: 'button',
+          identifier: PxiBarItemId,
           accessibilityLabel,
           icon: { type: 'image', source: pxiGlyphTemplate },
           label,

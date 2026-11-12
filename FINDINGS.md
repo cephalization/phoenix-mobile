@@ -13,6 +13,15 @@ This is the project's living technical memory. Record discoveries that would oth
 
 ## Active Constraints
 
+### 2026-11-12 - PXI Has One Place In An Expanded Split: The Detail Column's Bar
+
+**Status:** Decision
+**Area:** iPhone Duo, iPad, bar items, `SplitStack`
+
+Every sidebar screen and every detail screen added the PXI bar item, so the open Duo showed it twice once a trace or session was selected (above the sidebar and in the vertical bar), and only above the sidebar while nothing was. Apple's "Designing for iPhone Duo" (read 2026-11-12 through `developer.apple.com/tutorials/data/design/human-interface-guidelines/designing-for-iphone-duo.json`; the HTML page renders client-side) says controls belonging to a content area other than the trailing one stay with that area (Mail's list controls stay above the leading pane), that controls keep their relative positions across poses, and to use the system overflow menu "so people find everything in one place". It says nothing about app-wide actions or about one action in two bars. PXI is app-wide and its panel slides in from the trailing edge, so an expanded split now shows it only in the detail column's bar: sidebar headers drop the item by its `PxiBarItemId` identifier (`ColumnHeader`'s `omitItem`), and the empty detail screen and the overview board carry it. A collapsed split keeps it on the sidebar, which is then the whole window, so PXI stays in the vertical bar whether the device is open or closed.
+
+**Implication:** Add PXI to a screen's items as before (`usePxiHeaderOptions`); the split decides which column shows it. Give other app-wide actions an identifier and the same treatment rather than repeating them in both bars.
+
 ### 2026-11-10 - Swipe Actions In A Form Sheet Do Not Cancel The Row's Press
 
 **Status:** Resolved

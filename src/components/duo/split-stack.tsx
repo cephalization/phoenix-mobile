@@ -32,6 +32,7 @@ import type {
 import type { NativeStackNavigationOptions } from 'expo-router/native-stack';
 
 import { PxiChat, type PxiChatHandle } from '@/components/chat/pxi-chat';
+import { PxiBarItemId, usePxiHeaderOptions } from '@/components/pxi-header-button';
 import { ProjectOverviewBoard } from '@/components/overview/project-overview';
 import { EmptyState } from '@/components/ui/empty-state';
 import { type Surface, SurfaceContext, useAppColors } from '@/constants/theme';
@@ -51,7 +52,7 @@ import { SplitDetailContext, type SplitDetail } from '@/features/duo/split-detai
 import { usePxiPaneStore } from '@/features/pxi/pane-store';
 import { useMetricsSupported } from '@/hooks/use-phoenix-metrics';
 import { isJsonObject, isJsonString } from '@/lib/json';
-import { useInstanceStore } from '@/store/instances';
+import { useActiveInstance, useInstanceStore } from '@/store/instances';
 
 import { barButton, ColumnHeader } from './column-header';
 import { PxiFloatingPanel } from './pxi-floating-panel';
@@ -194,6 +195,8 @@ function SplitColumns({
     store.instances.find((candidate) => candidate.id === pxiInstanceId),
   );
 
+  const activeInstance = useActiveInstance();
+  const pxiHeader = usePxiHeaderOptions(activeInstance);
   const primaryScreens = useRetainedScreens(sidebar, descriptors);
   const detailScreens = useRetainedScreens(detail, descriptors);
 
@@ -269,7 +272,13 @@ function SplitColumns({
     if (action) dispatch(action);
   };
 
-  const columnScreen = (route: Route, index: number, attached: boolean, surface: Surface) => {
+  const columnScreen = (
+    route: Route,
+    index: number,
+    attached: boolean,
+    surface: Surface,
+    omitItem?: string,
+  ) => {
     const descriptor =
       descriptors[route.key] ??
       primaryScreens.descriptor(route.key) ??
@@ -284,6 +293,7 @@ function SplitColumns({
         descriptor={descriptor}
         emit={emit}
         key={route.key}
+        omitItem={omitItem}
         onAppearance={followCollapsed}
         onDismiss={handleDismiss}
         routeKey={route.key}
@@ -363,6 +373,8 @@ function SplitColumns({
                   sidebarKeys.has(route.key),
                   // Collapsed, the sidebar is the whole window, so it is a page.
                   collapsedState ? 'page' : 'sidebar',
+                  // Expanded, PXI lives only in the detail column's bar.
+                  collapsedState ? undefined : PxiBarItemId,
                 ),
               )}
             </Split.Stack>
@@ -373,7 +385,9 @@ function SplitColumns({
                 activityMode={detail.length === 0 && !collapsedState ? 'attached' : 'detached'}
                 screenKey="split-empty-detail"
               >
-                <ColumnHeader canGoBack={false} options={{ title: '' }} />
+                {/* PXI stays in this column's bar while nothing is selected, so it
+                  never moves between the sidebar and the window edge. */}
+                <ColumnHeader canGoBack={false} options={{ title: '', ...pxiHeader }} />
                 <ColumnContent>
                   {showBoard && overviewProject ? (
                     <ProjectOverviewBoard
@@ -563,6 +577,7 @@ function ColumnScreen({
   canGoBack,
   descriptor,
   emit,
+  omitItem,
   onAppearance,
   onDismiss,
   routeKey,
@@ -573,6 +588,7 @@ function ColumnScreen({
   canGoBack: boolean;
   descriptor: Descriptor;
   emit: Emit;
+  omitItem?: string;
   onAppearance: (type: 'willAppear' | 'didAppear' | 'willDisappear', key: string) => void;
   onDismiss: (key: string, native: boolean) => void;
   routeKey: string;
@@ -599,7 +615,7 @@ function ColumnScreen({
       screenKey={routeKey}
     >
       <SurfaceContext value={surface}>
-        <ColumnHeader canGoBack={canGoBack} options={descriptor.options} />
+        <ColumnHeader canGoBack={canGoBack} omitItem={omitItem} options={descriptor.options} />
         <ColumnContent>{descriptor.render()}</ColumnContent>
       </SurfaceContext>
     </Split.Screen>
